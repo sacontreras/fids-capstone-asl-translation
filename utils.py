@@ -44,3 +44,5 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
   else:
     if display:
       print(f"Successfully downloaded {file_size_local}/{file_size} bytes from URL file {url} to local file {local_fname}!")
+
+  return nested_tqdm_pb
