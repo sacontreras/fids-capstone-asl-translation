@@ -55,7 +55,8 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
   return nested_tqdm_pb
 
 
-def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
+# def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
+def download_to_memfile(url, block_sz=8192, display=False):
   http_file = urllib.request.urlopen(url)
   if http_file.getcode() != 200:
       raise ValueError(f"ERROR {http_file.getcode()} while opening {url}.")
@@ -70,13 +71,13 @@ def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
 
   file_size_dl = 0
   fblocks = range(0, file_size, block_sz)
-  if nested_tqdm_pb is None:
-    tqdm_pb = tqdm(fblocks, disable=not display)
-  else:
-    tqdm_pb = nested_tqdm_pb
-    tqdm_pb.leave = True
-  tqdm_pb.reset(total=file_size)
-  tqdm_pb.refresh(nolock=False)
+  # if nested_tqdm_pb is None:
+  #   tqdm_pb = tqdm(fblocks, disable=not display)
+  # else:
+  #   tqdm_pb = nested_tqdm_pb
+  #   tqdm_pb.leave = True
+  # tqdm_pb.reset(total=file_size)
+  # tqdm_pb.refresh(nolock=False)
   for fblock in fblocks: 
       buffer = http_file.read(block_sz)
       if not buffer:
@@ -84,7 +85,7 @@ def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
       n_bytes = len(buffer)
       file_size_dl += n_bytes
       memfile.write(buffer)
-      tqdm_pb.update(n_bytes)
+      # tqdm_pb.update(n_bytes)
 
   memfile.seek(0)
 
@@ -94,4 +95,5 @@ def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
     if display:
       print(f"Successfully downloaded {file_size_dl}/{file_size} bytes from URL file {url}!")
   
-  return memfile, nested_tqdm_pb
+  # return memfile, nested_tqdm_pb
+  return memfile

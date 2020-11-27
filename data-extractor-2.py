@@ -28,7 +28,7 @@ import zipfile
 from io import BytesIO
 import pandas as pd
 import urllib
-from . import utils
+import utils
 
 # # Regular expressions to parse an FTP URI.
 # _USER_RE = r'''(?P<user>[^:@]+|'[^']+'|"[^"]+")'''
@@ -331,7 +331,7 @@ def run(max_data_files, data_dir):
   print('Found {} target video records, using {}'.format(len(target_videos), max_data_files))
 
   # download segments in parallel
-  target_videos = target_videos.loc[:max_data_files]
+  target_videos = target_videos[:max_data_files]
   print('Downloading segments for target videos...')
   parallel_map(
     download_video_segment,
@@ -389,4 +389,4 @@ if __name__ == '__main__':
     max_data_files = None
 
   data_dir = os.path.join(args.work_dir, 'data')
-  run(args.data_sources, args.filter_regex, max_data_files, data_dir)
+  run(max_data_files, data_dir)
