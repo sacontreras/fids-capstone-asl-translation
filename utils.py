@@ -2,6 +2,8 @@ import urllib
 import urllib.request
 from tqdm.auto import tqdm, trange
 import os
+from io import BytesIO
+import tensorflow as tf
 
 def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None):
   http_file = urllib.request.urlopen(url)
@@ -16,7 +18,8 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
 
   f = None
   try:
-    f = open(local_fname, 'wb')
+    memfile = BytesIO()
+
     file_size_dl = 0
     fblocks = range(0, file_size, block_sz)
     if nested_tqdm_pb is None:
@@ -32,8 +35,12 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
             break
         n_bytes = len(buffer)
         file_size_dl += n_bytes
-        f.write(buffer)
+        memfile.write(buffer)
         tqdm_pb.update(n_bytes)
+
+    memfile.seek(0)
+    with tf.io.gfile.GFile(name=local_fname, mode='w') as f:
+      f.write(memfile.getvalue())
   finally:
     if f is not None:
       f.close()
