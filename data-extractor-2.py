@@ -110,9 +110,12 @@ def parallel_map(function, iterable):
 #     print('Found {}'.format(sdf_file))
 
 def download_video_segment(segment_url, data_dir):
-  local_segment_path = os.path.join(VIDEO_DIR, segment_url.split('/')[-1])
+  if not tf.io.gfile.exists(data_dir):
+    tf.io.gfile.makedirs(data_dir)
+  local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
   if not tf.io.gfile.exists(local_segment_path):
-    memfile, _ = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
+    # memfile, _ = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
+    memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
     # memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
       # gzip_wbits_format = zlib.MAX_WBITS | 16

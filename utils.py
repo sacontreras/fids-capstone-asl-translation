@@ -63,7 +63,8 @@ def download_to_memfile(url, block_sz=8192, display=False):
 
   meta = http_file.info()
   file_size = int(meta['Content-Length'])
-  if nested_tqdm_pb is None and display:
+  # if nested_tqdm_pb is None and display:
+  if display:
     print(f"Downloading {url} (filesize: {file_size} bytes)...")
     print()
     
