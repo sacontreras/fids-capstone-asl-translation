@@ -47,7 +47,7 @@ function run {
 
 # Extract the data files
 echo '>> Extracting data'
-run python $SRC_DIR/data-extractor.py \
+run python $SRC_DIR/data-extractor-2.py \
   --work-dir $WORK_DIR \
   --max-data-files $MAX_DATA_FILES
 echo ''
