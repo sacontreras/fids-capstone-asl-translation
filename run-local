@@ -14,10 +14,15 @@
 set -e
 
 # Parse command line arguments
+SRC_DIR=.
 WORK_DIR=/tmp/cloudml-samples/molecules
 MAX_DATA_FILES=5
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --src-dir)
+      SRC_DIR=$2
+      shift
+      ;;
     --work-dir)
       WORK_DIR=$2
       shift
@@ -42,7 +47,7 @@ function run {
 
 # Extract the data files
 echo '>> Extracting data'
-run python data-extractor.py \
+run python $SRC_DIR/data-extractor.py \
   --work-dir $WORK_DIR \
   --max-data-files $MAX_DATA_FILES
 echo ''
