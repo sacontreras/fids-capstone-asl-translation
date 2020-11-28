@@ -18,6 +18,7 @@ from __future__ import absolute_import
 import argparse
 import ftplib
 import multiprocessing as mp
+# from multiprocessing.sharedctypes import Value, Array
 import os
 import re
 import signal
@@ -30,37 +31,26 @@ import pandas as pd
 import urllib
 import utils
 
-# # Regular expressions to parse an FTP URI.
-# _USER_RE = r'''(?P<user>[^:@]+|'[^']+'|"[^"]+")'''
-# _PASSWORD_RE = r'''(?P<password>[^@]+|'[^']+'|"[^"]+")'''
-# _CREDS_RE = r'{}(?::{})?'.format(_USER_RE, _PASSWORD_RE)
-# FTP_RE = re.compile(r'^ftp://(?:{}@)?(?P<abs_path>.*)$'.format(_CREDS_RE))
-
-# Good for debugging.
-FORCE_DISABLE_MULTIPROCESSING = False
-
-ROOT_DIR = '/content'
-DATA_DIR_NAME = 'fids-capstone-data' 
-DATA_ROOT_DIR = os.path.join(ROOT_DIR, DATA_DIR_NAME)
-CORPUS_DIR_NAME = 'ncslgr-xml'
-CORPUS_DIR = os.path.join(DATA_ROOT_DIR, CORPUS_DIR_NAME)
-VIDEO_INDEX_BASE = 'video_index-20120129'
-VIDEO_INDEX_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
-VIDEO_INDEX_PATH = os.path.join(DATA_ROOT_DIR, VIDEO_INDEX_ARCHIVE)
-VIDEO_INDEX_DIR = os.path.join(DATA_ROOT_DIR, VIDEO_INDEX_BASE)
-VIDEO_DIR = os.path.join(DATA_ROOT_DIR, 'videos')
-VIDEO_FRAMES_DIR = os.path.join(DATA_ROOT_DIR, 'frames')
-STICHED_VIDEO_FRAMES_DIR = os.path.join(DATA_ROOT_DIR, 'stitched_video_frames')
-TMP_DIR = os.path.join(DATA_ROOT_DIR, 'tmp')
-_1KB = 1024
-_1MB = _1KB**2
-
+import subprocess
+import sys
+def pip_install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+import imp
+try:
+  imp.find_module('apache_beam')
+except ImportError:
+  pip_install("apache-beam") # !pip install apache-beam
+import apache_beam as beam
+try:
+  imp.find_module('cv2')
+except ImportError:
+  pip_install("opencv-python") # !pip install opencv-python
+import cv2
 
 def _function_wrapper(args_tuple):
   """Function wrapper to call from multiprocessing."""
   function, args = args_tuple
   return function(*args)
-
 
 def parallel_map(function, iterable):
   """Calls a function for every element in an iterable using multiple cores."""
@@ -82,223 +72,146 @@ def parallel_map(function, iterable):
   return results
 
 
-# def extract_data_file(ftp_file, data_dir):
-#   """Function to extract a single PubChem data file."""
-#   user = ftp_file['user']
-#   password = ftp_file['password']
-#   server = ftp_file['server']
-#   path = ftp_file['path']
-#   basename = os.path.basename(path)
-#   sdf_file = os.path.join(data_dir, os.path.splitext(basename)[0])
-
-#   if not tf.io.gfile.exists(sdf_file):
-#     # The `ftp` object cannot be pickled for multithreading, so we open a
-#     # new connection here
-#     memfile = BytesIO()
-#     ftp = ftplib.FTP(server, user, password)
-#     ftp.retrbinary('RETR ' + path, memfile.write)
-#     ftp.quit()
-
-#     memfile.seek(0)
-#     with tf.io.gfile.GFile(name=sdf_file, mode='w') as f:
-#       gzip_wbits_format = zlib.MAX_WBITS | 16
-#       contents = zlib.decompress(memfile.getvalue(), gzip_wbits_format)
-#       f.write(contents)
-#     print('Extracted {}'.format(sdf_file))
-
-#   else:
-#     print('Found {}'.format(sdf_file))
-
 def download_video_segment(segment_url, data_dir):
   if not tf.io.gfile.exists(data_dir):
     tf.io.gfile.makedirs(data_dir)
   local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
   if not tf.io.gfile.exists(local_segment_path):
     # memfile, _ = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
-    memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
-    # memfile.seek(0)
+    memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False) # returns with memfile.seek(0)
+    memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
-      # gzip_wbits_format = zlib.MAX_WBITS | 16
-      # contents = zlib.decompress(memfile.getvalue(), gzip_wbits_format)
       f.write(memfile.getvalue())
-    print('Downloaded {}'.format(local_segment_path))
+    print('\tDownloaded {} to {}'.format(segment_url, local_segment_path))
   else:
-    print('Found {}'.format(local_segment_path))
+    print('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
 
 
-# def download_process_media(df_video_index=df_video_index, dest_dir=STICHED_VIDEO_FRAMES_DIR, fps=30):
-#   n_missing = 0
-#   n_downloaded = 0
-#   failed_downloads = []
+def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decomposition):
+  target_stitched_vid_frames_dir = frames_dir
+  if not tf.io.gfile.exists(target_stitched_vid_frames_dir):
+    tf.io.gfile.makedirs(target_stitched_vid_frames_dir)
 
-#   try:
-#     os.mkdir(VIDEO_DIR)
-#   except:
-#     pass
+  local_vid_segment_paths = [os.path.join(videos_dir, segment_url.split('/')[-1]) for segment_url in segment_urls]
 
-#   try:
-#     os.mkdir(dest_dir)
-#   except:
-#     pass
+  vid_caps = [cv2.VideoCapture(local_vid_segment_path) for local_vid_segment_path in local_vid_segment_paths]
+  for seg_vid_cap in vid_caps:
+    seg_vid_cap.set(cv2.CAP_PROP_FPS, FPS)
+  frame_counts = list(map(lambda vc: int(vc.get(cv2.CAP_PROP_FRAME_COUNT)), vid_caps))
+  n_frames_expected = sum(frame_counts)
 
-#   print(f"Downloading/processing media-segments for {len(df_video_index)} videos...")
-#   tqdm_pb = tqdm(range(0, len(df_video_index), 1))
-#   tqdm_pb.set_description(desc='Video')
-#   media_record_iterator = df_video_index.iterrows()
-#   nested_tqdm_pb__byte = trange(1, leave=True)
-#   s_download = "DOWNLOAD ({} of {})"
-#   nested_tqdm_pb__byte.set_description(desc=s_download)
-#   nested_tqdm_pb__stitch = trange(1, leave=True)
-#   s_decompose = "DECOMPOSE ({} of {})"
-#   nested_tqdm_pb__stitch.set_description(desc=s_decompose)
+  failed_target_videos = []
 
-#   df_decomposition = pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
+  if n_frames_expected > 0:
+    # get count of existing stitched frames in target_stitched_vid_frames_dir
+    n_stitched_frames = len(tf.io.gfile.listdir(target_stitched_vid_frames_dir))
 
-#   failed_target_videos = []
+    b_restitch = n_stitched_frames < n_frames_expected
+    n_stitched_frames = 0 if b_restitch else n_stitched_frames
 
-#   for tfblock in tqdm_pb:
-#     idx, media_record = next(media_record_iterator)
+    for i, seg_vid_cap in enumerate(vid_caps):
+      _n_frames_expected = frame_counts[i]
+      fblocks = range(0, n_frames_expected, 1)
+      # nested_tqdm_pb__stitch.set_description(desc=s_decompose.format(i+1,n_segs))
+      # nested_tqdm_pb__stitch.leave = True
+      # nested_tqdm_pb__stitch.reset(total=_n_frames_expected)
+      # nested_tqdm_pb__stitch.refresh(nolock=False)
 
-#     remote_vid_paths = media_record['compressed_mov_url'].split(';') # this can be a list, separated by ';'
-#     local_vid_segment_paths = []
-#     n_segs = len(remote_vid_paths)
+      if b_restitch:
+        success, frame = seg_vid_cap.read()
+        n_frames = 0
+        while success:
+          cv2.imwrite(os.path.join(target_stitched_vid_frames_dir, f"{n_stitched_frames}.jpg"), frame)
+          n_frames += 1
+          n_stitched_frames += 1
+          # nested_tqdm_pb__stitch.update(1)
+          success, frame = seg_vid_cap.read()
 
-#     # ************************************ DOWNLOAD corresponding video segments: BEGIN ************************************
-#     for i, remote_vid_path in enumerate(remote_vid_paths):
-#       nested_tqdm_pb__byte.set_description(desc=s_download.format(i+1,n_segs))
-#       nested_tqdm_pb__byte.refresh()
-#       fname = remote_vid_path.split('/')[-1]
-#       local_vid_path = os.path.join(VIDEO_DIR, fname)
-#       local_vid_segment_paths.append(local_vid_path)
-#       if not os.path.isfile(local_vid_path):
-#         n_missing += 1
-#         try:
-#           nested_tqdm_pb__byte = utils.download(
-#               remote_vid_path, 
-#               local_vid_path, 
-#               block_sz=_1MB,
-#               display=False, 
-#               nested_tqdm_pb=nested_tqdm_pb__byte
-#           )
-#           n_downloaded += 1
-#         except Exception as e:
-#           print(f"Failed downloading {remote_vid_path} to {local_vid_path}: {e}")
-#           # to do: remove associated rows??  (NOT YET!)
-#           failed_downloads.append(remote_vid_path)
-#       else:
-#         nested_tqdm_pb__byte.leave = True
-#         nested_tqdm_pb__byte.reset(total=1)
-#         nested_tqdm_pb__byte.refresh(nolock=False)
-#         nested_tqdm_pb__byte.update(1)
-#     # ************************************ DOWNLOAD corresponding video segments: END ************************************
+        if n_frames != _n_frames_expected:
+          print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {local_vid_segment_paths[i]} but only {n_frames} were successfully extracted")
+          failed_target_videos.append(video_fname)
+          fail = True
+          break
+        else:
+          print(f"\tAdded {n_stitched_frames} frames from segment {local_vid_segment_paths[i]} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
+
+      else:
+        n_frames = _n_frames_expected
+        # nested_tqdm_pb__stitch.update(_n_frames_expected)
+        print('\tFound existing stiched-frames for {} ({} frames in {})'.format(target_stitched_vid_frames_dir, n_stitched_frames, target_stitched_vid_frames_dir))
+
+      df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
+
+  else:
+    print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    failed_target_videos.append(video_fname)
+    fail = True  
 
 
-#     # ************************************ DECOMPOSE segments into frames and then COMBINE frames into destination/target video: BEGIN ************************************
-#     target_video_fname = media_record['filename']
-#     target_stitched_vid_frames_dir = os.path.join(STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
-#     # TO DO: check if this even needs to be done... if it has already been done, don't do it again!
-#     # if os.path.isdir(target_stitched_vid_frames_dir) or len(os.listdir(target_stitched_vid_frames_dir))>0:
-#     try:
-#       os.mkdir(target_stitched_vid_frames_dir)
-#     except:
-#       pass
 
-#     fail = False
-#     n_stitched_frames = 0
 
-#     try:
-#       vid_caps = [cv2.VideoCapture(local_vid_segment_path) for local_vid_segment_path in local_vid_segment_paths]
-#       for seg_vid_cap in vid_caps:
-#         seg_vid_cap.set(cv2.CAP_PROP_FPS, fps)
-#       frame_counts = list(map(lambda vc: int(vc.get(cv2.CAP_PROP_FRAME_COUNT)), vid_caps))
-#       n_frames_expected = sum(frame_counts)
-#     except:
-#       vid_caps = None
-#       frame_counts = None
-#       n_frames_expected = 0
+# Good for debugging.
+FORCE_DISABLE_MULTIPROCESSING = False
 
-#     if n_frames_expected > 0:
-#       n_stitched_frames = len(os.listdir(target_stitched_vid_frames_dir))
-#       b_restitch = n_stitched_frames < n_frames_expected
-#       # if not b_restitch:
-#       #   print(f"\tDecomposition directory {target_stitched_vid_frames_dir} (for {target_video_fname}) contains {n_stitched_frames} image files (frames)")  
-#       n_stitched_frames = 0 if b_restitch else n_stitched_frames
+TMP_DIR = '/tmp'
+DATA_ROOT_DIR = None
+VIDEO_INDEX_BASE = 'video_index-20120129'
+VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
+VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
+SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
+VIDEO_DIR = None
+STICHED_VIDEO_FRAMES_DIR = None
+_1KB = 1024
+_1MB = _1KB**2
+FPS = 30
 
-#       for i, seg_vid_cap in enumerate(vid_caps):
-#         _n_frames_expected = frame_counts[i]
-#         fblocks = range(0, n_frames_expected, 1)
-#         nested_tqdm_pb__stitch.set_description(desc=s_decompose.format(i+1,n_segs))
-#         nested_tqdm_pb__stitch.leave = True
-#         nested_tqdm_pb__stitch.reset(total=_n_frames_expected)
-#         nested_tqdm_pb__stitch.refresh(nolock=False)
-
-#         if b_restitch:
-#           success, frame = seg_vid_cap.read()
-#           n_frames = 0
-#           while success:
-#             cv2.imwrite(os.path.join(target_stitched_vid_frames_dir, f"{n_stitched_frames}.jpg"), frame)
-#             n_frames += 1
-#             n_stitched_frames += 1
-#             nested_tqdm_pb__stitch.update(1)
-#             success, frame = seg_vid_cap.read()
-
-#           if n_frames != _n_frames_expected:
-#             print(f"\t***WARNING!!!*** Cannot stitch together target video {target_video_fname} since {_n_frames_expected} frames were expected from segment {local_vid_segment_paths[i]} but only {n_frames} were successfully extracted")
-#             failed_target_videos.append(target_video_fname)
-#             fail = True
-#             break
-
-#         else:
-#           n_frames = _n_frames_expected
-#           nested_tqdm_pb__stitch.update(_n_frames_expected)
-
-#         df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
-
-#     else:
-#       # print(f"\t***WARNING!!!*** Cannot stitch together target video {target_video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segment {local_vid_segment_path} has zero frames")
-#       failed_target_videos.append(target_video_fname)
-#       fail = True
-#       break    
-
-#     if fail:
-#       try:
-#         shutil.rmtree(target_stitched_vid_frames_dir)
-#       except:
-#         pass
-#     # ************************************ DECOMPOSE segments into frames and then COMBINE frames into destination/target video: END ************************************
-     
-#   print("\tDONE: " + f"Successfully downloaded {n_downloaded}{' (but failed to download '+str(len(failed_downloads))+')' if len(failed_downloads)>0 else ''} video-segment files (out of {n_missing} missing media files)" if n_missing>0 else "\tDONE: there were no missing media files")
-
-#   return df_decomposition
-
+df_decomposition = None # pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
 
 def run(max_data_files, data_dir):
   """Extracts the specified number of data files in parallel."""
-  if not tf.io.gfile.exists(data_dir):
-    tf.io.gfile.makedirs(data_dir)
+  # mpmanager = mp.Manager()
+
+  global DATA_ROOT_DIR
+  DATA_ROOT_DIR = data_dir
+  # DATA_ROOT_DIR = mpmanager.Array('c', data_dir)
+  if not tf.io.gfile.exists(DATA_ROOT_DIR):
+    tf.io.gfile.makedirs(DATA_ROOT_DIR)
+  if not tf.io.gfile.exists(TMP_DIR):
+    tf.io.gfile.makedirs(TMP_DIR)
+
+  global VIDEO_DIR
+  VIDEO_DIR = os.path.join(TMP_DIR, 'videos')
+  if not tf.io.gfile.exists(VIDEO_DIR):
+    tf.io.gfile.makedirs(VIDEO_DIR)
+
+  global STICHED_VIDEO_FRAMES_DIR
+  STICHED_VIDEO_FRAMES_DIR = os.path.join(DATA_ROOT_DIR, 'stitched_video_frames')
+  # STICHED_VIDEO_FRAMES_DIR = mpmanager.Array('c', os.path.join(DATA_ROOT_DIR, 'stitched_video_frames'))
+  print(f"STICHED_VIDEO_FRAMES_DIR (0): {STICHED_VIDEO_FRAMES_DIR}")
+  if not tf.io.gfile.exists(STICHED_VIDEO_FRAMES_DIR):
+    tf.io.gfile.makedirs(STICHED_VIDEO_FRAMES_DIR)
 
   # Get available data files
-  video_index_path = os.path.join(VIDEO_INDEX_DIR, 'files_by_video_name.csv')
-  if not os.path.isdir(VIDEO_INDEX_DIR) or not os.path.isfile(video_index_path):
-    remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', VIDEO_INDEX_ARCHIVE)
-    local_archive_path = os.path.join('./', VIDEO_INDEX_ARCHIVE)
+  if not os.path.isdir(VIDEO_INDEXES_DIR) or not os.path.isfile(SELECTED_VIDEO_INDEX_PATH):
+    remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', VIDEO_INDEXES_ARCHIVE)
+    local_archive_path = os.path.join(TMP_DIR, VIDEO_INDEXES_ARCHIVE)
     utils.download(
         remote_archive_path, 
         local_archive_path, 
         block_sz=_1MB
     )
     zip_ref = zipfile.ZipFile(local_archive_path, 'r')
-    print(f"unzipping {local_archive_path} to {VIDEO_INDEX_DIR}...")
-    zip_ref.extractall(DATA_ROOT_DIR) # this will video_index-20120129.zip to content dir first
+    print(f"unzipping {local_archive_path} to {VIDEO_INDEXES_DIR}...")
+    zip_ref.extractall(TMP_DIR)
     zip_ref.close()
     print(f"\tDONE")
     print(f"deleting {local_archive_path}...")
     os.remove(local_archive_path)
     print(f"\tDONE")
   else:
-    print(f'Found video index {video_index_path}')
+    print(f'Found video index {SELECTED_VIDEO_INDEX_PATH}')
 
-  df_video_index = pd.read_csv(video_index_path)
+  df_video_index = pd.read_csv(SELECTED_VIDEO_INDEX_PATH)
   df_video_index.rename(
       columns={
           'Video file name in XML file':'filename',
@@ -332,9 +245,9 @@ def run(max_data_files, data_dir):
     max_data_files = len(target_videos)
   assert max_data_files >= 1
   print('Found {} target video records, using {}'.format(len(target_videos), max_data_files))
+  target_videos = target_videos[:max_data_files]
 
   # download segments in parallel
-  target_videos = target_videos[:max_data_files]
   print('Downloading segments for target videos...')
   parallel_map(
     download_video_segment,
@@ -342,12 +255,22 @@ def run(max_data_files, data_dir):
   )
     
   # extract frames from video segments in parallel
-  # ftp_files = ftp_files.loc[:max_data_files]
-  # print('Extracting data files...')
-  # parallel_map(
-  #   extract_data_file, 
-  #   ((ftp_file, data_dir) for ftp_file in ftp_files)
-  # )
+  print('\nExtracting and aggregating frames from video-segments into target video-frames directories ...')
+  df_decomposition = pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
+  parallel_map(
+    extract_frames,
+    (
+      (
+        tvd['segment_urls'],      # segment_urls
+        tvd['video_fname'],       # video_fname
+        tvd['frames_dir'],
+        VIDEO_DIR,
+        df_decomposition
+      ) for tvd in target_videos
+    ) 
+  )
+
+
 
 
 if __name__ == '__main__':
@@ -360,23 +283,6 @@ if __name__ == '__main__':
       required=True,
       help='Directory for staging and working files. '
            'This can be a Google Cloud Storage path.')
-
-  # parser.add_argument(
-  #     '--data-sources',
-  #     nargs='+',
-  #     default=[CORPUS_DIR],
-  #     help='Data source location where SDF file(s) are stored. '
-  #          'Paths can be local, ftp://<path>, or gcs://<path>. '
-  #          'Examples: '
-  #          'ftp://hostname/path '
-  #          'ftp://username:password@hostname/path')
-
-  # parser.add_argument(
-  #     '--filter-regex',
-  #     default=r'\.sdf',
-  #     help='Regular expression to filter which files to use. '
-  #          'The regular expression will be searched on the full absolute path. '
-  #          'Every match will be kept.')
 
   parser.add_argument(
       '--max-data-files',

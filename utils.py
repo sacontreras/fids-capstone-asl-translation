@@ -26,7 +26,7 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
       tqdm_pb = tqdm(fblocks, disable=not display)
     else:
       tqdm_pb = nested_tqdm_pb
-      tqdm_pb.leave = True
+    tqdm_pb.leave = True
     tqdm_pb.reset(total=file_size)
     tqdm_pb.refresh(nolock=False)
     for fblock in fblocks: 
