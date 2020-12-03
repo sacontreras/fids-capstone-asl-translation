@@ -99,6 +99,8 @@ def download_video_segment(segment_url, data_dir):
 
 
 def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decomposition):
+  log_results = []
+
   target_stitched_vid_frames_dir = frames_dir
   if not tf.io.gfile.exists(target_stitched_vid_frames_dir):
     tf.io.gfile.makedirs(target_stitched_vid_frames_dir)
@@ -139,26 +141,30 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
           success, frame = seg_vid_cap.read()
 
         if n_frames != _n_frames_expected:
-          print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {local_vid_segment_paths[i]} but only {n_frames} were successfully extracted")
+          # print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {local_vid_segment_paths[i]} but only {n_frames} were successfully extracted")
+          log_results.append(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {local_vid_segment_paths[i]} but only {n_frames} were successfully extracted")
           failed_target_videos.append(video_fname)
           fail = True
           break
         else:
-          print(f"\tAdded {n_stitched_frames} frames from segment {local_vid_segment_paths[i]} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
+          # print(f"\tAdded {n_stitched_frames} frames from segment {local_vid_segment_paths[i]} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
+          log_results.append(f"\tAdded {n_stitched_frames} frames from segment {local_vid_segment_paths[i]} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
 
       else:
         n_frames = _n_frames_expected
         # nested_tqdm_pb__stitch.update(_n_frames_expected)
-        print('\tFound existing stiched-frames for {} ({} frames in {})'.format(target_stitched_vid_frames_dir, n_stitched_frames, target_stitched_vid_frames_dir))
+        # print('\tFound existing stiched-frames for {} ({} frames in {})'.format(target_stitched_vid_frames_dir, n_stitched_frames, target_stitched_vid_frames_dir))
+        log_results.append('\tFound existing stiched-frames for {} ({} frames in {})'.format(target_stitched_vid_frames_dir, n_stitched_frames, target_stitched_vid_frames_dir))
 
-      df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
-      if i % 1000 == 0:
-        print(df_decomposition)
+      # df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
 
   else:
-    print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    # print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    log_results.append(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
     failed_target_videos.append(video_fname)
     fail = True  
+
+  print("\n".join(log_results))
 
   return df_decomposition
 
