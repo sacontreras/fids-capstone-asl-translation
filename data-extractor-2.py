@@ -29,7 +29,7 @@ import zipfile
 from io import BytesIO
 import pandas as pd
 import urllib
-import utils
+from . import utils
 
 import subprocess
 import sys
@@ -87,6 +87,17 @@ def download_video_segment(segment_url, data_dir):
     print('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
 
 
+# def generator(n):
+#   """Returns the n-th generator function (for consumer n)"""
+#   consumer = self.consumers[n]
+#   def gen():
+#     for item in consumer:
+#         yield item
+#   return gen
+# def dataset(n):
+#   return tf.data.Dataset.from_generator(generator, args=(n,))
+
+
 def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decomposition):
   target_stitched_vid_frames_dir = frames_dir
   if not tf.io.gfile.exists(target_stitched_vid_frames_dir):
@@ -141,11 +152,15 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
         print('\tFound existing stiched-frames for {} ({} frames in {})'.format(target_stitched_vid_frames_dir, n_stitched_frames, target_stitched_vid_frames_dir))
 
       df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
+      if i % 1000 == 0:
+        print(df_decomposition)
 
   else:
     print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
     failed_target_videos.append(video_fname)
     fail = True  
+
+  return df_decomposition
 
 
 
@@ -171,6 +186,57 @@ def run(max_data_files, data_dir):
   """Extracts the specified number of data files in parallel."""
   # mpmanager = mp.Manager()
 
+  # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
+  #   tf.distribute.MirroredStrategy 
+  #     ... supports synchronous distributed training on multiple GPUs on one machine.
+  #     It creates one replica per GPU device. Each variable in the model is mirrored across all the replicas.
+  #     These variables are kept in sync with each other by applying identical updates. 
+  #     Efficient all-reduce algorithms are used to communicate the variable updates across the devices. 
+  #     All-reduce aggregates tensors across all the devices by adding them up, and makes them available on each device. 
+  #     It’s a fused algorithm that is very efficient and can reduce the overhead of synchronization significantly. 
+  #     There are many all-reduce algorithms and implementations available, depending on the type of communication available between devices. 
+  #     By default, it uses NVIDIA NCCL as the all-reduce implementation. You can choose from a few other options, or write your own.
+  # strategy = tf.distribute.MirroredStrategy()
+
+  #   tf.distribute.experimental.MultiWorkerMirroredStrategy
+  #     ... is very similar to MirroredStrategy. It implements synchronous distributed training across multiple workers, each with potentially multiple GPUs. 
+  #     Similar to MirroredStrategy, it creates copies of all variables in the model on each device across all workers.
+  #     It uses CollectiveOps as the multi-worker all-reduce communication method used to keep variables in sync. 
+  #     A collective op is a single op in the TensorFlow graph which can automatically choose an all-reduce algorithm in the TensorFlow runtime according to hardware, network topology and tensor sizes.
+  #     It also implements additional performance optimizations. 
+  #     For example, it includes a static optimization that converts multiple all-reductions on small tensors into fewer all-reductions on larger tensors. 
+  #     In addition, it is designed to have a plugin architecture - so that in the future, you will be able to plugin algorithms that are better tuned for your hardware. 
+  #     Note that collective ops also implement other collective operations such as broadcast and all-gather.
+  #     MultiWorkerMirroredStrategy currently allows you to choose between two different implementations of collective ops. 
+  #     CollectiveCommunication.RING implements ring-based collectives using gRPC as the communication layer. 
+  #     CollectiveCommunication.NCCL uses Nvidia's NCCL to implement collectives. CollectiveCommunication.AUTO defers the choice to the runtime.
+  #     The best choice of collective implementation depends upon the number and kind of GPUs, and the network interconnect in the cluster.
+  # strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+
+  #   tf.distribute.experimental.CentralStorageStrategy 
+  #     ... does synchronous training as well. Variables are not mirrored, instead they are placed on the CPU and operations are replicated across all local GPUs. 
+  #     If there is only one GPU, all variables and operations will be placed on that GPU.
+  # strategy = tf.distribute.experimental.CentralStorageStrategy()
+
+  #   tf.distribute.OneDeviceStrategy
+  #     ... is a strategy to place all variables and computation on a single specified device. This strategy is distinct from the default strategy in a number of ways. 
+  #     In default strategy, the variable placement logic remains unchanged when compared to running TensorFlow without any distribution strategy. 
+  #     But when using OneDeviceStrategy, all variables created in its scope are explicitly placed on the specified device. 
+  #     Moreover, any functions called via OneDeviceStrategy.run will also be placed on the specified device. 
+  #     Input distributed through this strategy will be prefetched to the specified device. In default strategy, there is no input distribution.
+  #     Similar to the default strategy, this strategy could also be used to test your code before switching to other strategies which actually distribute to multiple devices/machines. 
+  #     This will exercise the distribution strategy machinery somewhat more than default strategy, but not to the full extent as using MirroredStrategy or TPUStrategy etc. 
+  #     If you want code that behaves as if no strategy, then use default strategy. 
+
+  # if tf.config.list_physical_devices('gpu'):
+  #   # strategy = tf.distribute.MirroredStrategy()
+  #   strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+  #   # tf.distribute.experimental.CentralStorageStrategy()
+  # else:  # use default strategy
+  #   strategy = tf.distribute.get_strategy()
+  strategy = tf.distribute.experimental.CentralStorageStrategy() 
+  print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
+
   global DATA_ROOT_DIR
   DATA_ROOT_DIR = data_dir
   # DATA_ROOT_DIR = mpmanager.Array('c', data_dir)
@@ -186,12 +252,13 @@ def run(max_data_files, data_dir):
 
   global STICHED_VIDEO_FRAMES_DIR
   STICHED_VIDEO_FRAMES_DIR = os.path.join(DATA_ROOT_DIR, 'stitched_video_frames')
-  # STICHED_VIDEO_FRAMES_DIR = mpmanager.Array('c', os.path.join(DATA_ROOT_DIR, 'stitched_video_frames'))
-  print(f"STICHED_VIDEO_FRAMES_DIR (0): {STICHED_VIDEO_FRAMES_DIR}")
   if not tf.io.gfile.exists(STICHED_VIDEO_FRAMES_DIR):
     tf.io.gfile.makedirs(STICHED_VIDEO_FRAMES_DIR)
 
-  # Get available data files
+  # download data (video segment) files in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
+  #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
+  #   using the CPU of the machine
+  #   please see the definition of the parallel_map() function for details
   if not os.path.isdir(VIDEO_INDEXES_DIR) or not os.path.isfile(SELECTED_VIDEO_INDEX_PATH):
     remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', VIDEO_INDEXES_ARCHIVE)
     local_archive_path = os.path.join(TMP_DIR, VIDEO_INDEXES_ARCHIVE)
@@ -227,6 +294,9 @@ def run(max_data_files, data_dir):
   # NOTE!
   #   This is a CRUCIAL step! We MUST URL encode filenames since some of them sloppily contain spaces!
   df_video_index['filename'] = df_video_index['filename'].map(lambda filename: urllib.parse.quote(filename))
+  df_video_index_csv_path = os.path.join(DATA_ROOT_DIR, 'df_video_index.csv')
+  df_video_index.to_csv(path_or_buf=df_video_index_csv_path)
+  print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
 
   target_videos = []
   for idx, media_record in df_video_index.iterrows():
@@ -254,7 +324,10 @@ def run(max_data_files, data_dir):
     ((seg_url, VIDEO_DIR) for tvd in target_videos for seg_url in tvd['segment_urls'])
   )
     
-  # extract frames from video segments in parallel
+  # extract frames from video segments in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
+  #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
+  #   using the CPU of the machine
+  #   please see the definition of the parallel_map() function for details
   print('\nExtracting and aggregating frames from video-segments into target video-frames directories ...')
   df_decomposition = pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
   parallel_map(
@@ -269,6 +342,11 @@ def run(max_data_files, data_dir):
       ) for tvd in target_videos
     ) 
   )
+  df_decomposition.to_csv(path_or_buf=os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv'))
+  df_decomposition_csv_path = os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv')
+  print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
+
+  return df_video_index, df_decomposition
 
 
 
