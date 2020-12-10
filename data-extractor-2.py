@@ -11,8 +11,6 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-# This tool downloads SDF files from an FTP source.
-
 from __future__ import absolute_import
 
 import argparse
@@ -26,31 +24,42 @@ import tempfile
 import tensorflow as tf
 import zlib
 import zipfile
-from io import BytesIO
+# from io import BytesIO
 import pandas as pd
 import urllib
-from . import utils
+import utils
+# from . import utils
 
 import subprocess
 import sys
 def pip_install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 import imp
+
 try:
   imp.find_module('apache_beam')
 except ImportError:
-  pip_install("apache-beam") # !pip install apache-beam
+  pip_install("apache-beam[gcp]") # !pip install apache-beam[gcp]
 import apache_beam as beam
+from apache_beam.io import fileio
+from apache_beam.options.pipeline_options import PipelineOptions
+import csv
+import io
+import typing
+from apache_beam.transforms.sql import SqlTransform
+
 try:
   imp.find_module('cv2')
 except ImportError:
   pip_install("opencv-python") # !pip install opencv-python
 import cv2
 
+
 def _function_wrapper(args_tuple):
   """Function wrapper to call from multiprocessing."""
   function, args = args_tuple
   return function(*args)
+
 
 def parallel_map(function, iterable):
   """Calls a function for every element in an iterable using multiple cores."""
@@ -73,6 +82,7 @@ def parallel_map(function, iterable):
 
 
 def download_video_segment(segment_url, data_dir):
+  log_results = []
   if not tf.io.gfile.exists(data_dir):
     tf.io.gfile.makedirs(data_dir)
   local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
@@ -82,21 +92,12 @@ def download_video_segment(segment_url, data_dir):
     memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
       f.write(memfile.getvalue())
-    print('\tDownloaded {} to {}'.format(segment_url, local_segment_path))
+    # print('\tDownloaded {} to {}'.format(segment_url, local_segment_path))
+    log_results.append('\tDownloaded {} to {}'.format(segment_url, local_segment_path))
   else:
-    print('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
-
-
-# def generator(n):
-#   """Returns the n-th generator function (for consumer n)"""
-#   consumer = self.consumers[n]
-#   def gen():
-#     for item in consumer:
-#         yield item
-#   return gen
-# def dataset(n):
-#   return tf.data.Dataset.from_generator(generator, args=(n,))
-
+    # print('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
+    log_results.append('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
+  print("\n".join(log_results))
 
 def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decomposition):
   log_results = []
@@ -186,11 +187,25 @@ _1KB = 1024
 _1MB = _1KB**2
 FPS = 30
 
-df_decomposition = None # pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
+# BEAM_BOOTSTRAP_VIDEO_INDEX = False
+df_decomposition = pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
 
-def run(max_data_files, data_dir):
+# note that this "schema" assumes intimate knowledge of 'files_by_video_name.csv' layout (i.e. the column-name/order mappings in it)
+SCHEMA_COL_NAMES = [
+  'filename', 
+  'video_seq_id', 
+  'perspective_cam_id', 
+  'compressed_mov_url', 
+  'uncompressed_avi_url', 
+  'uncompressed_avi_mirror_1_url', 
+  'uncompressed_avi_mirror_2_url'
+]
+
+def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
   """Extracts the specified number of data files in parallel."""
   # mpmanager = mp.Manager()
+
+  print(f"beam_bootstrap_video_index: {beam_bootstrap_video_index}")
 
   # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
   #   tf.distribute.MirroredStrategy 
@@ -240,12 +255,13 @@ def run(max_data_files, data_dir):
   #   # tf.distribute.experimental.CentralStorageStrategy()
   # else:  # use default strategy
   #   strategy = tf.distribute.get_strategy()
-  strategy = tf.distribute.experimental.CentralStorageStrategy() 
+  # strategy = tf.distribute.experimental.CentralStorageStrategy() 
+  # strategy = tf.distribute.MirroredStrategy()
+  strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
   print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
   global DATA_ROOT_DIR
   DATA_ROOT_DIR = data_dir
-  # DATA_ROOT_DIR = mpmanager.Array('c', data_dir)
   if not tf.io.gfile.exists(DATA_ROOT_DIR):
     tf.io.gfile.makedirs(DATA_ROOT_DIR)
   if not tf.io.gfile.exists(TMP_DIR):
@@ -261,96 +277,323 @@ def run(max_data_files, data_dir):
   if not tf.io.gfile.exists(STICHED_VIDEO_FRAMES_DIR):
     tf.io.gfile.makedirs(STICHED_VIDEO_FRAMES_DIR)
 
-  # download data (video segment) files in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
-  #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
-  #   using the CPU of the machine
-  #   please see the definition of the parallel_map() function for details
-  if not os.path.isdir(VIDEO_INDEXES_DIR) or not os.path.isfile(SELECTED_VIDEO_INDEX_PATH):
-    remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', VIDEO_INDEXES_ARCHIVE)
-    local_archive_path = os.path.join(TMP_DIR, VIDEO_INDEXES_ARCHIVE)
-    utils.download(
-        remote_archive_path, 
-        local_archive_path, 
-        block_sz=_1MB
-    )
-    zip_ref = zipfile.ZipFile(local_archive_path, 'r')
-    print(f"unzipping {local_archive_path} to {VIDEO_INDEXES_DIR}...")
-    zip_ref.extractall(TMP_DIR)
-    zip_ref.close()
-    print(f"\tDONE")
-    print(f"deleting {local_archive_path}...")
-    os.remove(local_archive_path)
-    print(f"\tDONE")
-  else:
-    print(f'Found video index {SELECTED_VIDEO_INDEX_PATH}')
+  def boostrap_video_index(d_vid_indexes_info):
+    """
+    d_vid_indexes_info MUST be a dict as follows:
+      {
+        'vid_indexes_dir': VIDEO_INDEXES_DIR, 
+        'sel_vid_index_path': SELECTED_VIDEO_INDEX_PATH, 
+        'video_indexes_archive': VIDEO_INDEXES_ARCHIVE, 
+        'tmp_dir': TMP_DIR
+      }
 
-  df_video_index = pd.read_csv(SELECTED_VIDEO_INDEX_PATH)
-  df_video_index.rename(
-      columns={
-          'Video file name in XML file':'filename',
-          'Video sequence id': 'video_seq_id',
-          'Perspective/Camera id': 'perspective_cam_id',
-          'Compressed MOV file': 'compressed_mov_url',
-          'Uncompressed AVI': 'uncompressed_avi_url',
-          'Uncompressed AVI mirror 1': 'uncompressed_avi_mirror_1_url',
-          'Uncompressed AVI mirror 2': 'uncompressed_avi_mirror_2_url'
-      }, 
-      inplace=True
-  )
-  # NOTE!
-  #   This is a CRUCIAL step! We MUST URL encode filenames since some of them sloppily contain spaces!
-  df_video_index['filename'] = df_video_index['filename'].map(lambda filename: urllib.parse.quote(filename))
-  df_video_index_csv_path = os.path.join(DATA_ROOT_DIR, 'df_video_index.csv')
-  df_video_index.to_csv(path_or_buf=df_video_index_csv_path)
-  print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
+    this function downloads d_vid_indexes_info['video_indexes_archive'] from http://www.bu.edu/asllrp/ncslgr-for-download
+      and extracts it to os.path.join(d_vid_indexes_info['tmp_dir'], d_vid_indexes_info['video_indexes_archive'])
+      (assuming that has not already been done - i.e. if not os.path.isdir(d_vid_indexes_info['vid_indexes_dir']) or not os.path.isfile(d_vid_indexes_info['sel_vid_index_path']))
 
-  target_videos = []
-  for idx, media_record in df_video_index.iterrows():
-    video_fname = media_record['filename']
-    frames_dir = os.path.join(STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
-    urls = media_record['compressed_mov_url'].split(';') # this can be a list, separated by ';'
-    # local_paths = [os.path.join(VIDEO_DIR, url.split('/')[-1]) for url in urls]
-    d = {
-      'video_fname': video_fname,
-      'frames_dir': frames_dir,
-      'segment_urls': urls
-    }
-    target_videos.append(d)
-  
-  if not max_data_files:
-    max_data_files = len(target_videos)
-  assert max_data_files >= 1
-  print('Found {} target video records, using {}'.format(len(target_videos), max_data_files))
-  target_videos = target_videos[:max_data_files]
+    this function returns d_vid_indexes_info['sel_vid_index_path'] only after the above has been done
+    """
 
-  # download segments in parallel
-  print('Downloading segments for target videos...')
-  parallel_map(
-    download_video_segment,
-    ((seg_url, VIDEO_DIR) for tvd in target_videos for seg_url in tvd['segment_urls'])
-  )
+    print(f"video index boostrap info: {d_vid_indexes_info}")
+    if not os.path.isdir(d_vid_indexes_info['vid_indexes_dir']) or not os.path.isfile(d_vid_indexes_info['sel_vid_index_path']):
+      remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', d_vid_indexes_info['video_indexes_archive'])
+      local_archive_path = os.path.join(d_vid_indexes_info['tmp_dir'], d_vid_indexes_info['video_indexes_archive'])
+      utils.download(
+          remote_archive_path, 
+          local_archive_path, 
+          block_sz=_1MB
+      )
+      zip_ref = zipfile.ZipFile(local_archive_path, 'r')
+      print(f"unzipping {local_archive_path} to {d_vid_indexes_info['vid_indexes_dir']}...")
+      zip_ref.extractall(d_vid_indexes_info['tmp_dir'])
+      zip_ref.close()
+      print(f"\tDONE")
+      print(f"deleting {local_archive_path}...")
+      os.remove(local_archive_path)
+      print(f"\tDONE")
+    else:
+      print(f"Found video index {d_vid_indexes_info['sel_vid_index_path']}")
+    return d_vid_indexes_info['sel_vid_index_path']
+
+
+
+  if beam_bootstrap_video_index:
+    # ************* Test Apache Beam: BEGIN *************
+    def vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=False, dict_field_names=None):
+      """
+      this function opens the sel_vid_index_csv_path file (as a CSV),
+        reads its contents and returns a list of its rows
+      
+      by default, each row is a list of elements (separated initially by comma (',') of course)
+
+      if rows_to_dicts is True, each row is converted to a dict keyed by field names
+        if dict_field_names is None
+          csv.DictReader uses the first row in the csv file as field names
+        otherwise
+          dict_field_names provides field names (keys of each dict)
+      """
+      f = beam.io.filesystems.FileSystems.open(sel_vid_index_csv_path)
+      if sys.version_info >= (3,0):
+        f = io.TextIOWrapper(f)
+      if rows_to_dicts:
+        csv_reader = csv.DictReader(f,fieldnames=dict_field_names) if dict_field_names is not None else csv.DictReader(f)
+      else:
+        csv_reader = csv.reader(f)
+      if dict_field_names is not None:
+          next(csv_reader) # skip past first row (contains column names that we do not want to use)
+      return csv_reader
     
-  # extract frames from video segments in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
-  #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
-  #   using the CPU of the machine
-  #   please see the definition of the parallel_map() function for details
-  print('\nExtracting and aggregating frames from video-segments into target video-frames directories ...')
-  df_decomposition = pd.DataFrame(columns=['src_video', 'dest_dir', 'n_frames'])
-  parallel_map(
-    extract_frames,
-    (
+    class VideoIndexEntry(typing.NamedTuple):
+      """
+      fields should be identical to SCHEMA_COL_NAMES
+      """
+      filename: str                       # 'Video file name in XML file'
+      video_seq_id: int                   # 'Video sequence id'
+      perspective_cam_id: int             # 'Perspective/Camera id'
+      compressed_mov_url: str             # 'Compressed MOV file'
+      uncompressed_avi_url: str           # 'Uncompressed AVI'
+      uncompressed_avi_mirror_1_url: str  # 'Uncompressed AVI mirror 1'
+      uncompressed_avi_mirror_2_url: str  # 'Uncompressed AVI mirror 2'
+
+    # now register this schema with beam as a RowCoder
+    beam.coders.registry.register_coder(VideoIndexEntry, beam.coders.RowCoder)
+
+    def vid_index_csv_rows_to_dicts(sel_vid_index_csv_path): # 
+      """
+      this function simply wraps the call to vid_index_csv_rows() but shares the same goal of the VideoIndexEntry class: to produce a "schema'd" pcoll
+      so we fix the definition of dict_field_names to:
+        dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
+      """
+      return vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=True, dict_field_names=SCHEMA_COL_NAMES)
+
+
+    class PipelinePcollPrinter(beam.DoFn):
+      """
+      prints each element of the pcoll
+      should only be used for debugging - i.e. NOT in production
+      """
+      def process(self, pcoll_element):
+          print(pcoll_element)
+          # print(dir(pcoll_element))
+          # print()
+          return [pcoll_element] # passthrough
+
+    class VideoIndexPandasDataframeFromSchemadPcoll(beam.DoFn):
+      """
+      creates an underlying pandas DataFrame
+      appends pcoll dict element to this dataframe
+      """
+      def __init__(self):
+        self.df_video_index = pd.DataFrame(columns=SCHEMA_COL_NAMES)
+        # debug
+        self.rows = 0
+
+      def process(self, pcoll_dict_element):
+        self.df_video_index = self.df_video_index.append([pcoll_dict_element])
+        return [pcoll_dict_element] # passthrough
+
+
+    class VideoSegmentDownloadInfoGatherer(beam.DoFn):
+      """
+      assumes pcoll is already schemad
+      """
+      def process(self, schemad_pcoll_element):
+        video_fname = schemad_pcoll_element.filename
+        frames_dir = os.path.join(STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
+        urls = schemad_pcoll_element.compressed_mov_url.split(';') # this can be a list, separated by ';'
+        return [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url} for url in urls]
+
+
+    def download_video_segment_2(d_vid_seg_download_info):
+      """
+      expects d_vid_seg_download_info: {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url}
+      """
+      segment_url = d_vid_seg_download_info['segment_url']
+      log_results = []
+      if not tf.io.gfile.exists(VIDEO_DIR):
+        tf.io.gfile.makedirs(VIDEO_DIR)
+      local_segment_path = os.path.join(VIDEO_DIR, segment_url.split('/')[-1])
+      if not tf.io.gfile.exists(local_segment_path):
+        memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False) # returns with memfile.seek(0)
+        memfile.seek(0)
+        with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
+          f.write(memfile.getvalue())
+        # print('\tDownloaded {} to {}'.format(segment_url, local_segment_path))
+        log_results.append('Downloaded {} to {}'.format(segment_url, local_segment_path))
+      else:
+        # print('\tFound target segment {} (from {})'.format(local_segment_path, segment_url))
+        log_results.append('Found target segment {} (from {})'.format(local_segment_path, segment_url))
+      print("\n".join(log_results))
+      return [d_vid_seg_download_info] # passthrough
+
+    class VideoSegmentExtractor(beam.DoFn):
+      def process(self, d_vid_seg_download_info):
+        return download_video_segment_2(d_vid_seg_download_info)
+
+
+
+
+    vid_index_df_converter = VideoIndexPandasDataframeFromSchemadPcoll()
+    
+    options = {
+      'project': 'my-project', # change
+      'runner:': 'DirectRunner',
+      'direct_num_workers': 0, # 0 is use all available cores
+      'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+      'streaming': False
+    }
+    pipeline_options = PipelineOptions(flags=[], **options)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      vid_index_schemad_pcoll = (
+        pl
+
+        | beam.Create(  # pcoll containing values required to bootstrap from vid index
+            [ # one row containing dict of:
+                # 1. url of video indexes archive
+                # 2. local destination (path) for the downloaded archive
+                # 3. local destination (path) which will receive the extracted archive csv files (there are more than one)
+                # 4. final path to the selected videx index csv
+                #   (note that the dict is not laid out in the above order)
+              {
+                'vid_indexes_dir': VIDEO_INDEXES_DIR, 
+                'sel_vid_index_path': SELECTED_VIDEO_INDEX_PATH, 
+                'video_indexes_archive': VIDEO_INDEXES_ARCHIVE, 
+                'tmp_dir': TMP_DIR
+              }
+            ]
+          )
+        | "Beam PL: bootstrap video index" >> beam.Map(boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+
+        # | "Beam PL: read csv rows" >> beam.FlatMap(vid_index_csv_rows) # but rows of this PColl are lists and the first one is the header row (column names), which we do not want...
+        | "Beam PL: read video index into pcoll" >> beam.FlatMap(vid_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict
+
+        # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
+
+        # NOTE! This is scheduled for deletion since it violates thread-safety requirement - DO NOT UNCOMMENT; it is only here for reference for the time being
+        # | "Beam PL: create pandas df video index from schemad PCollection" >> beam.ParDo(vid_index_df_converter)
+
+        # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf)
+          # Haven't yet worked the following out
+          # | "Beam PL: map csv rows to schema" >> beam.Map(
+          #     lambda x: VideoIndexEntry(
+          #       str(urllib.parse.quote(x[SCHEMA_COL_NAMES[0]])),  # originally 'Video file name in XML file': str
+          #       int(x[SCHEMA_COL_NAMES[1]]),                      # originally 'Video sequence id': int
+          #       int(x[SCHEMA_COL_NAMES[2]]),                      # originally 'Perspective/Camera id': int
+          #       str(x[SCHEMA_COL_NAMES[3]]),                      # originally 'Compressed MOV file': str (note that this is actually a list with ';' as delimiter)
+          #       str(x[SCHEMA_COL_NAMES[4]]),                      # originally 'Uncompressed AVI': str
+          #       str(x[SCHEMA_COL_NAMES[5]]),                      # originally 'Uncompressed AVI mirror 1': str
+          #       str(x[SCHEMA_COL_NAMES[6]])                       # originally 'Uncompressed AVI mirror 2': str
+          #     )
+          #   ).with_output_types(VideoIndexEntry)
+
+        # So for now, we settle for beam.Row implementation, which is almost as good (although doesn't respect field order)...
+        | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
+              filename=str(urllib.parse.quote(x[SCHEMA_COL_NAMES[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+              video_seq_id=int(x[SCHEMA_COL_NAMES[1]]),                            
+              perspective_cam_id=int(x[SCHEMA_COL_NAMES[2]]),                  
+              compressed_mov_url=str(x[SCHEMA_COL_NAMES[3]]),            # this is actually a list with ';' as delimiter)
+              uncompressed_avi_url=str(x[SCHEMA_COL_NAMES[4]]),                     
+              uncompressed_avi_mirror_1_url=str(x[SCHEMA_COL_NAMES[5]]),   
+              uncompressed_avi_mirror_2_url=str(x[SCHEMA_COL_NAMES[6]])
+            )
+          )
+        # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
+
+        # filter schemad pcoll as desired (if necessary) using SqlTransform(), for example
+        # | SqlTransform("SELECT * FROM PCOLLECTION")
+      )
+
       (
-        tvd['segment_urls'],      # segment_urls
-        tvd['video_fname'],       # video_fname
-        tvd['frames_dir'],
-        VIDEO_DIR,
-        df_decomposition
-      ) for tvd in target_videos
-    ) 
-  )
-  df_decomposition.to_csv(path_or_buf=os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv'))
-  df_decomposition_csv_path = os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv')
-  print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
+        vid_index_schemad_pcoll
+        | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
+        # | "Beam PL: print download info for video segments" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
+        | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentExtractor()) # if not cpu_par_vid_seg_dl else 
+        # | beam.FlatMap(download_video_segment) # now flatten so we can parallelize segment downloads
+      )
+
+    print(f"Beam PL: ALL DONE!")
+    # ************* Test Apache Beam: END *************
+    df_video_index = vid_index_df_converter.df_video_index
+
+  else:
+    # first make sure SELECTED_VIDEO_INDEX exists locally
+    boostrap_video_index(d_vid_indexes_info={
+      'vid_indexes_dir': VIDEO_INDEXES_DIR, 
+      'sel_vid_index_path': SELECTED_VIDEO_INDEX_PATH, 
+      'video_indexes_archive': VIDEO_INDEXES_ARCHIVE, 
+      'tmp_dir': TMP_DIR
+    })
+
+    # df_video_index drives the (parallel) download of video segments
+    df_video_index = pd.read_csv(SELECTED_VIDEO_INDEX_PATH)
+    df_video_index.rename(
+        columns={
+            'Video file name in XML file': SCHEMA_COL_NAMES[0],
+            'Video sequence id': SCHEMA_COL_NAMES[1],
+            'Perspective/Camera id': SCHEMA_COL_NAMES[2],
+            'Compressed MOV file': SCHEMA_COL_NAMES[3],
+            'Uncompressed AVI': SCHEMA_COL_NAMES[4],
+            'Uncompressed AVI mirror 1': SCHEMA_COL_NAMES[5],
+            'Uncompressed AVI mirror 2': SCHEMA_COL_NAMES[6]
+        }, 
+        inplace=True
+    )
+    # NOTE!
+    #   This is a CRUCIAL step! We MUST URL encode filenames since some of them sloppily contain spaces!
+    df_video_index['filename'] = df_video_index['filename'].map(lambda filename: urllib.parse.quote(filename))
+    df_video_index_csv_path = os.path.join(DATA_ROOT_DIR, 'df_video_index.csv')
+    df_video_index.to_csv(path_or_buf=df_video_index_csv_path)
+    print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
+
+    target_videos = []
+    for idx, media_record in df_video_index.iterrows():
+      video_fname = media_record['filename']
+      frames_dir = os.path.join(STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
+      urls = media_record['compressed_mov_url'].split(';') # this can be a list, separated by ';'
+      # local_paths = [os.path.join(VIDEO_DIR, url.split('/')[-1]) for url in urls]
+      d = {
+        'video_fname': video_fname,
+        'frames_dir': frames_dir,
+        'segment_urls': urls
+      }
+      target_videos.append(d)
+    
+    if not max_data_files:
+      max_data_files = len(target_videos)
+    assert max_data_files >= 1
+    print('Found {} target video records, using {}'.format(len(target_videos), max_data_files))
+    target_videos = target_videos[:max_data_files]
+
+    # download data (video segment) files in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
+    #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
+    #   using the CPU of the machine
+    #   please see the definition of the parallel_map() function for details
+    print('Downloading segments for target videos...')
+    parallel_map(
+      download_video_segment,
+      ((seg_url, VIDEO_DIR) for tvd in target_videos for seg_url in tvd['segment_urls'])
+    )
+      
+    # extract frames from video segments in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
+    #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
+    #   using the CPU of the machine
+    #   please see the definition of the parallel_map() function for details
+    print('\nExtracting and aggregating frames from video-segments into target video-frames directories ...')
+    parallel_map(
+      extract_frames,
+      (
+        (
+          tvd['segment_urls'],      # segment_urls
+          tvd['video_fname'],       # video_fname
+          tvd['frames_dir'],
+          VIDEO_DIR,
+          df_decomposition
+        ) for tvd in target_videos
+      ) 
+    )
+    df_decomposition.to_csv(path_or_buf=os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv'))
+    df_decomposition_csv_path = os.path.join(DATA_ROOT_DIR, 'df_decomposition.csv')
+    print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
 
   return df_video_index, df_decomposition
 
@@ -359,27 +602,47 @@ def run(max_data_files, data_dir):
 
 if __name__ == '__main__':
   """Main function"""
-  parser = argparse.ArgumentParser(
-      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
   parser.add_argument(
-      '--work-dir',
-      required=True,
-      help='Directory for staging and working files. '
-           'This can be a Google Cloud Storage path.')
+    '--work-dir',
+    required=True,
+    help='Directory for staging and working files. '
+          'This can be a Google Cloud Storage path.'
+  )
 
   parser.add_argument(
-      '--max-data-files',
-      type=int,
-      required=True,
-      help='Maximum number of data files for every file pattern expansion. '
-           'Set to -1 to use all files.')
+    '--max-data-files',
+    type=int,
+    default=-1,
+    help='Maximum number of data files for every file pattern expansion. '
+          'Set to -1 to use all files.'
+  )
+
+  # courtesy of https://stackoverflow.com/a/43357954
+  #   script --beam-bootstrap-video-index
+  #   script --beam-bootstrap-video-index <bool>
+  def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+  parser.add_argument(
+    "--beam-bootstrap-video-index", 
+    type=str2bool, 
+    nargs='?',
+    const=True, 
+    default=False,
+    help=""
+  )
 
   args = parser.parse_args()
-
-  max_data_files = args.max_data_files
-  if args.max_data_files == -1:
-    max_data_files = None
-
-  data_dir = os.path.join(args.work_dir, 'data')
-  run(max_data_files, data_dir)
+  run(
+    args.max_data_files if args.max_data_files!=-1 else None, 
+    os.path.join(args.work_dir, 'data'), 
+    beam_bootstrap_video_index=args.beam_bootstrap_video_index
+  )
