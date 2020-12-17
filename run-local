@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --beam-bootstrap-video-index)
-      BEAM_BOOTSTRAP_VIDEO_INDEX=$2
+      BEAM_BOOTSTRAP_VIDEO_INDEX=$2 #${2:-1}
       shift
       ;;
     *)
