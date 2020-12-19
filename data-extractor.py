@@ -26,6 +26,7 @@ import zlib
 import zipfile
 # from io import BytesIO
 import pandas as pd
+import numpy as np
 import urllib
 import utils
 # from . import utils
@@ -1054,7 +1055,6 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
 
 def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
   """Extracts the specified number of data files in parallel."""
-  # mpmanager = mp.Manager()
 
   print(f"beam_bootstrap_video_index: {beam_bootstrap_video_index}")
 
@@ -1207,14 +1207,16 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
     class PipelinePcollPrinter(beam.DoFn):
       """
       prints each element of the pcoll
-      should only be used for debugging - i.e. NOT in production
+      should generally only be used for debugging
       """
-      def __init__(self, label=""):
+      def __init__(self, label="", msg=""):
         self.label = label
+        self.msg = msg
 
       def process(self, pcoll_element):
-          print(f"{self.label+': ' if len(self.label)>0 else ''}{pcoll_element}")
-          return [pcoll_element] # passthrough
+        print(f"{self.label+': ' if len(self.label)>0 else ''}{self.msg+': ' if len(self.msg)>0 else ''}{pcoll_element}")
+        return [pcoll_element] # passthrough
+
 
     class VideoIndexPandasDataframeFromSchemadPcoll(beam.DoFn):
       """
@@ -1231,7 +1233,7 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
         return [pcoll_dict_element] # passthrough
 
 
-    class VideoSegmentDownloadInfoGatherer(beam.DoFn):
+    class VideoSegmentInfoGatherer(beam.DoFn):
       """
       assumes pcoll is already schemad
       """
@@ -1239,44 +1241,65 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
         video_fname = schemad_pcoll_element.filename
         frames_dir = os.path.join(STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
         urls = schemad_pcoll_element.compressed_mov_url.split(';') # this can be a list, separated by ';'
-        return [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url} for url in urls]
+        return [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in urls]
 
-
-    def beam_download_video_segment(d_vid_seg_download_info, label=""):
+    import time
+    def beam_download_video_segment(d_vid_seg_download_info, max_fail=3, label=""):
       """
-      expects d_vid_seg_download_info: {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url}
+      expects d_vid_seg_download_info: {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
       """
       segment_url = d_vid_seg_download_info['segment_url']
-      # log_results = []
+      segment_fname = d_vid_seg_download_info['segment_fname']
       if not tf.io.gfile.exists(VIDEO_DIR):
         tf.io.gfile.makedirs(VIDEO_DIR)
-      local_segment_path = os.path.join(VIDEO_DIR, segment_url.split('/')[-1])
+      local_segment_path = os.path.join(VIDEO_DIR, segment_fname)
+      n_fail = 0
       if not tf.io.gfile.exists(local_segment_path):
-        memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False) # returns with memfile.seek(0)
-        memfile.seek(0)
-        with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
-          f.write(memfile.getvalue())
-        print(f"\t{label+': ' if len(label)>0 else ''}Downloaded {segment_url} to {local_segment_path}")
+        while n_fail < max_fail:
+          try:
+            memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False) # returns with memfile.seek(0)
+            memfile.seek(0)
+            with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
+              f.write(memfile.getvalue())
+            print(f"{label+': ' if len(label)>0 else ''}Downloaded {segment_url} to {local_segment_path}")
+            break
+          except Exception as e:
+            n_fail += 1
+            if n_fail < max_fail:
+              print(f"{label+': ' if len(label)>0 else ''}*** {e} ***: fail count: {n_fail}, max fail: {max_fail} --> sleeping 1 second, then trying again...")
+              time.sleep(1)
+            else:
+              print(f"{label+': ' if len(label)>0 else ''}*** {e} ***: fail count: {n_fail}, max fail: {max_fail} --> giving up!")
       else:
-        print(f"\t{label+': ' if len(label)>0 else ''}Found target segment {local_segment_path} (from {segment_url})".format(local_segment_path, segment_url))
+        print(f"{label+': ' if len(label)>0 else ''}Found target segment {local_segment_path} (from {segment_url})".format(local_segment_path, segment_url))
       return [d_vid_seg_download_info] # passthrough
 
-    class VideoSegmentExtractor(beam.DoFn):
+
+    class VideoSegmentDownloader(beam.DoFn):
       def __init__(self, label=""):
         self.label = label
 
       def process(self, d_vid_seg_download_info):
-        return beam_download_video_segment(d_vid_seg_download_info, self.label)
+        return beam_download_video_segment(d_vid_seg_download_info, label=self.label)
 
-    def beam_extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decomposition):
-      # log_results = []
+
+    def beam_extract_frames(tpl_target_video_extraction_info, label=""):
+      """
+      expects tpl_target_video_extraction_info: (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+      """
+
+      # # log_results = []
+      video_fname = tpl_target_video_extraction_info[0]
+      segment_dicts = sorted(tpl_target_video_extraction_info[1], key=lambda segment_dict: segment_dict['segment_fname'])
+      frames_dir = segment_dicts[0]['frames_dir']
+      # segment_urls = [segment_dict['segment_url'] for segment_dict in segment_dicts]
 
       target_stitched_vid_frames_dir = frames_dir
       target_stitched_vid_name = target_stitched_vid_frames_dir.split(os.path.sep)[-1]
       if not tf.io.gfile.exists(target_stitched_vid_frames_dir):
         tf.io.gfile.makedirs(target_stitched_vid_frames_dir)
 
-      local_vid_segment_paths = [os.path.join(videos_dir, segment_url.split('/')[-1]) for segment_url in segment_urls]
+      local_vid_segment_paths = [os.path.join(VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
 
       vid_caps = [cv2.VideoCapture(local_vid_segment_path) for local_vid_segment_path in local_vid_segment_paths]
       for seg_vid_cap in vid_caps:
@@ -1314,35 +1337,38 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
             seg_path = local_vid_segment_paths[i]
             seg_fname = seg_path.split(os.path.sep)[-1]
             if n_frames != _n_frames_expected:
-              print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
+              print(f"{label+': ' if len(label)>0 else ''}***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
               failed_target_videos.append(video_fname)
               fail = True
               break
             else:
-              print(f"\tAdded {n_stitched_frames} frames from segment {seg_fname} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
+              print(f"{label+': ' if len(label)>0 else ''}Added {n_stitched_frames} frames from segment {seg_fname} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
 
           else:
             n_frames = _n_frames_expected
             # nested_tqdm_pb__stitch.update(_n_frames_expected)
-            print(f'\tFound existing stiched-frames for {target_stitched_vid_name} ({n_stitched_frames} frames in {target_stitched_vid_frames_dir})')
-
-          # df_decomposition.loc[len(df_decomposition)] = [local_vid_segment_paths[i], target_stitched_vid_frames_dir, n_frames]
+            print(f"{label+': ' if len(label)>0 else ''}Found existing stiched-frames for {target_stitched_vid_name} ({n_stitched_frames} frames in {target_stitched_vid_frames_dir})")
 
       else:
         print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
         failed_target_videos.append(video_fname)
         fail = True  
 
-      # print("\n".join(log_results))
+      return [tpl_target_video_extraction_info] # passthrough
 
-      return df_decomposition
 
+    class SegmentFrameExtractor(beam.DoFn):
+      def __init__(self, label=""):
+        self.label = label
+
+      def process(self, tpl_target_video_extraction_info):
+        return beam_extract_frames(tpl_target_video_extraction_info, self.label)
     
 
 
 
 
-    vid_index_df_converter = VideoIndexPandasDataframeFromSchemadPcoll()
+    # vid_index_df_converter = VideoIndexPandasDataframeFromSchemadPcoll()
     
     options = {
       'project': 'my-project', # change
@@ -1384,13 +1410,9 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
 
         # | "Beam PL: read csv rows" >> beam.FlatMap(vid_index_csv_rows) # but rows of this PColl are lists and the first one is the header row (column names), which we do not want...
         | "Beam PL: read video index into pcoll" >> beam.FlatMap(vid_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict
-
         # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
-        # NOTE! This is scheduled for deletion since it violates thread-safety requirement - DO NOT UNCOMMENT; it is only here for reference for the time being
-        # | "Beam PL: create pandas df video index from schemad PCollection" >> beam.ParDo(vid_index_df_converter)
-
-        # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf)
+        # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf) when necessary
           # Haven't yet worked the following out
           # | "Beam PL: map csv rows to schema" >> beam.Map(
           #     lambda x: VideoIndexEntry(
@@ -1415,10 +1437,10 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
               uncompressed_avi_mirror_2_url=str(x[SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
             )
           )
-        # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
+        # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
 
         # filter schemad pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to max_data_files
-        | SqlTransform(f"SELECT * FROM PCOLLECTION LIMIT {max_data_files}")
+        | SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(max_data_files) if max_data_files is not None and max_data_files>0 else ''}")
       )
 
       # (
@@ -1427,92 +1449,114 @@ def run(max_data_files, data_dir, beam_bootstrap_video_index=False):
       #   | 'Print result' >> beam.Map(lambda count_pcol_element: print(f"Videos queued for download: {count_pcol_element}"))
       # )
 
+      # ******************** DOWNLOAD AND EXTRACT VIDEOS: BEGIN ********************
       # this does the job but is much much slower than parallel downloads since each item is processed sequentially
       # (
       #   vid_index_schemad_pcoll
-      #   | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
+      #   | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
       #   # | "Beam PL: print download info for video segments" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
-      #   | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentExtractor())
+      #   | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentDownloader())
       # )
 
       # create as many partitions as we have workers (cores for DirectRunner) available
       #   this is done so that downloads can occur in parallel
-      #   we randomly assign each data item to one of the num_partitions partitions 
-      p1, p2, p3, p4, p5, p6, p7, p8 = (
-      # p1, p2, p3, p4 = (
+      #   we randomly assign each data item to one of the num_partitions partitions
+      n_partitions = 8 # hardcoded for now 
+      partitions = (
         vid_index_schemad_pcoll
 
         # Partition accepts a function that receives the number of partitions, and returns the index of the desired partition for the element. 
         # The number of partitions passed must be a positive integer, and it must return an integer in the range 0 to num_partitions-1.
         | 'Partition' >> beam.Partition(
           lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
-          8 # number of partitions we use to download in parallel
+          # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
+          n_partitions
         )
       )
 
       # here, we download in parallel by partition
-      (
-        p1
-        | "Beam PL: p1 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p1 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p1"))  # comment out for production
-        | "Beam PL: p1 download video segments" >> beam.ParDo(VideoSegmentExtractor("p1")) # outputs a pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url}
-        | "Beam PL: p1 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p1 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp1: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p2
-        | "Beam PL: p2 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p2 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p2"))  # comment out for production
-        | "Beam PL: p2 download video segments" >> beam.ParDo(VideoSegmentExtractor("p2"))
-        | "Beam PL: p2 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p2 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp2: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p3
-        | "Beam PL: p3 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p3 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p3"))  # comment out for production
-        | "Beam PL: p3 download video segments" >> beam.ParDo(VideoSegmentExtractor("p3"))
-        | "Beam PL: p3 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p3 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp3: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p4
-        | "Beam PL: p4 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p4 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p4"))  # comment out for production
-        | "Beam PL: p4 download video segments" >> beam.ParDo(VideoSegmentExtractor("p4"))
-        | "Beam PL: p4 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p4 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp4: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p5
-        | "Beam PL: p5 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p5 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p5"))  # comment out for production
-        | "Beam PL: p5 download video segments" >> beam.ParDo(VideoSegmentExtractor("p5"))
-        | "Beam PL: p5 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p5 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp5: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p6
-        | "Beam PL: p6 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p6 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p6"))  # comment out for production
-        | "Beam PL: p6 download video segments" >> beam.ParDo(VideoSegmentExtractor("p6"))
-        | "Beam PL: p6 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p6 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp6: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p7
-        | "Beam PL: p7 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p7 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p7"))  # comment out for production
-        | "Beam PL: p7 download video segments" >> beam.ParDo(VideoSegmentExtractor("p7"))
-        | "Beam PL: p7 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p7 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp7: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
-      (
-        p8
-        | "Beam PL: p8 gather download info for video segments" >> beam.ParDo(VideoSegmentDownloadInfoGatherer())
-        # | "Beam PL: p8 print download info for video segments" >> beam.ParDo(PipelinePcollPrinter("p8"))  # comment out for production
-        | "Beam PL: p8 download video segments" >> beam.ParDo(VideoSegmentExtractor("p8"))
-        | "Beam PL: p8 count videos downloaded" >> beam.combiners.Count.Globally() | "Beam PL: p8 print result" >> beam.Map(lambda count_pcol_element: print(f"\tp8: videos downloaded: {count_pcol_element}")) # comment out for production
-      )
+      print('Downloading segments for target videos...')
+      for i, p in enumerate(partitions):
+        p_label = f"p{i+1}"
+        p_label_indented = f"\t{p_label}"
 
+        partition_download_results = (
+          p
+          | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
+          | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
+        )
 
+        # this will print download results but it's a branch of the DAG at this level, which means output to stdout will be interspersed with segment-extraction output
+        #   note that this depends on the DAG - i.e. will not occur until partition_download_results are ready which, of course, does not occur until all videos have been downloaded
+        # (
+        #   partition_download_results
+        #   | f"Beam PL: {p_label} count videos downloaded" >> beam.combiners.Count.Globally() 
+        #   | f"Beam PL: {p_label} print videos downloaded count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="videos downloaded/found"))
+        # )
+
+        # now we need to extract segment-frames for each target video
+        #   NOTE! THIS IS A CRUCIAL PIECE SO PAY ATTENTION TO THE FOLLOWING!!
+        #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (BEGIN) **********
+        #     We partitioned vid_index_schemad_pcoll so that video-SEGMENT downloads can occur independently.
+        #     Downloading segments can occur independently since there is no correlation between each segment
+        #       AS FAR AS DOWNLOADING IS CONCERNED.
+        #
+        #     However, AS FAR AS EXTRACTION IS CONCERNED, each segment is related by the target video composed
+        #       of each segment.  The segment-videos themselves are ordered as they compose the final target
+        #       video corresponding of ordered segment videos. For example, if a target video is composed of
+        #       three segment videos, those segments occur in a certain order, as specified by the video index.
+        #       Expanding upon this example, suppose target video "some_story_given_by_john_doe_0.mov", was recorded
+        #       and saved in three corresponding video segments (to save space, I guess?) 
+        #       "some_story_given_by_john_doe_0_1.mov", "some_story_given_by_john_doe_0_2.mov", and
+        #       "some_story_given_by_john_doe_0_3.mov". Note that the trailing "0" in the TARGET VIDEO filename
+        #       indicates the camera perspective... all stories are potentially filmed from multiple synchronized
+        #       camera perspectives/angles - there were obvioiusly multiple synchronized video recorders used in
+        #       in that case.  However, for this example, we are focusing on the target video for camera perspective 0.
+        #       Anyway, as said, there are three segments which compose the target video.  THESE SEGMENT VIDEOS
+        #       ARE ORDERED (in time).  THEREFORE, THE FRAMES COMPOSING EACH SEGMENT VIDEO ARE CONSEQUENTLY ORDERED
+        #       (in time).  THE BOTTOM LINE IS THAT WE NOW NEED TO GROUP SEGMENT VIDEOS, KEYED BY CORRESPONDING
+        #       TARGET VIDEO.  FURTHERMORE, THE COLLECTION OF SEGMENT VIDEOS FOR EACH TARGET VIDEO MUST BE ORDERED.
+        #       THAT IS, WE MUST EXTRACT SEGMENT FRAMES AND SAVE THEM TO THE FILE SYSTEM WITH A FILE NAMING SCHEME
+        #       THAT REFLECTS FRAME ORDER OF THE UNION OF ALL SEGMENT FRAMES.  IF WE EXTRACT THE FRAMES OF EACH
+        #       ORDERED SEGMENT, THEN A SIMPLE NUMERIC INDEX AS SEGMENT-FRAME FILENAME WILL DO THE TRICK.
+        #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (END) **********
+
+        # GROUP segment videos by target video
+        #   note that this depends on the DAG - i.e. will not occur until partition_download_results are ready which, of course, does not occur until all videos have been downloaded
+        partition_video_frame_extraction_results = (
+          partition_download_results # pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
+            # | "Beam PL: apply schema to video segments extraction info pcoll" >> beam.Map(lambda d_vid_seg_extraction_info: beam.Row(
+            #       video_fname=str(d_vid_seg_extraction_info['video_fname']),
+            #       frames_dir=str(d_vid_seg_extraction_info['frames_dir']),                            
+            #       segment_url=str(d_vid_seg_extraction_info['segment_url']),                  
+            #       segment_fname=str(d_vid_seg_extraction_info['segment_fname'])
+            #     )
+            #   )
+            # | f"Beam PL: group extraction info for video segments by video_fname" >> SqlTransform(
+            #       f"""
+            #         SELECT 
+            #           video_fname, 
+            #           COUNT(segment_fname) AS n_segments 
+            #         FROM 
+            #           PCOLLECTION 
+            #         GROUP BY 
+            #           video_fname
+            #         ORDER BY
+            #           video_fname
+            #       """
+            #     )
+
+            # this is WAY faster than using SqlTransform()
+            | f"Beam PL: {p_label} group extraction info for video segments by video_fname" >> beam.GroupBy(lambda d: d['video_fname']) # yields pcoll of rows as (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+            # | f"Beam PL: {p_label} print extraction info for video segments grouped by video_fname" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="video segments downloaded/found for target video"))
+            | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+        )
+    # ******************** DOWNLOAD AND EXTRACT VIDEOS: END ********************
 
     print(f"Beam PL: ALL DONE!")
     # ************* Test Apache Beam: END *************
-    df_video_index = vid_index_df_converter.df_video_index
+    # df_video_index = vid_index_df_converter.df_video_index # this doesn't work since it's not thread-safe!
+    df_video_index = None
 
   else:
 
