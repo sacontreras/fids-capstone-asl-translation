@@ -17,7 +17,7 @@ set -e
 SRC_DIR=.
 WORK_DIR=/tmp/cloudml-samples/molecules
 MAX_DATA_FILES=5
-BEAM_BOOTSTRAP_VIDEO_INDEX=0
+USE_BEAM=0
 while [[ $# -gt 0 ]]; do
   case $1 in
     --src-dir)
@@ -32,8 +32,8 @@ while [[ $# -gt 0 ]]; do
       MAX_DATA_FILES=$2
       shift
       ;;
-    --beam-bootstrap-video-index)
-      BEAM_BOOTSTRAP_VIDEO_INDEX=$2 #${2:-1}
+    --use-beam)
+      USE_BEAM=$2 #${2:-1}
       shift
       ;;
     *)
@@ -55,7 +55,7 @@ echo '>> Extracting data'
 run python $SRC_DIR/data-extractor.py \
   --work-dir $WORK_DIR \
   --max-data-files $MAX_DATA_FILES \
-  --beam-bootstrap-video-index $BEAM_BOOTSTRAP_VIDEO_INDEX
+  --use-beam $USE_BEAM
 echo ''
 
 # # Preprocess the datasets
