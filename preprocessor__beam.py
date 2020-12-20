@@ -1,20 +1,99 @@
-import apache_beam as beam
-from apache_beam.io import fileio
-from apache_beam.options.pipeline_options import PipelineOptions
-import tensorflow as tf
-import os
-import sys
 import csv
 import io
-from apache_beam.transforms.sql import SqlTransform
-# import apache_beam.runners.interactive.interactive_beam as ib
+import os
 import random
+import sys
 import typing
-from preprocessr__common import *
-import utils
-import cv2
 import urllib
+import zipfile
+
+import apache_beam as beam
+import cv2
+# import apache_beam.runners.interactive.interactive_beam as ib
+import tensorflow as tf
+from apache_beam.io import fileio
+from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.transforms.sql import SqlTransform
+
 import globals
+import utils
+from preprocessor__common import *
+
+
+def prepare_output_str(str, label=""):
+  return f"{label+': ' if len(label)>0 else ''}{str}"
+
+
+def boostrap_signstream_corpus(d_corpus_info, label=""):
+  """
+  d_corpus_info MUST be a dict as follows:
+    {
+      'tmp_dir': TMP_DIR,
+      'data_dir': DATA_ROOT_DIR,
+      'corpus_archive': CORPUS_ARCHIVE, 
+      'corpus_ds_path': CORPUS_DS_PATH,
+    }
+
+  this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
+    and extracts it to os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])
+    (assuming that has not already been done - i.e. if not os.path.isdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
+      or len(os.listdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
+    )
+  """
+
+  corpus_parent_dir = d_corpus_info['tmp_dir']
+  corpus_dir = os.path.join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
+
+  if not tf.io.gfile.exists(d_corpus_info['corpus_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['document_asl_consultant_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['asl_consultant_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['video_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['utterance_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['utterance_video_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['utterance_token_ds_path']) \
+    or not tf.io.gfile.exists(d_corpus_info['vocabulary_ds_path']):
+
+    print(prepare_output_str(f"corpus boostrap info: {d_corpus_info}", label=label))
+
+    # download archive
+    """
+    requires:
+      d_corpus_info['corpus_archive']
+      d_corpus_info['tmp_dir']
+    """
+    remote_archive_path = os.path.join('http://secrets.rutgers.edu/dai/xml', d_corpus_info['corpus_archive'])
+    local_archive_parent_dir = d_corpus_info['tmp_dir']
+    local_archive_path = os.path.join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
+    utils.download(
+        remote_archive_path, 
+        local_archive_path, 
+        block_sz=globals._1MB
+    )
+    zip_ref = zipfile.ZipFile(local_archive_path, 'r')
+    print(f"unzipping {local_archive_path} to {corpus_dir}...")
+    zip_ref.extractall(corpus_parent_dir)
+    zip_ref.close()
+    print(f"\tDONE")
+    print(f"deleting {local_archive_path}...")
+    os.remove(local_archive_path)
+    print(f"\tDONE")
+
+    return [os.path.join(corpus_dir,"*")]
+    # return fileio.MatchFiles(os.path.join(corpus_dir,"*")).expand()
+
+  else:
+
+    print(prepare_output_str(f"Found dataset {d_corpus_info['corpus_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['document_asl_consultant_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['asl_consultant_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['video_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_video_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_token_ds_path']}", label=label))
+    print(prepare_output_str(f"Found dataset {d_corpus_info['vocabulary_ds_path']}", label=label))
+
+    return []
+
 
 def vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=False, dict_field_names=None):
   """
@@ -78,21 +157,6 @@ class PipelinePcollPrinter(beam.DoFn):
     return [pcoll_element] # passthrough
 
 
-class VideoIndexPandasDataframeFromSchemadPcoll(beam.DoFn):
-  """
-  creates an underlying pandas DataFrame
-  appends pcoll dict element to this dataframe
-  """
-  def __init__(self):
-    self.df_video_index = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
-    # debug
-    self.rows = 0
-
-  def process(self, pcoll_dict_element):
-    self.df_video_index = self.df_video_index.append([pcoll_dict_element])
-    return [pcoll_dict_element] # passthrough
-
-
 class VideoSegmentInfoGatherer(beam.DoFn):
   """
   assumes pcoll is already schemad
@@ -104,6 +168,8 @@ class VideoSegmentInfoGatherer(beam.DoFn):
     return [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in urls]
 
 import time
+
+
 def beam_download_video_segment(d_vid_seg_download_info, max_fail=3, label=""):
   """
   expects d_vid_seg_download_info: {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
@@ -253,10 +319,12 @@ def run():
   # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}")
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    vid_index_schemad_pcoll = (
+
+    # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
+    full_vid_index_schemad_pcoll = (
       pl
 
-      | beam.Create(  # pcoll containing values required to bootstrap from vid index
+      | "Beam PL: create initial pcoll containing information for boostrap_video_index" >> beam.Create(
           [ # one row containing dict of:
               # 1. url of video indexes archive
               # 2. local destination (path) for the downloaded archive
@@ -289,9 +357,65 @@ def run():
           )
         )
       # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
+    )
+    # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
 
-      # filter schemad pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to max_data_files
+
+    # ******************** write video index to storage as CSV: BEGIN ********************
+    write_vid_index_to_storage_result = (
+      full_vid_index_schemad_pcoll
+      | beam.Map(lambda vid_index_schemad_pcoll_row: f"{vid_index_schemad_pcoll_row.filename.strip()},{vid_index_schemad_pcoll_row.video_seq_id},{vid_index_schemad_pcoll_row.perspective_cam_id},{vid_index_schemad_pcoll_row.compressed_mov_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url.strip()}")
+      | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
+          os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
+          file_name_suffix=".csv", 
+          append_trailing_newlines=True,
+          shard_name_template="",
+          header=", ".join(globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+        )
+      | "Beam PL: print path to video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="video index csv written to storage"))
+    )
+    # ******************** write video index to storage as CSV: END ********************
+
+
+    # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
+    vid_index_schemad_pcoll = (
+      full_vid_index_schemad_pcoll
       | SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
+    )
+    # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
+
+
+    _ = (
+      pl
+      | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
+        [ # one row containing dict of:
+            # 1. globals.TMP_DIR (this where the initial corpus archive will be unzipped)
+            # 2. globals.DATA_ROOT_DIR (this is where the datasets will be saved as csv files)
+            # 3. globals.CORPUS_ARCHIVE (this is the base filename of the corpus archive, used to download and save in globals.TMP_DIR)
+            # 4. globals.CORPUS_DS_PATH
+          {
+            'tmp_dir': globals.TMP_DIR,
+            'data_dir': globals.DATA_ROOT_DIR,
+            'corpus_archive': globals.CORPUS_ARCHIVE, 
+            'corpus_ds_path': globals.CORPUS_DS_PATH
+            # 'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+            # 'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
+            # 'video_ds_path': globals.VIDEO_DS_PATH,
+            # 'utterance_ds_path': globals.UTTERANCE_DS_PATH,
+            # 'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
+            # 'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
+            # 'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+          }
+        ]
+      )
+      | "Beam PL: bootstrap SignStream corpus" >> beam.Map(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+      # | "Beam PL: print corpus dir" >> beam.ParDo(PipelinePcollPrinter())
+      # | "Beam PL: list documents in corpus dir" >> beam.Map(lambda ss_corpus_dir: fileio.MatchFiles(ss_corpus_dir))
+      | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+      | "Beam PL: read corpus documents" >> fileio.ReadMatches()
+      # | beam.Reshuffle()
+      # | "Beam PL: get corpus documents metadata" >> beam.Map(lambda corpus_document_readable_file: corpus_document_readable_file.getMetadata()) # broken
+      | "Beam PL: corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
     )
 
     # (
@@ -421,9 +545,8 @@ def run():
             n_stitched_frames=int(x[1])
           ))
       # | "Beam PL: count total frames extracted" >> SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
-      | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames)
+      | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames) # on DirectRunner, this is literally about 100 times faster!
       | "Beam PL: count total frames extracted" >> beam.CombineGlobally(sum)
-
       | f"Beam PL: print total frames extracted" >> beam.ParDo(PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
     )
     # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************

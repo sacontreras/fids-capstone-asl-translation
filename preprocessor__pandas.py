@@ -1,21 +1,25 @@
-import signal
-import multiprocessing as mp
-import utils
-import os
-import pandas as pd
-import tensorflow as tf
-import apache_beam as beam
 import io
+import multiprocessing as mp
+import os
+import signal
+import sys
 import urllib
 import zipfile
-import sys
 from importlib import import_module
+
+import apache_beam as beam
+import pandas as pd
+import tensorflow as tf
+
+import utils
+
 # import signstreamxmlparser.analysis as sxa
 # import signstreamxmlparser.analysis.signstream as ss
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
 from preprocessr__common import *
+
 import globals
 
 
@@ -803,9 +807,9 @@ def run():
       frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
       urls = media_record['compressed_mov_url'].split(';') # this can be a list, separated by ';'
       d = {
-      'video_fname': video_fname,
-      'frames_dir': frames_dir,
-      'segment_urls': urls
+        'video_fname': video_fname,
+        'frames_dir': frames_dir,
+        'segment_urls': urls
       }
       target_videos.append(d)
 
