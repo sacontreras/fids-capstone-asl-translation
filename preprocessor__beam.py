@@ -95,9 +95,9 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     return []
 
 
-def vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=False, dict_field_names=None):
+def _read_csv_rows(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None):
   """
-  this function opens the sel_vid_index_csv_path file (as a CSV),
+  this function opens the "readable file" (as a CSV),
     reads its contents and returns a list of its rows
   
   by default, each row is a list of elements (separated initially by comma (',') of course)
@@ -108,39 +108,58 @@ def vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=False, dict_field_n
     otherwise
       dict_field_names provides field names (keys of each dict)
   """
-  f = beam.io.filesystems.FileSystems.open(sel_vid_index_csv_path)
   if sys.version_info >= (3,0):
-    f = io.TextIOWrapper(f)
+    sel_csv_readable_file = io.TextIOWrapper(sel_csv_readable_file)
   if rows_to_dicts:
-    csv_reader = csv.DictReader(f,fieldnames=dict_field_names) if dict_field_names is not None else csv.DictReader(f)
+    csv_reader = csv.DictReader(sel_csv_readable_file,fieldnames=dict_field_names) if dict_field_names is not None else csv.DictReader(f)
   else:
-    csv_reader = csv.reader(f)
+    csv_reader = csv.reader(sel_csv_readable_file)
   if dict_field_names is not None:
       next(csv_reader) # skip past first row (contains column names that we do not want to use)
   return csv_reader
 
-class VideoIndexEntry(typing.NamedTuple):
-  """
-  fields should be identical to SCHEMA_COL_NAMES__VIDEO_INDEX
-  """
-  filename: str                       # 'Video file name in XML file'
-  video_seq_id: int                   # 'Video sequence id'
-  perspective_cam_id: int             # 'Perspective/Camera id'
-  compressed_mov_url: str             # 'Compressed MOV file'
-  uncompressed_avi_url: str           # 'Uncompressed AVI'
-  uncompressed_avi_mirror_1_url: str  # 'Uncompressed AVI mirror 1'
-  uncompressed_avi_mirror_2_url: str  # 'Uncompressed AVI mirror 2'
 
-# now register this schema with beam as a RowCoder
-beam.coders.registry.register_coder(VideoIndexEntry, beam.coders.RowCoder)
+def read_csv_rows(sel_csv_path, rows_to_dicts=False, dict_field_names=None):
+  return _read_csv_rows(
+    beam.io.filesystems.FileSystems.open(sel_csv_path), 
+    rows_to_dicts, 
+    dict_field_names
+  )
 
-def vid_index_csv_rows_to_dicts(sel_vid_index_csv_path): # 
+
+# class VideoIndexEntry(typing.NamedTuple):
+#   """
+#   fields should be identical to SCHEMA_COL_NAMES__VIDEO_INDEX
+#   """
+#   filename: str                       # 'Video file name in XML file'
+#   video_seq_id: int                   # 'Video sequence id'
+#   perspective_cam_id: int             # 'Perspective/Camera id'
+#   compressed_mov_url: str             # 'Compressed MOV file'
+#   uncompressed_avi_url: str           # 'Uncompressed AVI'
+#   uncompressed_avi_mirror_1_url: str  # 'Uncompressed AVI mirror 1'
+#   uncompressed_avi_mirror_2_url: str  # 'Uncompressed AVI mirror 2'
+
+# # now register this schema with beam as a RowCoder
+# beam.coders.registry.register_coder(VideoIndexEntry, beam.coders.RowCoder)
+def vid_index_csv_rows_to_dicts(sel_csv_path):
   """
   this function simply wraps the call to vid_index_csv_rows() but shares the same goal of the VideoIndexEntry class: to produce a "schema'd" pcoll
   so we fix the definition of dict_field_names to:
     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
   """
-  return vid_index_csv_rows(sel_vid_index_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+  return read_csv_rows(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+def _vid_index_csv_rows_to_dicts(sel_csv_readable_file):
+  return _read_csv_rows(sel_csv_readable_file, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+
+
+# def vid_index_csv_rows_to_dicts(sel_csv_path):
+#   """
+#   this function simply wraps the call to vid_index_csv_rows() but shares the same goal of the VideoIndexEntry class: to produce a "schema'd" pcoll
+#   so we fix the definition of dict_field_names to:
+#     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
+#   """
+#   return read_csv_rows(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+
 
 
 class PipelinePcollPrinter(beam.DoFn):
@@ -301,6 +320,34 @@ def row_to_string(row):
   return ", ". join([str(d_row[k]) for k in d_row.keys()])
 
 
+class CorpusDocumentFileProcessor(beam.DoFn):
+  def __init__(self, label=""):
+    self.label = label
+    self.next_doc_id = 0
+
+  def process(self, corpus_readable_file):
+    xml_db_path = corpus_readable_file.metadata.path
+    xml_db_fname = xml_db_path.split(os.path.sep)[-1]
+    f = beam.io.filesystems.FileSystems.open(xml_db_path)
+    if sys.version_info >= (3,0):
+      f = io.TextIOWrapper(f)
+    xml_lines_with_cr = f.readlines()
+    f.close()
+    raw_xml = "".join([xml_line.replace('\n', '') for xml_line in xml_lines_with_cr])
+    row = beam.Row(
+      # SCHEMA_COL_NAMES__CORPUS_DS = [
+      #   'DocumentID',
+      #   'Filename',
+      #   'XML'
+      # ]
+      DocumentID=int(self.next_doc_id),
+      Filename=str(xml_db_fname),
+      XML=raw_xml
+    )
+    self.next_doc_id += 1
+    return [row]
+
+
 
 
 def run():
@@ -369,8 +416,6 @@ def run():
     # ******************** write video index to storage as CSV: BEGIN ********************
     write_vid_index_to_storage_result = (
       full_vid_index_schemad_pcoll
-      # row_to_string
-      # | beam.Map(lambda vid_index_schemad_pcoll_row: f"{vid_index_schemad_pcoll_row.filename.strip()},{vid_index_schemad_pcoll_row.video_seq_id},{vid_index_schemad_pcoll_row.perspective_cam_id},{vid_index_schemad_pcoll_row.compressed_mov_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url.strip()}")
       | beam.Map(lambda vid_index_schemad_pcoll_row: row_to_string(vid_index_schemad_pcoll_row))
       | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
           os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
@@ -393,38 +438,49 @@ def run():
 
 
     # ******************** bootstrap SignStream corpus: BEGIN ********************
-    signstream_corpus_readable_files = (
+    corpus_index_schemad_pcoll = (
       pl
       | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
-        [ # one row containing dict of:
-            # 1. globals.TMP_DIR (this where the initial corpus archive will be unzipped)
-            # 2. globals.DATA_ROOT_DIR (this is where the datasets will be saved as csv files)
-            # 3. globals.CORPUS_ARCHIVE (this is the base filename of the corpus archive, used to download and save in globals.TMP_DIR)
-            # 4. globals.CORPUS_DS_PATH
+        [
           {
             'tmp_dir': globals.TMP_DIR,
             'data_dir': globals.DATA_ROOT_DIR,
             'corpus_archive': globals.CORPUS_ARCHIVE, 
-            'corpus_ds_path': globals.CORPUS_DS_PATH
-            # 'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-            # 'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-            # 'video_ds_path': globals.VIDEO_DS_PATH,
-            # 'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-            # 'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-            # 'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-            # 'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+            'corpus_ds_path': globals.CORPUS_DS_PATH,
+            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+            'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
+            'video_ds_path': globals.VIDEO_DS_PATH,
+            'utterance_ds_path': globals.UTTERANCE_DS_PATH,
+            'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
+            'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
+            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
           }
         ]
       )
       | "Beam PL: bootstrap SignStream corpus" >> beam.Map(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
-      # | "Beam PL: print corpus dir" >> beam.ParDo(PipelinePcollPrinter())
-      # | "Beam PL: list documents in corpus dir" >> beam.Map(lambda ss_corpus_dir: fileio.MatchFiles(ss_corpus_dir))
       | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
       | "Beam PL: read corpus documents" >> fileio.ReadMatches()
-
-      # | "Beam PL: corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
+      | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
+      
+      # | "Beam PL: print corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
     )
     # ******************** bootstrap SignStream corpus: END ********************
+
+
+    # ******************** write corpus index to storage as CSV: BEGIN ********************
+    write_corpu_index_to_storage_result = (
+      corpus_index_schemad_pcoll
+      | beam.Map(lambda corpus_index_schemad_pcoll_row: row_to_string(corpus_index_schemad_pcoll_row))
+      | "Beam PL: write corpus index to storage as csv" >> beam.io.WriteToText(
+          os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME.split('.')[0]), 
+          file_name_suffix=".csv", 
+          append_trailing_newlines=True,
+          shard_name_template="",
+          header=", ".join(globals.SCHEMA_COL_NAMES__CORPUS_DS)
+        )
+      | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="corpus index csv written to storage"))
+    )
+    # ******************** write corpus index to storage as CSV: END ********************
 
 
     # (

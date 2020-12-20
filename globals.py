@@ -17,7 +17,6 @@ VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
 VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
 SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
 CORPUS_ARCHIVE = 'ncslgr-xml.zip'
-CORPUS_DS_FNAME = 'corpus.csv'
 DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant.csv'
 ASL_CONSULTANT_DS_FNAME = 'asl-consultant.csv'
 VIDEO_DS_FNAME = 'video.csv'
