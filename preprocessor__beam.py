@@ -296,6 +296,11 @@ class SegmentFrameExtractor(beam.DoFn):
     return beam_extract_frames(tpl_target_video_extraction_info, self.label)
 
 
+def row_to_string(row):
+  d_row = row.as_dict()
+  return ", ". join([str(d_row[k]) for k in d_row.keys()])
+
+
 
 
 def run():
@@ -364,7 +369,9 @@ def run():
     # ******************** write video index to storage as CSV: BEGIN ********************
     write_vid_index_to_storage_result = (
       full_vid_index_schemad_pcoll
-      | beam.Map(lambda vid_index_schemad_pcoll_row: f"{vid_index_schemad_pcoll_row.filename.strip()},{vid_index_schemad_pcoll_row.video_seq_id},{vid_index_schemad_pcoll_row.perspective_cam_id},{vid_index_schemad_pcoll_row.compressed_mov_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url.strip()}")
+      # row_to_string
+      # | beam.Map(lambda vid_index_schemad_pcoll_row: f"{vid_index_schemad_pcoll_row.filename.strip()},{vid_index_schemad_pcoll_row.video_seq_id},{vid_index_schemad_pcoll_row.perspective_cam_id},{vid_index_schemad_pcoll_row.compressed_mov_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url.strip()},{vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url.strip()}")
+      | beam.Map(lambda vid_index_schemad_pcoll_row: row_to_string(vid_index_schemad_pcoll_row))
       | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
           os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
           file_name_suffix=".csv", 
@@ -385,7 +392,8 @@ def run():
     # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
 
 
-    _ = (
+    # ******************** bootstrap SignStream corpus: BEGIN ********************
+    signstream_corpus_readable_files = (
       pl
       | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
         [ # one row containing dict of:
@@ -413,10 +421,11 @@ def run():
       # | "Beam PL: list documents in corpus dir" >> beam.Map(lambda ss_corpus_dir: fileio.MatchFiles(ss_corpus_dir))
       | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
       | "Beam PL: read corpus documents" >> fileio.ReadMatches()
-      # | beam.Reshuffle()
-      # | "Beam PL: get corpus documents metadata" >> beam.Map(lambda corpus_document_readable_file: corpus_document_readable_file.getMetadata()) # broken
-      | "Beam PL: corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
+
+      # | "Beam PL: corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
     )
+    # ******************** bootstrap SignStream corpus: END ********************
+
 
     # (
     #   vid_index_schemad_pcoll
