@@ -320,6 +320,7 @@ def row_to_string(row):
   return ", ". join([str(d_row[k]) for k in d_row.keys()])
 
 
+import base64
 class CorpusDocumentFileProcessor(beam.DoFn):
   def __init__(self, label=""):
     self.label = label
@@ -333,7 +334,12 @@ class CorpusDocumentFileProcessor(beam.DoFn):
       f = io.TextIOWrapper(f)
     xml_lines_with_cr = f.readlines()
     f.close()
-    raw_xml = "".join([xml_line.replace('\n', '') for xml_line in xml_lines_with_cr])
+    # encode each row to bytes
+    raw_xml_b64 = base64.b64encode("".join([xml_line.replace('\n','') for xml_line in xml_lines_with_cr]).encode('utf-8')) # we end up with a string containing the base-64 encoded "characters"
+    # #debug
+    # raw_xml_bytes = base64.b64decode(raw_xml_b64)
+    # raw_xml = raw_xml_bytes.decode('ascii')
+    # print(f"\n{xml_db_fname} (base64 decoded):\n{raw_xml}\n")
     row = beam.Row(
       # SCHEMA_COL_NAMES__CORPUS_DS = [
       #   'DocumentID',
@@ -342,11 +348,263 @@ class CorpusDocumentFileProcessor(beam.DoFn):
       # ]
       DocumentID=int(self.next_doc_id),
       Filename=str(xml_db_fname),
-      XML=raw_xml
+      XML=raw_xml_b64
     )
     self.next_doc_id += 1
     return [row]
 
+
+def pl__1__bootstrap_video_index(pl):
+  # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
+  return (
+    pl
+
+    | "Beam PL: create initial pcoll containing information for boostrap_video_index" >> beam.Create(
+        [ # one row containing dict of:
+            # 1. url of video indexes archive
+            # 2. local destination (path) for the downloaded archive
+            # 3. local destination (path) which will receive the extracted archive csv files (there are more than one)
+            # 4. final path to the selected videx index csv
+            #   (note that the dict is not laid out in the above order)
+          {
+            'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
+            'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
+            'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
+            'tmp_dir': globals.TMP_DIR
+          }
+        ]
+      )
+    | "Beam PL: bootstrap video index" >> beam.Map(boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+
+    # | "Beam PL: read csv rows" >> beam.FlatMap(vid_index_csv_rows) # but rows of this PColl are lists and the first one is the header row (column names), which we do not want...
+    | "Beam PL: read video index into pcoll" >> beam.FlatMap(vid_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict
+    # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
+
+    # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf) when necessary
+    | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
+          filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+          perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+          compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+          uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+          uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+          uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+        )
+      )
+    # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
+  )
+  # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
+
+def pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll):
+  # ******************** write video index to storage as CSV: BEGIN ********************
+  return (
+    full_vid_index_schemad_pcoll
+    | beam.Map(lambda vid_index_schemad_pcoll_row: row_to_string(vid_index_schemad_pcoll_row))
+    | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+      )
+    | "Beam PL: print path to video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="video index csv written to storage"))
+  )
+  # ******************** write video index to storage as CSV: END ********************
+
+def pl__2__vid_index_schemad_pcoll(full_vid_index_schemad_pcoll):
+  # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
+  return (
+    full_vid_index_schemad_pcoll
+    | SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
+  )
+  # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
+
+def pl__1__bootstrap_corpus_index(pl):
+  # ******************** bootstrap SignStream corpus: BEGIN ********************
+  return (
+    pl
+    | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
+      [
+        {
+          'tmp_dir': globals.TMP_DIR,
+          'data_dir': globals.DATA_ROOT_DIR,
+          'corpus_archive': globals.CORPUS_ARCHIVE, 
+          'corpus_ds_path': globals.CORPUS_DS_PATH,
+          'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+          'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
+          'video_ds_path': globals.VIDEO_DS_PATH,
+          'utterance_ds_path': globals.UTTERANCE_DS_PATH,
+          'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
+          'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
+          'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+        }
+      ]
+    )
+    | "Beam PL: bootstrap SignStream corpus" >> beam.Map(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+    | "Beam PL: read corpus documents" >> fileio.ReadMatches()
+    | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
+    
+    # | "Beam PL: print corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
+  )
+  # ******************** bootstrap SignStream corpus: END ********************
+
+def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
+  # ******************** write corpus index to storage as CSV: BEGIN ********************
+  return (
+    corpus_index_schemad_pcoll
+    | beam.Map(lambda corpus_index_schemad_pcoll_row: row_to_string(corpus_index_schemad_pcoll_row))
+    | "Beam PL: write corpus index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__CORPUS_DS)
+      )
+    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="corpus index csv written to storage"))
+  )
+  # ******************** write corpus index to storage as CSV: END ********************
+
+def pl__3__corpus_index_to_datasets():
+  pass
+
+def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
+  # ******************** DOWNLOAD VIDEOS IN PARALLEL: BEGIN ********************
+  # this is just for debugging - comment out for production
+  # (
+  #   vid_index_schemad_pcoll
+  #   | 'Count videos queued for download' >> beam.combiners.Count.Globally()
+  #   | 'Print result' >> beam.Map(lambda count_pcol_element: print(f"Videos queued for download: {count_pcol_element}"))
+  # )
+
+  # this does the job but is much much slower than parallel downloads since each item is processed sequentially
+  # (
+  #   vid_index_schemad_pcoll
+  #   | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
+  #   # | "Beam PL: print download info for video segments" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
+  #   | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentDownloader())
+  # )
+
+  # create as many partitions as we have workers (cores for DirectRunner) available
+  #   this is done so that downloads can occur in parallel
+  #   we randomly assign each data item to one of the num_partitions partitions
+  download_partitions = (
+    vid_index_schemad_pcoll
+
+    # Partition accepts a function that receives the number of partitions, and returns the index of the desired partition for the element. 
+    # The number of partitions passed must be a positive integer, and it must return an integer in the range 0 to num_partitions-1.
+    | "Beam PL: partition schemad video index for download parallelization" >> beam.Partition(
+        lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
+        # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
+        n_partitions
+      )
+  )
+
+  # here, we download in parallel by partition
+  partition_download_results = [None for i in range(n_partitions)]
+  for i, p in enumerate(download_partitions):
+    p_label = f"p{i+1}"
+    p_label_indented = f"\t{p_label}"
+
+    p_dl_results = (
+      p
+      | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
+      | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
+    )
+    partition_download_results[i] = p_dl_results
+
+    # # note that this depends on the DAG - i.e. will not occur until p_dl_results are ready which, of course, does not occur until all videos have been downloaded
+    # (
+    #   p_dl_results
+    #   | f"Beam PL: {p_label} count videos downloaded" >> beam.combiners.Count.Globally() 
+    #   | f"Beam PL: {p_label} print videos downloaded count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="videos downloaded/found"))
+    # )
+
+  # now merge all download results
+  merged_download_results = (
+    (p_dl_r for p_dl_r in partition_download_results) 
+    | f"Beam PL: merge download results" >> beam.Flatten() 
+  )
+
+  return merged_download_results
+  # ******************** DOWNLOAD VIDEOS IN PARALLEL: END ********************
+
+def pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions=8):
+  # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: BEGIN ********************
+  #   NOTE! THIS IS A CRUCIAL PIECE SO PAY ATTENTION TO THE FOLLOWING!!
+  #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (BEGIN) **********
+  #     We partitioned vid_index_schemad_pcoll so that video-SEGMENT downloads can occur independently.
+  #     Downloading segments can occur independently since there is no correlation between each segment
+  #       AS FAR AS DOWNLOADING IS CONCERNED.
+  #
+  #     However, AS FAR AS EXTRACTION IS CONCERNED, each segment is related by the target video composed
+  #       of each segment.  The segment-videos themselves are ordered as they compose the final target
+  #       video corresponding of ordered segment videos. For example, if a target video is composed of
+  #       three segment videos, those segments occur in a certain order, as specified by the video index.
+  #       Expanding upon this example, suppose target video "some_story_given_by_john_doe_0.mov", was recorded
+  #       and saved in three corresponding video segments (to save space, I guess?) 
+  #       "some_story_given_by_john_doe_0_1.mov", "some_story_given_by_john_doe_0_2.mov", and
+  #       "some_story_given_by_john_doe_0_3.mov". Note that the trailing "0" in the TARGET VIDEO filename
+  #       indicates the camera perspective... all stories are potentially filmed from multiple synchronized
+  #       camera perspectives/angles - there were obvioiusly multiple synchronized video recorders used in
+  #       in that case.  However, for this example, we are focusing on the target video for camera perspective 0.
+  #       Anyway, as said, there are three segments which compose the target video.  THESE SEGMENT VIDEOS
+  #       ARE ORDERED (in time).  THEREFORE, THE FRAMES COMPOSING EACH SEGMENT VIDEO ARE CONSEQUENTLY ORDERED
+  #       (in time).  THE BOTTOM LINE IS THAT WE NOW NEED TO GROUP SEGMENT VIDEOS, KEYED BY CORRESPONDING
+  #       TARGET VIDEO.  FURTHERMORE, THE COLLECTION OF SEGMENT VIDEOS FOR EACH TARGET VIDEO MUST BE ORDERED.
+  #       THAT IS, WE MUST EXTRACT SEGMENT FRAMES AND SAVE THEM TO THE FILE SYSTEM WITH A FILE NAMING SCHEME
+  #       THAT REFLECTS FRAME ORDER OF THE UNION OF ALL SEGMENT FRAMES.  IF WE EXTRACT THE FRAMES OF EACH
+  #       ORDERED SEGMENT, THEN A SIMPLE NUMERIC INDEX AS SEGMENT-FRAME FILENAME WILL DO THE TRICK.
+  #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (END) **********
+
+  # GROUP segment videos by target video
+  #   note that this depends on the DAG - i.e. will not occur until partition_download_results are ready which, of course, does not occur until all videos have been downloaded
+  frame_extraction_partitions = (
+    merged_download_results # pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
+    | f"Beam PL: group extraction info for video segments by target video" >> beam.GroupBy(lambda d: d['video_fname']) # yields pcoll of rows as (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+    | f"Beam PL: partition target video segment info for extraction parallelization" >> beam.Partition(
+        lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
+        # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
+        n_partitions
+      )
+  )
+
+  partition_extraction_results = [None for i in range(n_partitions)]
+  for i, p in enumerate(frame_extraction_partitions):
+    p_label = f"p{i+1}"
+    p_label_indented = f"\t{p_label}"
+
+    p_extraction_results = (
+      p
+      | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
+    )
+    partition_extraction_results[i] = p_extraction_results
+
+    # (
+    #   p_extraction_results
+    #   | f"Beam PL: {p_label} count target videos processed" >> beam.combiners.Count.Globally() 
+    #   | f"Beam PL: {p_label} print target videos processed count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="target videos processed"))
+    # )
+  
+  merged_extraction_results = (
+    (p_extraction_results for p_extraction_results in partition_extraction_results) 
+    | f"Beam PL: merge extraction results" >> beam.Flatten() # outputs pcoll of rows as tpl_target_video_extraction_info: (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
+    # | f"Beam PL: print merged extraction results" >> beam.ParDo(PipelinePcollPrinter(label="\t"))
+  )
+  _ = (
+    merged_extraction_results
+    | "Beam PL: apply schema to merged extraction results pcoll" >> beam.Map(lambda x: beam.Row(
+          video_fname=str(x[0]),
+          n_stitched_frames=int(x[1])
+        ))
+    # | "Beam PL: count total frames extracted" >> SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
+    | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames) # on DirectRunner, this is literally about 100 times faster!
+    | "Beam PL: count total frames extracted" >> beam.CombineGlobally(sum)
+    | f"Beam PL: print total frames extracted" >> beam.ParDo(PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
+  )
+
+  return merged_extraction_results
+  # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************
 
 
 
@@ -370,252 +628,19 @@ def run():
   # )
   # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}")
 
+  n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
+
   with beam.Pipeline(options=pipeline_options) as pl:
+    corpus_index_schemad_pcoll = pl__1__bootstrap_corpus_index(pl)
+    write_corpu_index_to_storage_result = pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll)
 
-    # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
-    full_vid_index_schemad_pcoll = (
-      pl
-
-      | "Beam PL: create initial pcoll containing information for boostrap_video_index" >> beam.Create(
-          [ # one row containing dict of:
-              # 1. url of video indexes archive
-              # 2. local destination (path) for the downloaded archive
-              # 3. local destination (path) which will receive the extracted archive csv files (there are more than one)
-              # 4. final path to the selected videx index csv
-              #   (note that the dict is not laid out in the above order)
-            {
-              'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
-              'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
-              'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
-              'tmp_dir': globals.TMP_DIR
-            }
-          ]
-        )
-      | "Beam PL: bootstrap video index" >> beam.Map(boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
-
-      # | "Beam PL: read csv rows" >> beam.FlatMap(vid_index_csv_rows) # but rows of this PColl are lists and the first one is the header row (column names), which we do not want...
-      | "Beam PL: read video index into pcoll" >> beam.FlatMap(vid_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict
-      # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
-
-      # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf) when necessary
-      | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-            filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
-            video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-            perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-            compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
-            uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-            uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-            uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
-          )
-        )
-      # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
-    )
-    # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
-
-
-    # ******************** write video index to storage as CSV: BEGIN ********************
-    write_vid_index_to_storage_result = (
-      full_vid_index_schemad_pcoll
-      | beam.Map(lambda vid_index_schemad_pcoll_row: row_to_string(vid_index_schemad_pcoll_row))
-      | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
-          os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
-          file_name_suffix=".csv", 
-          append_trailing_newlines=True,
-          shard_name_template="",
-          header=", ".join(globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
-        )
-      | "Beam PL: print path to video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="video index csv written to storage"))
-    )
-    # ******************** write video index to storage as CSV: END ********************
-
-
-    # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
-    vid_index_schemad_pcoll = (
-      full_vid_index_schemad_pcoll
-      | SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
-    )
-    # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
-
-
-    # ******************** bootstrap SignStream corpus: BEGIN ********************
-    corpus_index_schemad_pcoll = (
-      pl
-      | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
-        [
-          {
-            'tmp_dir': globals.TMP_DIR,
-            'data_dir': globals.DATA_ROOT_DIR,
-            'corpus_archive': globals.CORPUS_ARCHIVE, 
-            'corpus_ds_path': globals.CORPUS_DS_PATH,
-            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-            'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-            'video_ds_path': globals.VIDEO_DS_PATH,
-            'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-            'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-            'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
-          }
-        ]
-      )
-      | "Beam PL: bootstrap SignStream corpus" >> beam.Map(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
-      | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
-      | "Beam PL: read corpus documents" >> fileio.ReadMatches()
-      | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
-      
-      # | "Beam PL: print corpus documents metadata" >> beam.ParDo(PipelinePcollPrinter())
-    )
-    # ******************** bootstrap SignStream corpus: END ********************
-
-
-    # ******************** write corpus index to storage as CSV: BEGIN ********************
-    write_corpu_index_to_storage_result = (
-      corpus_index_schemad_pcoll
-      | beam.Map(lambda corpus_index_schemad_pcoll_row: row_to_string(corpus_index_schemad_pcoll_row))
-      | "Beam PL: write corpus index to storage as csv" >> beam.io.WriteToText(
-          os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME.split('.')[0]), 
-          file_name_suffix=".csv", 
-          append_trailing_newlines=True,
-          shard_name_template="",
-          header=", ".join(globals.SCHEMA_COL_NAMES__CORPUS_DS)
-        )
-      | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="corpus index csv written to storage"))
-    )
-    # ******************** write corpus index to storage as CSV: END ********************
-
-
-    # (
-    #   vid_index_schemad_pcoll
-    #   | 'Count videos queued for download' >> beam.combiners.Count.Globally()
-    #   | 'Print result' >> beam.Map(lambda count_pcol_element: print(f"Videos queued for download: {count_pcol_element}"))
-    # )
-
-    # ******************** DOWNLOAD VIDEOS IN PARALLEL: BEGIN ********************
-    # this does the job but is much much slower than parallel downloads since each item is processed sequentially
-    # (
-    #   vid_index_schemad_pcoll
-    #   | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
-    #   # | "Beam PL: print download info for video segments" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
-    #   | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentDownloader())
-    # )
-
-    # create as many partitions as we have workers (cores for DirectRunner) available
-    #   this is done so that downloads can occur in parallel
-    #   we randomly assign each data item to one of the num_partitions partitions
-    n_partitions = 8 # hardcoded for now 
-    download_partitions = (
-      vid_index_schemad_pcoll
-
-      # Partition accepts a function that receives the number of partitions, and returns the index of the desired partition for the element. 
-      # The number of partitions passed must be a positive integer, and it must return an integer in the range 0 to num_partitions-1.
-      | "Beam PL: partition schemad video index for download parallelization" >> beam.Partition(
-          lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
-          # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
-          n_partitions
-        )
-    )
-
-    # here, we download in parallel by partition
-    partition_download_results = [None for i in range(n_partitions)]
-    for i, p in enumerate(download_partitions):
-      p_label = f"p{i+1}"
-      p_label_indented = f"\t{p_label}"
-
-      p_dl_results = (
-        p
-        | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
-        | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
-      )
-      partition_download_results[i] = p_dl_results
-
-      # # note that this depends on the DAG - i.e. will not occur until p_dl_results are ready which, of course, does not occur until all videos have been downloaded
-      # (
-      #   p_dl_results
-      #   | f"Beam PL: {p_label} count videos downloaded" >> beam.combiners.Count.Globally() 
-      #   | f"Beam PL: {p_label} print videos downloaded count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="videos downloaded/found"))
-      # )
-    # ******************** DOWNLOAD VIDEOS IN PARALLEL: END ********************
-
-
-    # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: BEGIN ********************
-    #   but first we need to merge all download results
-    merged_download_results = (
-      (p_dl_r for p_dl_r in partition_download_results) 
-      | f"Beam PL: merge download results" >> beam.Flatten() 
-    )
-
-    #   NOTE! THIS IS A CRUCIAL PIECE SO PAY ATTENTION TO THE FOLLOWING!!
-    #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (BEGIN) **********
-    #     We partitioned vid_index_schemad_pcoll so that video-SEGMENT downloads can occur independently.
-    #     Downloading segments can occur independently since there is no correlation between each segment
-    #       AS FAR AS DOWNLOADING IS CONCERNED.
-    #
-    #     However, AS FAR AS EXTRACTION IS CONCERNED, each segment is related by the target video composed
-    #       of each segment.  The segment-videos themselves are ordered as they compose the final target
-    #       video corresponding of ordered segment videos. For example, if a target video is composed of
-    #       three segment videos, those segments occur in a certain order, as specified by the video index.
-    #       Expanding upon this example, suppose target video "some_story_given_by_john_doe_0.mov", was recorded
-    #       and saved in three corresponding video segments (to save space, I guess?) 
-    #       "some_story_given_by_john_doe_0_1.mov", "some_story_given_by_john_doe_0_2.mov", and
-    #       "some_story_given_by_john_doe_0_3.mov". Note that the trailing "0" in the TARGET VIDEO filename
-    #       indicates the camera perspective... all stories are potentially filmed from multiple synchronized
-    #       camera perspectives/angles - there were obvioiusly multiple synchronized video recorders used in
-    #       in that case.  However, for this example, we are focusing on the target video for camera perspective 0.
-    #       Anyway, as said, there are three segments which compose the target video.  THESE SEGMENT VIDEOS
-    #       ARE ORDERED (in time).  THEREFORE, THE FRAMES COMPOSING EACH SEGMENT VIDEO ARE CONSEQUENTLY ORDERED
-    #       (in time).  THE BOTTOM LINE IS THAT WE NOW NEED TO GROUP SEGMENT VIDEOS, KEYED BY CORRESPONDING
-    #       TARGET VIDEO.  FURTHERMORE, THE COLLECTION OF SEGMENT VIDEOS FOR EACH TARGET VIDEO MUST BE ORDERED.
-    #       THAT IS, WE MUST EXTRACT SEGMENT FRAMES AND SAVE THEM TO THE FILE SYSTEM WITH A FILE NAMING SCHEME
-    #       THAT REFLECTS FRAME ORDER OF THE UNION OF ALL SEGMENT FRAMES.  IF WE EXTRACT THE FRAMES OF EACH
-    #       ORDERED SEGMENT, THEN A SIMPLE NUMERIC INDEX AS SEGMENT-FRAME FILENAME WILL DO THE TRICK.
-    #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (END) **********
-
-    # GROUP segment videos by target video
-    #   note that this depends on the DAG - i.e. will not occur until partition_download_results are ready which, of course, does not occur until all videos have been downloaded
-    frame_extraction_partitions = (
-      merged_download_results # pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
-      | f"Beam PL: group extraction info for video segments by target video" >> beam.GroupBy(lambda d: d['video_fname']) # yields pcoll of rows as (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
-      | f"Beam PL: partition target video segment info for extraction parallelization" >> beam.Partition(
-          lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
-          # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
-          n_partitions
-        )
-    )
-
-    partition_extraction_results = [None for i in range(n_partitions)]
-    for i, p in enumerate(frame_extraction_partitions):
-      p_label = f"p{i+1}"
-      p_label_indented = f"\t{p_label}"
-
-      p_extraction_results = (
-        p
-        | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
-      )
-      partition_extraction_results[i] = p_extraction_results
-
-      # (
-      #   p_extraction_results
-      #   | f"Beam PL: {p_label} count target videos processed" >> beam.combiners.Count.Globally() 
-      #   | f"Beam PL: {p_label} print target videos processed count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="target videos processed"))
-      # )
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
+    write_full_vid_index_to_storage_result = pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll)
+    vid_index_schemad_pcoll = pl__2__vid_index_schemad_pcoll(full_vid_index_schemad_pcoll)
+    merged_download_results = pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions)
+    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
     
-    merged_extraction_results = (
-      (p_extraction_results for p_extraction_results in partition_extraction_results) 
-      | f"Beam PL: merge extraction results" >> beam.Flatten() # outputs pcoll of rows as tpl_target_video_extraction_info: (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
-      # | f"Beam PL: print merged extraction results" >> beam.ParDo(PipelinePcollPrinter(label="\t"))
-    )
-    _ = (
-      merged_extraction_results
-      | "Beam PL: apply schema to merged extraction results pcoll" >> beam.Map(lambda x: beam.Row(
-            video_fname=str(x[0]),
-            n_stitched_frames=int(x[1])
-          ))
-      # | "Beam PL: count total frames extracted" >> SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
-      | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames) # on DirectRunner, this is literally about 100 times faster!
-      | "Beam PL: count total frames extracted" >> beam.CombineGlobally(sum)
-      | f"Beam PL: print total frames extracted" >> beam.ParDo(PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
-    )
-    # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************
-
   print(f"Beam PL: ALL DONE!")
   # df_video_index = vid_index_df_converter.df_video_index # this doesn't work since it's not thread-safe!
   df_video_index = None
