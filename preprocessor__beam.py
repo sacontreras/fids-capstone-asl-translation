@@ -8,7 +8,6 @@ import urllib
 import zipfile
 
 import apache_beam as beam
-import cv2
 # import apache_beam.runners.interactive.interactive_beam as ib
 import tensorflow as tf
 from apache_beam.io import fileio
@@ -18,6 +17,11 @@ from apache_beam.transforms.sql import SqlTransform
 import globals
 import utils
 from preprocessor__common import *
+
+from importlib import import_module
+sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
+ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
+import cv2
 
 
 def prepare_output_str(str, label=""):
@@ -150,9 +154,10 @@ def read_csv_rows(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_
 
 # # now register this schema with beam as a RowCoder
 # beam.coders.registry.register_coder(VideoIndexEntry, beam.coders.RowCoder)
+
 def vid_index_csv_rows_to_dicts(sel_csv_path):
   """
-  this function simply wraps the call to vid_index_csv_rows() but shares the same goal of the VideoIndexEntry class: to produce a "schema'd" pcoll
+  this function simply wraps the call to vid_index_csv_rows() to produce a "schema'd" pcoll
   so we fix the definition of dict_field_names to:
     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
   """
@@ -363,6 +368,7 @@ def corpus_index_csv_rows_to_dicts(tpl_combined_results__corpus_index_csv_path__
     max_len=d_combined_results__corpus_index_csv_path__max_len['max_len'][0]+4 # note that we need 4 more bytes since due to base-64 encoding
   )
 
+
 class RowIndexer(beam.DoFn):
   def __init__(self, label=""):
     self.label = label
@@ -372,6 +378,28 @@ class RowIndexer(beam.DoFn):
     tpl = (self.next_id, element)
     self.next_id += 1
     return [tpl]
+
+
+def decode_XML(d_corpus_index_schemad_pcoll_row):
+  """
+  d_corpus_index_schemad_pcoll_row: {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
+  """
+  raw_XML_b64_as_str = d_corpus_index_schemad_pcoll_row['XML_B64']
+  raw_XML_b64_as_str = str(raw_XML_b64_as_str[2:-1]) # strip
+  raw_XML_b64_to_ascii = raw_XML_b64_as_str.encode('ascii')
+  raw_XML_b64 = base64.b64decode(raw_XML_b64_to_ascii)
+  raw_xml = raw_XML_b64.decode('ascii').strip()
+  # print(raw_xml)
+  return [
+    {
+      'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+      'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+      'XML': raw_xml,
+      'LEN': len(raw_xml)
+    }
+  ]
+
+
 
 
 def pl__1__bootstrap_video_index(pl):
@@ -531,30 +559,88 @@ def pl__3__read_corpus_index_csv(tpl_combined_results__corpus_index_csv_path__ma
     | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(corpus_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
   )
 
-def decode_XML(d_corpus_index_schemad_pcoll_row):
-  """
-  d_corpus_index_schemad_pcoll_row: {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
-  """
-  raw_XML_b64_as_str = d_corpus_index_schemad_pcoll_row['XML_B64']
-  raw_XML_b64_as_str = str(raw_XML_b64_as_str[2:-1]) # strip
-  raw_XML_b64_to_ascii = raw_XML_b64_as_str.encode('ascii')
-  raw_XML_b64 = base64.b64decode(raw_XML_b64_to_ascii)
-  raw_xml = raw_XML_b64.decode('ascii').strip()
-  # print(raw_xml)
-  return [
-    {
-      'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
-      'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
-      'XML': raw_xml,
-      'LEN': len(raw_xml)
-    }
-  ]
-
 def pl__4__decode_XML(corpus_index_schemad_pcoll):
   # each row is of the form {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
   return (
     corpus_index_schemad_pcoll
     | "Beam PL: extract/decode base-64 encoded XML from corpus index document" >> beam.Map(decode_XML)
+  )
+
+# def pl__5__append_corpus__document(d_corpus_index_decoded_XML_pcoll_row):
+#   """
+#   d_corpus_index_decoded_XML_pcoll_row:
+#   {
+#     'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+#     'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+#     'XML': raw_xml,
+#     'LEN': len(raw_xml)
+#   }
+#   """
+#   xml_db_fname = d_corpus_index_decoded_XML_pcoll_row['Filename']
+#   # debug
+#   print(f"\tfilename: {xml_db_fname}")
+#   # xml_db_path = os.path.join("", xml_db_fname)
+#   # f = beam.io.filesystems.FileSystems.open(xml_db_path)
+#   # if sys.version_info >= (3,0):
+#   #   f = io.TextIOWrapper(f)
+#   # xml_lines_with_cr = f.readlines()
+#   # f.close()
+#   # raw_xml = "".join([xml_line.replace('\n', '') for xml_line in xml_lines_with_cr])
+#   # if debug: # this produces way too much output to stdout; uncomment with caution!
+#   raw_xml = d_corpus_index_decoded_XML_pcoll_row['XML']
+#   print(f"\tXML (RAW):\n\t\t{raw_xml}") # this produces way too much output to stdout; uncomment with caution!
+#   doc_id = None
+#   try:
+#     df_document_lookup = df_corpus.query(f"{globals.SCHEMA_COL_NAMES__CORPUS_DS[1]}=='{xml_db_fname}'")
+#     if df_document_lookup.empty:
+#       data = {
+#         globals.SCHEMA_COL_NAMES__CORPUS_DS[1]: xml_db_fname,
+#         globals.SCHEMA_COL_NAMES__CORPUS_DS[2]: raw_xml,
+#       }
+#       _doc_id = len(df_corpus)
+#       df_corpus.loc[_doc_id] = data
+#       doc_id = _doc_id
+#     else:
+#       doc_id = df_document_lookup.index.values[0]
+#   except Exception as e:
+#     print(e)
+#   if debug:
+#     print(f"\tdoc_id: {doc_id}")
+#   return doc_id
+
+def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
+  """
+  d_corpus_index_decoded_XML_pcoll_row:
+  {
+    'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+    'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+    'XML': raw_xml,
+    'LEN': len(raw_xml)
+  }
+  """
+  d_corpus_index_decoded_XML = corpus_index_decoded_XML_pcoll_row[0]
+  # ********** parse (XML) document with SignStream: BEGIN **********
+  in_memory_xml_doc = io.StringIO(d_corpus_index_decoded_XML['XML'])
+  ss_xml_db = ss.SignStreamDatabase.read_xml(in_memory_xml_doc)
+  
+  # debug
+  print(f"\tfields:")
+  fields = [field for field in ss_xml_db.get_fields()]
+  for fi, field in enumerate(fields):
+    field_values = [fv.get_name() for fv in field.get_values()]
+    print(f"\t\t#{fi}:")
+    print(f"\t\t\tname: {field.get_name()}")
+    print(f"\t\t\tlabel: {field.get_label()}")
+    print(f"\t\t\tvalues:")
+    for field_value in field_values:
+      print(f"\t\t\t\t{field_value}")
+  # ********** parse (XML) document with SignStream: END **********
+  return [d_corpus_index_decoded_XML]
+
+def pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll):
+  return (
+    corpus_index_decoded_XML_pcoll
+    | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
   )
 
 def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
@@ -697,17 +783,8 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
 
 
 
-def run():
-  # vid_index_df_converter = VideoIndexPandasDataframeFromSchemadPcoll()
 
-  options = {
-    'project': 'my-project', # change
-    'runner': 'DirectRunner',
-    'direct_num_workers': 0, # 0 is use all available cores
-    'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
-    'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
-  }
-  pipeline_options = PipelineOptions(flags=[], **options)
+def run():
   # pipeline_options = PipelineOptions(
   #   save_main_session=True,
   #   runner='DirectRunner',
@@ -715,7 +792,15 @@ def run():
   #   direct_running_mode='multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
   #   streaming=False,
   # )
-  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}")
+  options = {
+    'project': 'my-project', # change
+    'runner': 'DirectRunner',
+    'direct_num_workers': 0, # 0 is use all available cores
+    'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+    'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
+  }
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
@@ -723,6 +808,8 @@ def run():
     corpus_documents_dir_path_schemad_pcoll = pl__1__bootstrap_corpus_index(pl)
 
   # this needs to be in a separate pipeline, which will execute sequentially after the download completes
+  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+  #   for reading yet
   with beam.Pipeline(options=pipeline_options) as pl:
     corpus_index_schemad_pcoll = pl__1__create_corpus_index_schemad_pcoll(pl)
     write_corpus_index_to_storage_result = pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll)
@@ -739,6 +826,7 @@ def run():
       # }
       | "Beam PL: print decoded XML result" >> beam.Map(lambda corpus_index_decoded_XML_pcoll_row: print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")) 
     )
+    _ = pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll)
 
   with beam.Pipeline(options=pipeline_options) as pl:
     full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
