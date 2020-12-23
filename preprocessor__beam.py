@@ -119,9 +119,9 @@ def _read_csv_rows(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=
   if sys.version_info >= (3,0):
     sel_csv_readable_file = io.TextIOWrapper(sel_csv_readable_file)
   if rows_to_dicts:
-    csv_reader = csv.DictReader(sel_csv_readable_file,fieldnames=dict_field_names) if dict_field_names is not None else csv.DictReader(sel_csv_readable_file)
+    csv_reader = csv.DictReader(sel_csv_readable_file,fieldnames=dict_field_names,skipinitialspace=True) if dict_field_names is not None else csv.DictReader(sel_csv_readable_file,skipinitialspace=True)
   else:
-    csv_reader = csv.reader(sel_csv_readable_file)
+    csv_reader = csv.reader(sel_csv_readable_file,skipinitialspace=True)
   if dict_field_names is not None:
       next(csv_reader) # skip past first row (contains column names that we do not want to use)
   return csv_reader
@@ -325,19 +325,15 @@ class CorpusDocumentFileProcessor(beam.DoFn):
 
   def process(self, corpus_readable_file):
     xml_db_path = corpus_readable_file.metadata.path
-    xml_db_fname = xml_db_path.split(os.path.sep)[-1]
+    xml_db_fname = xml_db_path.split(os.path.sep)[-1].strip()
     f = beam.io.filesystems.FileSystems.open(xml_db_path)
     if sys.version_info >= (3,0):
       f = io.TextIOWrapper(f)
     xml_lines_with_cr = f.readlines()
     f.close()
     # encode each row to bytes
-    raw_xml_b64 = base64.b64encode("".join([xml_line.replace('\n','') for xml_line in xml_lines_with_cr]).encode('utf-8')) # we end up with a string containing the base-64 encoded "characters"
-    # raw_xml_b64_ascii = base64.b64decode(raw_xml_b64).decode('ascii')
-    raw_xml_b64_ascii = str(raw_xml_b64)
-    len_raw_xml_b64_ascii = len(raw_xml_b64_ascii)
-    # debug
-    print(f"length of base-64 encoded XML for {xml_db_fname} is: {len(raw_xml_b64_ascii)}")
+    raw_xml_b64 = base64.b64encode("".join([xml_line.replace('\n','').strip() for xml_line in xml_lines_with_cr]).encode('ascii')) # we end up with a string containing the base-64 encoded "characters"
+    print(f"length of base-64 encoded XML document {xml_db_fname}: {len(raw_xml_b64)}")
     row = beam.Row(
       # SCHEMA_COL_NAMES__CORPUS_DS = [
       #   'DocumentID',
@@ -346,9 +342,9 @@ class CorpusDocumentFileProcessor(beam.DoFn):
       #   'LEN'
       # ]
       DocumentID=int(self.next_doc_id),
-      Filename=str(xml_db_fname),
+      Filename=xml_db_fname,
       XML_B64=raw_xml_b64,
-      LEN=int(len_raw_xml_b64_ascii)
+      LEN=len(raw_xml_b64)
     )
     self.next_doc_id += 1
     return [row]
@@ -358,13 +354,13 @@ def corpus_index_csv_rows_to_dicts(tpl_combined_results__corpus_index_csv_path__
   this function simply wraps the call to read_csv_rows() to produce a "schema'd" pcoll
   so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
 
-  tpl_combined_results__corpus_index_csv_path__max_len: (0, {'corpus_index_csv_path': ['/tmp/fids-capstone-data/data/ncslgr-corpus.csv'], 'max_len': [531267]})
+  tpl_combined_results__corpus_index_csv_path__max_len: (0, {'corpus_index_csv_path': ['/tmp/fids-capstone-data/data/ncslgr-corpus.csv'], 'max_len': [531266]})
   """
   d_combined_results__corpus_index_csv_path__max_len = tpl_combined_results__corpus_index_csv_path__max_len[1]
   return read_csv_rows(
     d_combined_results__corpus_index_csv_path__max_len['corpus_index_csv_path'][0], 
     rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
-    max_len=d_combined_results__corpus_index_csv_path__max_len['max_len'][0]+1
+    max_len=d_combined_results__corpus_index_csv_path__max_len['max_len'][0]+4 # note that we need 4 more bytes since due to base-64 encoding
   )
 
 class RowIndexer(beam.DoFn):
@@ -475,7 +471,7 @@ def pl__1__bootstrap_corpus_index(pl):
   return corpus_documents_dir_path_schemad_pcoll
   # ******************** bootstrap SignStream corpus: END ********************
 
-def pl__1__corpus_dir_to_index(pl):
+def pl__1__create_corpus_index_schemad_pcoll(pl):
   return (
     pl
     | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
@@ -497,8 +493,7 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
       )
     | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="CORPUS INDEX CSV WRITTEN TO STORAGE"))
   )
-  
-  max_len = (
+  max_xml_b64_len = (
     corpus_index_schemad_pcoll
     | "Beam PL: select LEN" >> beam.Map(lambda corpus_index_schemad_pcoll_row: corpus_index_schemad_pcoll_row.LEN)
     | beam.CombineGlobally(lambda corpus_index_b64_doc_length_rows: max(corpus_index_b64_doc_length_rows or [None]))
@@ -511,8 +506,8 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
     # debug
     # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
   )
-  max_len_indexed = (
-    max_len
+  max_xml_b64_len_indexed = (
+    max_xml_b64_len
     | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer())
     # debug
     # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
@@ -520,27 +515,46 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
   combined_results = (
     ({
       'corpus_index_csv_path': corpus_index_csv_path_indexed,
-      'max_len': max_len_indexed
+      'max_len': max_xml_b64_len_indexed
     })
     | "Beam PL: merge corpus_index_csv_path and max_len" >> beam.CoGroupByKey()
-    | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="CORPUS INDEX PATH COMBINED WITH MAX (b64-encoded) DOC LENGTH"))
+    | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
   )
   return combined_results
   # ******************** write corpus index to storage as CSV: END ********************
 
-def pl__3__corpus_index_to_datasets(tpl_combined_results__corpus_index_csv_path__max_len):
-    # #debug
-    # raw_xml_bytes = base64.b64decode(raw_xml_b64)
-    # raw_xml = raw_xml_bytes.decode('ascii')
-    # print(f"\n{xml_db_fname} (base64 decoded):\n{raw_xml}\n")
+def pl__3__read_corpus_index_csv(tpl_combined_results__corpus_index_csv_path__max_len):
   return (
     tpl_combined_results__corpus_index_csv_path__max_len
     # debug
     # | "Beam PL: read tpl_combined_results__corpus_index_csv_path__max_len" >> beam.ParDo(PipelinePcollPrinter(msg="READ tpl_combined_results__corpus_index_csv_path__max_len")) 
     | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(corpus_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
-    
-    # # debug
-    # | "Beam PL: read corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="corpus index csv row as dict")) 
+  )
+
+def decode_XML(d_corpus_index_schemad_pcoll_row):
+  """
+  d_corpus_index_schemad_pcoll_row: {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
+  """
+  raw_XML_b64_as_str = d_corpus_index_schemad_pcoll_row['XML_B64']
+  raw_XML_b64_as_str = str(raw_XML_b64_as_str[2:-1]) # strip
+  raw_XML_b64_to_ascii = raw_XML_b64_as_str.encode('ascii')
+  raw_XML_b64 = base64.b64decode(raw_XML_b64_to_ascii)
+  raw_xml = raw_XML_b64.decode('ascii').strip()
+  # print(raw_xml)
+  return [
+    {
+      'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+      'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+      'XML': raw_xml,
+      'LEN': len(raw_xml)
+    }
+  ]
+
+def pl__4__decode_XML(corpus_index_schemad_pcoll):
+  # each row is of the form {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
+  return (
+    corpus_index_schemad_pcoll
+    | "Beam PL: extract/decode base-64 encoded XML from corpus index document" >> beam.Map(decode_XML)
   )
 
 def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
@@ -710,9 +724,21 @@ def run():
 
   # this needs to be in a separate pipeline, which will execute sequentially after the download completes
   with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_index_schemad_pcoll = pl__1__corpus_dir_to_index(pl)
+    corpus_index_schemad_pcoll = pl__1__create_corpus_index_schemad_pcoll(pl)
     write_corpus_index_to_storage_result = pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll)
-    pl__3__corpus_index_to_datasets(write_corpus_index_to_storage_result)
+    corpus_index_schemad_pcoll = pl__3__read_corpus_index_csv(write_corpus_index_to_storage_result)
+    corpus_index_decoded_XML_pcoll = pl__4__decode_XML(corpus_index_schemad_pcoll)
+    # debug
+    _ = (
+      corpus_index_decoded_XML_pcoll 
+      # {
+      #   'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+      #   'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+      #   'XML': raw_xml,
+      #   'LEN': len(raw_xml)
+      # }
+      | "Beam PL: print decoded XML result" >> beam.Map(lambda corpus_index_decoded_XML_pcoll_row: print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")) 
+    )
 
   with beam.Pipeline(options=pipeline_options) as pl:
     full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
