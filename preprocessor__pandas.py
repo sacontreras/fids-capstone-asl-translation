@@ -475,7 +475,6 @@ def boostrap_signstream_corpus(d_corpus_info, df_video_index):
             print(f"\t\t\t\t{field_value}")
       # ********** parse (XML) document with SignStream: END **********
 
-      # ********** populate df_video: BEGIN **********
       """
       Note that we don't have all information at this point to populate every column
         of the videos dataset.  For now, we only populate the DocumentID, CameraPerspective,

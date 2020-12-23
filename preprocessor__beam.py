@@ -57,7 +57,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     or not tf.io.gfile.exists(d_corpus_info['utterance_token_ds_path']) \
     or not tf.io.gfile.exists(d_corpus_info['vocabulary_ds_path']):
 
-    print(prepare_output_str(f"corpus boostrap info: {d_corpus_info}", label=label))
+    print(prepare_output_str(f"CORPUS INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
 
     # download archive
     """
@@ -566,63 +566,34 @@ def pl__4__decode_XML(corpus_index_schemad_pcoll):
     | "Beam PL: extract/decode base-64 encoded XML from corpus index document" >> beam.Map(decode_XML)
   )
 
-# def pl__5__append_corpus__document(d_corpus_index_decoded_XML_pcoll_row):
-#   """
-#   d_corpus_index_decoded_XML_pcoll_row:
-#   {
-#     'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
-#     'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
-#     'XML': raw_xml,
-#     'LEN': len(raw_xml)
-#   }
-#   """
-#   xml_db_fname = d_corpus_index_decoded_XML_pcoll_row['Filename']
-#   # debug
-#   print(f"\tfilename: {xml_db_fname}")
-#   # xml_db_path = os.path.join("", xml_db_fname)
-#   # f = beam.io.filesystems.FileSystems.open(xml_db_path)
-#   # if sys.version_info >= (3,0):
-#   #   f = io.TextIOWrapper(f)
-#   # xml_lines_with_cr = f.readlines()
-#   # f.close()
-#   # raw_xml = "".join([xml_line.replace('\n', '') for xml_line in xml_lines_with_cr])
-#   # if debug: # this produces way too much output to stdout; uncomment with caution!
-#   raw_xml = d_corpus_index_decoded_XML_pcoll_row['XML']
-#   print(f"\tXML (RAW):\n\t\t{raw_xml}") # this produces way too much output to stdout; uncomment with caution!
-#   doc_id = None
-#   try:
-#     df_document_lookup = df_corpus.query(f"{globals.SCHEMA_COL_NAMES__CORPUS_DS[1]}=='{xml_db_fname}'")
-#     if df_document_lookup.empty:
-#       data = {
-#         globals.SCHEMA_COL_NAMES__CORPUS_DS[1]: xml_db_fname,
-#         globals.SCHEMA_COL_NAMES__CORPUS_DS[2]: raw_xml,
-#       }
-#       _doc_id = len(df_corpus)
-#       df_corpus.loc[_doc_id] = data
-#       doc_id = _doc_id
-#     else:
-#       doc_id = df_document_lookup.index.values[0]
-#   except Exception as e:
-#     print(e)
-#   if debug:
-#     print(f"\tdoc_id: {doc_id}")
-#   return doc_id
-
 def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
   """
-  d_corpus_index_decoded_XML_pcoll_row:
-  {
-    'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
-    'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
-    'XML': raw_xml,
-    'LEN': len(raw_xml)
-  }
+  require pcollection or list of:
+
+    d_corpus_index_decoded_XML_pcoll_row:
+    {
+      'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
+      'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+      'XML': raw_xml,
+      'LEN': len(raw_xml)
+    }
   """
   d_corpus_index_decoded_XML = corpus_index_decoded_XML_pcoll_row[0]
   # ********** parse (XML) document with SignStream: BEGIN **********
+  print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")
   in_memory_xml_doc = io.StringIO(d_corpus_index_decoded_XML['XML'])
   ss_xml_db = ss.SignStreamDatabase.read_xml(in_memory_xml_doc)
-  
+  # ********** parse (XML) document with SignStream: END **********
+  return [ss_xml_db]
+
+def pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll):
+  return (
+    corpus_index_decoded_XML_pcoll
+    | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
+  )
+
+def debug_print_signstream_db(ss_parsed_xmldb_pcoll_row):
+  ss_xml_db = ss_parsed_xmldb_pcoll_row[0]
   # debug
   print(f"\tfields:")
   fields = [field for field in ss_xml_db.get_fields()]
@@ -634,14 +605,73 @@ def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
     print(f"\t\t\tvalues:")
     for field_value in field_values:
       print(f"\t\t\t\t{field_value}")
-  # ********** parse (XML) document with SignStream: END **********
-  return [d_corpus_index_decoded_XML]
+  return [ss_xml_db] # passthrough
 
-def pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll):
+def append_initial_video_dataset(ss_parsed_xmldb_pcoll_row):
+  ss_xml_db = ss_parsed_xmldb_pcoll_row[0]
+  """
+  Note that we don't have all information at this point to populate every column
+    of the videos dataset.  For now, we only populate the DocumentID, CameraPerspective,
+    and Filename columns.
+  """
+  print(f"\tmedia:")
+  for media in ss_xml_db.get_media():
+    # ********** populate df_video: BEGIN **********
+    # video_id = append_corpus__video(media, doc_id, df_video_index, df_video, debug=debug)
+
+    fname = str(urllib.parse.quote(media.get_filename().split(':')[-1])) # there may be spaces in the fname
+
+    # we need access to the video index here:
+    #   we would preferably have it in memory already
+    #   if not, we need to load it again from the filesystem
+    # df_video_index_lookup = df_video_index.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]}=='{fname}'")
+
+    # camera_perspective = None if df_video_index_lookup.empty else df_video_index_lookup[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]].values[0]
+    camera_perspective = None # for now
+    video_id = None
+    try:
+      # if camera_perspective is None:
+      #   if debug:
+      #     print(f"\t\t{fname}\t\t*** ValueError: video '{fname}' is not in the video index, has no valid camera perspective ***")
+      # else:
+      #   df_video_lookup = df_video.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'")
+      #   if df_video_lookup.empty:
+      #     df_video.reset_index(inplace=True)
+      #     data = {
+      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: doc_id,
+      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: camera_perspective,
+      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: fname
+      #     }
+      #     video_id = len(df_video)
+      #     df_video.loc[video_id] = data
+      #     df_video.columns = globals.SCHEMA_COL_NAMES__VIDEO_DS
+      #     df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+      #     df_video.sort_index(ascending=[True for c in globals.SCHEMA_PK__VIDEO_DS], inplace=True)
+      #   else:
+      #     # if debug:
+      #     #   print(f"KeyError: video '{fname}' has already been inserted")
+      #     video_id = df_video_lookup.index.values[0]
+      #   if debug:
+      print(f"\t\t{fname} (camera perspective {camera_perspective})")
+    except Exception as e:
+      print(e)
+    # return video_id
+    pass
+    # ********** populate df_video: BEGIN **********
+  return [ss_xml_db] # passthrough
+
+def pl__6__append_initial_video_dataset(ss_parsed_xmldb_pcoll):
   return (
-    corpus_index_decoded_XML_pcoll
-    | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
+    ss_parsed_xmldb_pcoll
+    | "Beam PL: append initial video dataset" >> beam.Map(append_initial_video_dataset)
   )
+
+def pl__6__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
+  return (
+    ss_parsed_xmldb_pcoll
+    | "Beam PL: debug print parsed signstream xmldb" >> beam.Map(debug_print_signstream_db)
+  )
+
 
 def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
   # ******************** DOWNLOAD VIDEOS IN PARALLEL: BEGIN ********************
@@ -826,7 +856,9 @@ def run():
       # }
       | "Beam PL: print decoded XML result" >> beam.Map(lambda corpus_index_decoded_XML_pcoll_row: print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")) 
     )
-    _ = pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+    ss_parsed_xmldb_pcoll = pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+    pl__6__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+    pl__6__append_initial_video_dataset(ss_parsed_xmldb_pcoll)
 
   with beam.Pipeline(options=pipeline_options) as pl:
     full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)

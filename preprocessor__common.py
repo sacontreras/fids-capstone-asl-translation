@@ -22,7 +22,7 @@ def boostrap_video_index(d_vid_indexes_info):
   """
 
   if not os.path.isdir(d_vid_indexes_info['vid_indexes_dir']) or not os.path.isfile(d_vid_indexes_info['sel_vid_index_path']):
-    print(f"video index boostrap info: {d_vid_indexes_info}")
+    print(f"VIDEO INDEX BOOTSTRAP INFO: {d_vid_indexes_info}")
     remote_archive_path = os.path.join('http://www.bu.edu/asllrp/ncslgr-for-download', d_vid_indexes_info['video_indexes_archive'])
     local_archive_parent_dir = d_vid_indexes_info['tmp_dir']
     local_archive_path = os.path.join(local_archive_parent_dir, d_vid_indexes_info['video_indexes_archive'])
