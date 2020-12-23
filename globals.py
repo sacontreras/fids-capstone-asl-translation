@@ -43,7 +43,8 @@ VOCABULARY_DS_FNAME = 'vocabulary.csv'
 SCHEMA_COL_NAMES__CORPUS_DS = [
   'DocumentID',
   'Filename',
-  'XML_B64'
+  'XML_B64',
+  'LEN'
 ]
 SCHEMA_PK__CORPUS_DS = [SCHEMA_COL_NAMES__CORPUS_DS[0]]
 
