@@ -427,7 +427,7 @@ def pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll):
         shard_name_template="",
         header=", ".join(globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
       )
-    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="CORPUS INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VIDEO INDEX CSV WRITTEN TO STORAGE"))
   )
   # ******************** write video index to storage as CSV: END ********************
 
