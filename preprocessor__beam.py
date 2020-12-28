@@ -16,18 +16,19 @@ from apache_beam.transforms.sql import SqlTransform
 
 import globals
 import utils
-from preprocessor__common import *
+import preprocessor__common
 
 from importlib import import_module
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
+import time
 
 
 def prepare_output_str(str, label=""):
   return f"{label+': ' if len(label)>0 else ''}{str}"
 
-import time
+
 def boostrap_signstream_corpus(d_corpus_info, label=""):
   """
   d_corpus_info MUST be a dict as follows:
@@ -97,6 +98,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
 
     return []
 
+
 class SignstreamCorpusBootsrapper(beam.DoFn):
   def __init__(self, label=""):
     self.label = label
@@ -105,7 +107,7 @@ class SignstreamCorpusBootsrapper(beam.DoFn):
     return boostrap_signstream_corpus(d_corpus_info, self.label)
 
 
-def _read_csv_rows(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None, max_len=None):
+def _load_csv(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None, max_len=None):
   """
   this function opens the "readable file" (as a CSV),
     reads its contents and returns a list of its rows
@@ -131,8 +133,8 @@ def _read_csv_rows(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=
   return csv_reader
 
 
-def read_csv_rows(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_len=None):
-  return _read_csv_rows(
+def load_csv(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_len=None):
+  return _load_csv(
     beam.io.filesystems.FileSystems.open(sel_csv_path), 
     rows_to_dicts, 
     dict_field_names,
@@ -155,27 +157,42 @@ def read_csv_rows(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_
 # # now register this schema with beam as a RowCoder
 # beam.coders.registry.register_coder(VideoIndexEntry, beam.coders.RowCoder)
 
-def vid_index_csv_rows_to_dicts(sel_csv_path):
+def load_vid_index_csv(sel_csv_path):
   """
-  this function simply wraps the call to vid_index_csv_rows() to produce a "schema'd" pcoll
+  this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
   so we fix the definition of dict_field_names to:
     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
   """
-  return read_csv_rows(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+  return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
 
 
-class PipelinePcollPrinter(beam.DoFn):
+class PipelinePcollElementProcessor(beam.DoFn):
+  def __init__(self, fn_pcoll_element_processor, kargs=None, return_result=False):
+    self.fn_pcoll_element_processor = fn_pcoll_element_processor
+    self.kargs = kargs
+    self.return_result = return_result
+
+  def process(self, pcoll_element):
+    result = self.fn_pcoll_element_processor(pcoll_element, **self.kargs) if self.kargs is not None else self.fn_pcoll_element_processor(pcoll_element)
+    return result if self.return_result else [pcoll_element]
+
+
+def print_element(pcoll_element, label="", msg=""):
+    print(f"{label+': ' if len(label)>0 else ''}{msg+': ' if len(msg)>0 else ''}{pcoll_element}")
+    return [pcoll_element] # passthrough
+class PipelinePcollPrinter(PipelinePcollElementProcessor):
   """
   prints each element of the pcoll
   should generally only be used for debugging
   """
   def __init__(self, label="", msg=""):
+    super(PipelinePcollPrinter, self).__init__(
+      fn_pcoll_element_processor=print_element,
+      kargs={'label':label,'msg':msg},
+      return_result=True
+    )
     self.label = label
     self.msg = msg
-
-  def process(self, pcoll_element):
-    print(f"{self.label+': ' if len(self.label)>0 else ''}{self.msg+': ' if len(self.msg)>0 else ''}{pcoll_element}")
-    return [pcoll_element] # passthrough
 
 
 class VideoSegmentInfoGatherer(beam.DoFn):
@@ -354,19 +371,24 @@ class CorpusDocumentFileProcessor(beam.DoFn):
     self.next_doc_id += 1
     return [row]
 
-def corpus_index_csv_rows_to_dicts(tpl_combined_results__corpus_index_csv_path__max_len):
+
+def load_corpus_index_csv(d_corpus_info):
   """
-  this function simply wraps the call to read_csv_rows() to produce a "schema'd" pcoll
+  this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
   so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
 
-  tpl_combined_results__corpus_index_csv_path__max_len: (0, {'corpus_index_csv_path': ['/tmp/fids-capstone-data/data/ncslgr-corpus.csv'], 'max_len': [531266]})
+  d_corpus_info: {
+    'corpus_index_csv_path': globals.CORPUS_DS_PATH,
+    'max_len': globals.MAX_RAW_XML_B64_LEN
+  }
   """
-  d_combined_results__corpus_index_csv_path__max_len = tpl_combined_results__corpus_index_csv_path__max_len[1]
-  return read_csv_rows(
-    d_combined_results__corpus_index_csv_path__max_len['corpus_index_csv_path'][0], 
-    rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
-    max_len=d_combined_results__corpus_index_csv_path__max_len['max_len'][0]+4 # note that we need 4 more bytes since due to base-64 encoding
+  return load_csv(
+    d_corpus_info['corpus_index_csv_path'], 
+    rows_to_dicts=True, 
+    dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
+    max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes since due to base-64 encoding
   )
+  
 
 
 class RowIndexer(beam.DoFn):
@@ -400,13 +422,27 @@ def decode_XML(d_corpus_index_schemad_pcoll_row):
   ]
 
 
+class GlobalVarValueAssigner(PipelinePcollElementProcessor):
+  def __init__(self, fn_assign_to_global, kargs=None):
+    super(GlobalVarValueAssigner, self).__init__(
+      fn_pcoll_element_processor=fn_assign_to_global,
+      kargs=kargs,
+      return_result=True
+    )
+
+
+def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
+    globals.MAX_RAW_XML_B64_LEN = max_xml_b64_len+4
+    print(f"ASSIGNED globals.MAX_RAW_XML_B64_LEN={globals.MAX_RAW_XML_B64_LEN}")
+    return [max_xml_b64_len]
+
+
 
 
 def pl__1__bootstrap_video_index(pl):
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
   return (
     pl
-
     | "Beam PL: create initial pcoll containing information for boostrap_video_index" >> beam.Create(
         [ # one row containing dict of:
             # 1. url of video indexes archive
@@ -422,10 +458,8 @@ def pl__1__bootstrap_video_index(pl):
           }
         ]
       )
-    | "Beam PL: bootstrap video index" >> beam.Map(boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
-
-    # | "Beam PL: read csv rows" >> beam.FlatMap(vid_index_csv_rows) # but rows of this PColl are lists and the first one is the header row (column names), which we do not want...
-    | "Beam PL: read video index into pcoll" >> beam.FlatMap(vid_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict
+    | "Beam PL: bootstrap video index" >> beam.Map(preprocessor__common.boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+    | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
     # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf) when necessary
@@ -443,7 +477,7 @@ def pl__1__bootstrap_video_index(pl):
   )
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
 
-def pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll):
+def pl__2__write_vid_index_to_storage(full_vid_index_schemad_pcoll):
   # ******************** write video index to storage as CSV: BEGIN ********************
   return (
     full_vid_index_schemad_pcoll
@@ -459,7 +493,24 @@ def pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll):
   )
   # ******************** write video index to storage as CSV: END ********************
 
-def pl__2__select_from_vid_index_schemad_pcoll(full_vid_index_schemad_pcoll):
+def pl__1__load_vid_index_csv(pl):
+  return (
+    pl
+    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
+    | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
+    | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
+          filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+          perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+          compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+          uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+          uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+          uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+        )
+      )
+  )
+
+def pl__2__filter_vid_index(full_vid_index_schemad_pcoll):
   # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
   return (
     full_vid_index_schemad_pcoll
@@ -472,22 +523,22 @@ def pl__1__bootstrap_corpus_index(pl):
   corpus_documents_dir_path_schemad_pcoll = (
     pl
     | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
-      [
-        {
-          'tmp_dir': globals.TMP_DIR,
-          'data_dir': globals.DATA_ROOT_DIR,
-          'corpus_archive': globals.CORPUS_ARCHIVE, 
-          'corpus_ds_path': globals.CORPUS_DS_PATH,
-          'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-          'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-          'video_ds_path': globals.VIDEO_DS_PATH,
-          'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-          'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-          'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-          'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
-        }
-      ]
-    )
+        [
+          {
+            'tmp_dir': globals.TMP_DIR,
+            'data_dir': globals.DATA_ROOT_DIR,
+            'corpus_archive': globals.CORPUS_ARCHIVE, 
+            'corpus_ds_path': globals.CORPUS_DS_PATH,
+            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+            'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
+            'video_ds_path': globals.VIDEO_DS_PATH,
+            'utterance_ds_path': globals.UTTERANCE_DS_PATH,
+            'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
+            'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
+            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+          }
+        ]
+      )
     | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
     | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(
           corpus_docs_dir=str(x)
@@ -499,7 +550,7 @@ def pl__1__bootstrap_corpus_index(pl):
   return corpus_documents_dir_path_schemad_pcoll
   # ******************** bootstrap SignStream corpus: END ********************
 
-def pl__1__create_corpus_index_schemad_pcoll(pl):
+def pl__1__corpus_document_file_structure_to_corpus_index(pl):
   return (
     pl
     | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
@@ -507,7 +558,8 @@ def pl__1__create_corpus_index_schemad_pcoll(pl):
     | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
   )
 
-def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
+
+def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll, global_var_value_assigner__raw_xml_b64_max_len):
   # ******************** write corpus index to storage as CSV: BEGIN ********************
   corpus_index_csv_path = (
     corpus_index_schemad_pcoll
@@ -536,6 +588,7 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
   )
   max_xml_b64_len_indexed = (
     max_xml_b64_len
+    | "Beam PL: assign to global var (globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
     | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer())
     # debug
     # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
@@ -546,20 +599,31 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll):
       'max_len': max_xml_b64_len_indexed
     })
     | "Beam PL: merge corpus_index_csv_path and max_len" >> beam.CoGroupByKey()
-    | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
+    # debug
+    # | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
   )
   return combined_results
   # ******************** write corpus index to storage as CSV: END ********************
 
-def pl__3__read_corpus_index_csv(tpl_combined_results__corpus_index_csv_path__max_len):
+def pl__1__load_corpus_index_csv(pl):
+  # return (
+  #   tpl_combined_results__corpus_index_csv_path__max_len
+  #   # debug
+  #   # | "Beam PL: read tpl_combined_results__corpus_index_csv_path__max_len" >> beam.ParDo(PipelinePcollPrinter(msg="READ tpl_combined_results__corpus_index_csv_path__max_len"))
+  #   | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
+  # )
   return (
-    tpl_combined_results__corpus_index_csv_path__max_len
-    # debug
-    # | "Beam PL: read tpl_combined_results__corpus_index_csv_path__max_len" >> beam.ParDo(PipelinePcollPrinter(msg="READ tpl_combined_results__corpus_index_csv_path__max_len")) 
-    | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(corpus_index_csv_rows_to_dicts) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
+    pl
+    | "Beam PL: create initial pcoll containing info to load the corpus index csv" >> beam.Create(
+        [{
+          'corpus_index_csv_path': globals.CORPUS_DS_PATH,
+          'max_len': globals.MAX_RAW_XML_B64_LEN
+        }]
+      )
+    | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
   )
 
-def pl__4__decode_XML(corpus_index_schemad_pcoll):
+def pl__2__decode_XML(corpus_index_schemad_pcoll):
   # each row is of the form {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
   return (
     corpus_index_schemad_pcoll
@@ -586,7 +650,22 @@ def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
   # ********** parse (XML) document with SignStream: END **********
   return [ss_xml_db]
 
-def pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll):
+def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
+  return (
+    corpus_index_decoded_XML_pcoll
+    | "Beam PL: load vid index from csv into pcoll" >> beam.Create(
+        [ # one row containing dict of:
+            # 1. path to video index that was previously written to storage
+          {
+            'vid_index_path': os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
+          }
+        ]
+      )
+    # debug
+    | "Beam PL: print saved vid index path" >> beam.ParDo(PipelinePcollPrinter(msg="READ SAVED VID INDEX PATH"))
+  )
+
+def pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll):
   return (
     corpus_index_decoded_XML_pcoll
     | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
@@ -625,6 +704,9 @@ def append_initial_video_dataset(ss_parsed_xmldb_pcoll_row):
     #   we would preferably have it in memory already
     #   if not, we need to load it again from the filesystem
     # df_video_index_lookup = df_video_index.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]}=='{fname}'")
+    # _ = (
+
+    # )
 
     # camera_perspective = None if df_video_index_lookup.empty else df_video_index_lookup[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]].values[0]
     camera_perspective = None # for now
@@ -660,13 +742,13 @@ def append_initial_video_dataset(ss_parsed_xmldb_pcoll_row):
     # ********** populate df_video: BEGIN **********
   return [ss_xml_db] # passthrough
 
-def pl__6__append_initial_video_dataset(ss_parsed_xmldb_pcoll):
+def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll): # TO DO: make use of full_vid_index_schemad_pcoll within append_initial_video_dataset()
   return (
     ss_parsed_xmldb_pcoll
     | "Beam PL: append initial video dataset" >> beam.Map(append_initial_video_dataset)
   )
 
-def pl__6__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
+def pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
   return (
     ss_parsed_xmldb_pcoll
     | "Beam PL: debug print parsed signstream xmldb" >> beam.Map(debug_print_signstream_db)
@@ -835,38 +917,36 @@ def run():
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_documents_dir_path_schemad_pcoll = pl__1__bootstrap_corpus_index(pl)
+    full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
+    pl__2__write_vid_index_to_storage(full_vid_index_schemad_pcoll)
 
-  # this needs to be in a separate pipeline, which will execute sequentially after the download completes
+  with beam.Pipeline(options=pipeline_options) as pl:
+    pl__1__bootstrap_corpus_index(pl)
+  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
   #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
   #   for reading yet
   with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_index_schemad_pcoll = pl__1__create_corpus_index_schemad_pcoll(pl)
-    write_corpus_index_to_storage_result = pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll)
-    corpus_index_schemad_pcoll = pl__3__read_corpus_index_csv(write_corpus_index_to_storage_result)
-    corpus_index_decoded_XML_pcoll = pl__4__decode_XML(corpus_index_schemad_pcoll)
-    # debug
-    _ = (
-      corpus_index_decoded_XML_pcoll 
-      # {
-      #   'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
-      #   'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
-      #   'XML': raw_xml,
-      #   'LEN': len(raw_xml)
-      # }
-      | "Beam PL: print decoded XML result" >> beam.Map(lambda corpus_index_decoded_XML_pcoll_row: print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")) 
-    )
-    ss_parsed_xmldb_pcoll = pl__5__parse_signstream_database(corpus_index_decoded_XML_pcoll)
-    pl__6__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
-    pl__6__append_initial_video_dataset(ss_parsed_xmldb_pcoll)
+    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+    pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll, GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+  print(f"globals.CORPUS_DS_PATH={globals.CORPUS_DS_PATH}, globals.MAX_RAW_XML_B64_LEN={globals.MAX_RAW_XML_B64_LEN}")
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
-    write_full_vid_index_to_storage_result = pl__2__write_full_vid_index_to_storage(full_vid_index_schemad_pcoll)
-    vid_index_schemad_pcoll = pl__2__select_from_vid_index_schemad_pcoll(full_vid_index_schemad_pcoll)
+    full_vid_index_schemad_pcoll = pl__1__load_vid_index_csv(pl)
+    corpus_index_schemad_pcoll = pl__1__load_corpus_index_csv(pl)
+    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
+    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+    # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+    pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll)
+
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_vid_index_schemad_pcoll = pl__1__load_vid_index_csv(pl)
+    vid_index_schemad_pcoll = pl__2__filter_vid_index(full_vid_index_schemad_pcoll)
     merged_download_results = pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions)
     merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+
+  # TO DO: use results bootstraps to populate datasets (using extractor to globals classes)
     
   print(f"Beam PL: ALL DONE!")
   # df_video_index = vid_index_df_converter.df_video_index # this doesn't work since it's not thread-safe!
   df_video_index = None
+  
