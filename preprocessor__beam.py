@@ -631,10 +631,10 @@ def pl__2__decode_XML(corpus_index_schemad_pcoll):
   )
 
 def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
+  d_corpus_index_decoded_XML = corpus_index_decoded_XML_pcoll_row[0]
   """
-  require pcollection or list of:
-
-    d_corpus_index_decoded_XML_pcoll_row:
+  require:
+    d_corpus_index_decoded_XML:
     {
       'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
       'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
@@ -642,13 +642,12 @@ def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
       'LEN': len(raw_xml)
     }
   """
-  d_corpus_index_decoded_XML = corpus_index_decoded_XML_pcoll_row[0]
   # ********** parse (XML) document with SignStream: BEGIN **********
-  print(f"length of (base-64 decoded) XML document {corpus_index_decoded_XML_pcoll_row[0]['Filename']}: {corpus_index_decoded_XML_pcoll_row[0]['LEN']}")
+  print(f"length of (base-64 decoded) XML document {d_corpus_index_decoded_XML['Filename']}: {d_corpus_index_decoded_XML['LEN']}")
   in_memory_xml_doc = io.StringIO(d_corpus_index_decoded_XML['XML'])
   ss_xml_db = ss.SignStreamDatabase.read_xml(in_memory_xml_doc)
   # ********** parse (XML) document with SignStream: END **********
-  return [ss_xml_db]
+  return [{'DocumentID':d_corpus_index_decoded_XML['DocumentID'],'Filename':d_corpus_index_decoded_XML['Filename'],'ss_xml_db':ss_xml_db}]
 
 def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
   return (
@@ -668,11 +667,15 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
 def pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll):
   return (
     corpus_index_decoded_XML_pcoll
-    | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
+    | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database) # outputs pcoll containing one row of {'DocumentID':d_corpus_index_decoded_XML['DocumentID'],'Filename':d_corpus_index_decoded_XML['Filename'],'ss_xml_db':ss_xml_db}
   )
 
-def debug_print_signstream_db(ss_parsed_xmldb_pcoll_row):
-  ss_xml_db = ss_parsed_xmldb_pcoll_row[0]
+def debug_print_signstream_db(d_corpus_index_decoded_XML_row):
+  d_corpus_index_decoded_XML = d_corpus_index_decoded_XML_row[0]
+  """
+  d_corpus_index_decoded_XML: {'DocumentID':d_corpus_index_decoded_XML['DocumentID'],'Filename':d_corpus_index_decoded_XML['Filename'],'ss_xml_db':ss_xml_db}
+  """
+  ss_xml_db = d_corpus_index_decoded_XML['ss_xml_db']
   # debug
   print(f"\tfields:")
   fields = [field for field in ss_xml_db.get_fields()]
@@ -684,69 +687,159 @@ def debug_print_signstream_db(ss_parsed_xmldb_pcoll_row):
     print(f"\t\t\tvalues:")
     for field_value in field_values:
       print(f"\t\t\t\t{field_value}")
-  return [ss_xml_db] # passthrough
+  return [d_corpus_index_decoded_XML_row] # passthrough
 
-def append_initial_video_dataset(ss_parsed_xmldb_pcoll_row):
-  ss_xml_db = ss_parsed_xmldb_pcoll_row[0]
+
+def get_ss_xml_db_media(d_parsed_ss_xml_db_row):
+  d_parsed_ss_xml_db = d_parsed_ss_xml_db_row[0]
   """
-  Note that we don't have all information at this point to populate every column
-    of the videos dataset.  For now, we only populate the DocumentID, CameraPerspective,
-    and Filename columns.
+  d_parsed_ss_xml_db: {
+    globals.SCHEMA_COL_NAMES__VIDEO_DS[0]:  <ss_xml_db documentID>,   # documentID from corpus index
+    globals.SCHEMA_COL_NAMES__VIDEO_DS[3]:  <ss_xml_db filename>,     # filename from corpus index
+    'ss_xml_db':                            <ss_xml_db object>        # this is the in-memory object (already parsed via the SignStream DOM API)
+  }
   """
-  print(f"\tmedia:")
+  ss_xml_db_docid = d_parsed_ss_xml_db[globals.SCHEMA_COL_NAMES__VIDEO_DS[0]]
+  ss_xml_db_fname = d_parsed_ss_xml_db[globals.SCHEMA_COL_NAMES__VIDEO_DS[3]]
+  ss_xml_db = d_parsed_ss_xml_db['ss_xml_db']
+  media_list = []
   for media in ss_xml_db.get_media():
-    # ********** populate df_video: BEGIN **********
-    # video_id = append_corpus__video(media, doc_id, df_video_index, df_video, debug=debug)
+    media_fname = str(urllib.parse.quote(media.get_filename().split(':')[-1])) # there may be spaces in the fname
+    media_list.append(media_fname)
+  return [(ss_xml_db_docid, (ss_xml_db_fname, media_list))]
 
-    fname = str(urllib.parse.quote(media.get_filename().split(':')[-1])) # there may be spaces in the fname
 
-    # we need access to the video index here:
-    #   we would preferably have it in memory already
-    #   if not, we need to load it again from the filesystem
-    # df_video_index_lookup = df_video_index.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]}=='{fname}'")
-    # _ = (
-
-    # )
-
-    # camera_perspective = None if df_video_index_lookup.empty else df_video_index_lookup[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]].values[0]
-    camera_perspective = None # for now
-    video_id = None
-    try:
-      # if camera_perspective is None:
-      #   if debug:
-      #     print(f"\t\t{fname}\t\t*** ValueError: video '{fname}' is not in the video index, has no valid camera perspective ***")
-      # else:
-      #   df_video_lookup = df_video.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'")
-      #   if df_video_lookup.empty:
-      #     df_video.reset_index(inplace=True)
-      #     data = {
-      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: doc_id,
-      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: camera_perspective,
-      #       globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: fname
-      #     }
-      #     video_id = len(df_video)
-      #     df_video.loc[video_id] = data
-      #     df_video.columns = globals.SCHEMA_COL_NAMES__VIDEO_DS
-      #     df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
-      #     df_video.sort_index(ascending=[True for c in globals.SCHEMA_PK__VIDEO_DS], inplace=True)
-      #   else:
-      #     # if debug:
-      #     #   print(f"KeyError: video '{fname}' has already been inserted")
-      #     video_id = df_video_lookup.index.values[0]
-      #   if debug:
-      print(f"\t\t{fname} (camera perspective {camera_perspective})")
-    except Exception as e:
-      print(e)
-    # return video_id
-    pass
-    # ********** populate df_video: BEGIN **********
-  return [ss_xml_db] # passthrough
-
-def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll): # TO DO: make use of full_vid_index_schemad_pcoll within append_initial_video_dataset()
-  return (
+def validate_ds_video_preprocessing(tpl_combined_results_row):
+  d_combined_results = tpl_combined_results_row[1]
+  media_fname = tpl_combined_results_row[0]
+  media_corpus_doc_mapping = d_combined_results['media_corpus_doc_mapping']
+  media_camera_perspective_mapping = d_combined_results['media_camera_perspective']
+  if len(media_corpus_doc_mapping) > 0:
+    doc_id = None
+    doc_fname = None
+    not_unique = False
+    for d_media_corpus_doc_mapping_instance in media_corpus_doc_mapping:
+      _doc_id = d_media_corpus_doc_mapping_instance['DocumentID']
+      _doc_fname = d_media_corpus_doc_mapping_instance['Filename']
+      if doc_id is None:
+        doc_id = _doc_id
+        doc_fname = _doc_fname
+      else:
+        if _doc_id != doc_id:
+          not_unique = True
+          print(f"***WARNING!!!*** media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
+          break
+  if len(media_camera_perspective_mapping) > 0:
+    camera_perspective = None
+    not_unique = False
+    for d_media_camera_perspectivec_mapping_instance in media_camera_perspective_mapping:
+      _camera_perspective = d_media_camera_perspectivec_mapping_instance['CameraPerspective']
+      if camera_perspective is None:
+        camera_perspective = _camera_perspective
+      else:
+        if _camera_perspective != camera_perspective:
+          not_unique = True
+          print(f"***FATAL ERROR!!!*** media {media_fname} camera perspecctive not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          break
+  return [tpl_combined_results_row] # passthrough
+class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
+  def __init__(self):
+    super(DSVideoPreprocessingValidator, self).__init__(
+      fn_pcoll_element_processor=validate_ds_video_preprocessing,
+      kargs=None,
+      return_result=True
+    )
+def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll):
+  ss_doc_media_list_pcoll = (
     ss_parsed_xmldb_pcoll
-    | "Beam PL: append initial video dataset" >> beam.Map(append_initial_video_dataset)
+    | "Beam PL: get media associated with this ss_parsed_xmldb, keyed by doc_id" >> beam.Map(get_ss_xml_db_media) # outputs pcoll with each row as (ss_xml_db_docid, (ss_xml_db_fname, media_list))
   )
+
+  # now transform media_list to pcoll
+  media_list_pcoll = (
+    ss_doc_media_list_pcoll
+    | "Beam PL: 'explode' associated video segments to media_list pcoll" >> beam.FlatMap(lambda tpl_doc_media_list_row: tpl_doc_media_list_row[0][1][1])
+    # debug
+    # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\t\tmedia"))
+  )
+
+  # now we need to filter from full_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
+    # recall, vid_index_entry is "schemad":
+    #   beam.Row(
+    #     filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+    #     video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+    #     perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+    #     compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+    #     uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+    #     uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+    #     uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+    #   )
+  media_camera_perspective_pcoll = (
+    full_vid_index_schemad_pcoll
+    | "Beam PL: filter matching rows from vid index" >> beam.Filter(
+          lambda vid_index_entry, matching_media_fnames: vid_index_entry.filename in matching_media_fnames,
+          matching_media_fnames=beam.pvalue.AsIter(media_list_pcoll),
+        )
+    | "Beam PL: extract column vals from matching vid index entries for new video dataset" >> beam.Map(
+          lambda matching_vid_index_entry: (
+            matching_vid_index_entry.filename, # key
+            {globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: matching_vid_index_entry.perspective_cam_id}
+          )
+        )
+  )
+
+  # now create pcoll associating doc_id with media_fname (key)
+  media_corpus_doc_mapping_pcoll = (
+    ss_doc_media_list_pcoll
+    | "Beam PL: 'explode' associated video segments to media_list tuple pcoll" >> beam.Map(
+          lambda tpl_doc_media_list_row: [
+            (
+              media_fname, # (key)
+              {
+                globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: tpl_doc_media_list_row[0][0],      # DocumentID
+                globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: tpl_doc_media_list_row[0][1][0]    # Filename (corpus)
+              }
+            ) for media_fname in tpl_doc_media_list_row[0][1][1]
+          ]
+        )
+    | "Beam PL: 'explode' media_list tuple pcoll" >> beam.FlatMap(lambda list_media_tpl: list_media_tpl)
+    # debug
+    | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
+  )
+
+  initial_video_dataset_pcoll = (
+    ({
+      'media_corpus_doc_mapping': media_corpus_doc_mapping_pcoll,
+      'media_camera_perspective': media_camera_perspective_pcoll
+    })
+
+    | "Beam PL: merge media_corpus_doc_mapping and media_camera_perspective" >> beam.CoGroupByKey() # the key in this case is media_fname
+    # the above step produces output like the following:
+    #   ('b-959_776_master_small.mov', {'media_corpus_doc_mapping': [{'DocumentID': '29', 'Filename': 'ncslgr10k.xml'}], 'media_camera_perspective': [{'CameraPerspective': 0}]})
+
+    | "Beam PL: filter only those rows with non-empty media_camera_perspective" >> beam.Filter(lambda tpl_row: len(tpl_row[1]['media_camera_perspective']) > 0)
+    | "Beam PL: validate media_corpus_doc_mapping uniqueness" >> beam.ParDo(DSVideoPreprocessingValidator()) # there can be duplicate entries due to cardinalities but still a video should occur in a unique document
+    # note that if the video-to-document mapping is NOT unique this will not cause an error, so we just output a warning to stdout
+    #   HOWEVER, if there is more than one camera perspective this WILL cause an error!
+
+    | "Beam PL: 'explode' associated documents to create (single) list of ds_video entries" >> beam.Map(
+          lambda tpl_row: [
+            {
+              globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: media_corpus_doc_mapping_instance[globals.SCHEMA_COL_NAMES__VIDEO_DS[0]],
+              globals.SCHEMA_COL_NAMES__VIDEO_DS[1]: None, # we don't have the ASL Consultant ID yet
+              globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: tpl_row[1]['media_camera_perspective'][0]['CameraPerspective'], # there should be only one but since it occurs in a list, we fix to the first (and only) one
+              globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: tpl_row[0], # this is the media_fname
+             } for media_corpus_doc_mapping_instance in tpl_row[1]['media_corpus_doc_mapping']
+          ]
+        )
+    | "Beam PL: 'explode' list of ds_video entries into final final ds_video pcoll" >> beam.FlatMap(lambda list_ds_video_entry: list_ds_video_entry)
+
+    # debug
+    # | "Beam PL: print initial_video_dataset_pcoll" >> beam.ParDo(PipelinePcollPrinter())
+  )
+
+  return initial_video_dataset_pcoll
+
 
 def pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
   return (
@@ -938,15 +1031,14 @@ def run():
     # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
     pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll)
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_vid_index_schemad_pcoll = pl__1__load_vid_index_csv(pl)
-    vid_index_schemad_pcoll = pl__2__filter_vid_index(full_vid_index_schemad_pcoll)
-    merged_download_results = pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions)
-    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   full_vid_index_schemad_pcoll = pl__1__load_vid_index_csv(pl)
+  #   vid_index_schemad_pcoll = pl__2__filter_vid_index(full_vid_index_schemad_pcoll)
+  #   merged_download_results = pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions)
+  #   merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
 
   # TO DO: use results bootstraps to populate datasets (using extractor to globals classes)
     
   print(f"Beam PL: ALL DONE!")
   # df_video_index = vid_index_df_converter.df_video_index # this doesn't work since it's not thread-safe!
   df_video_index = None
-  

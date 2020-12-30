@@ -172,7 +172,7 @@ SCHEMA_PK__VIDEO_INDEX = [SCHEMA_COL_NAMES__VIDEO_INDEX[0]]
 # ********** SCHEMA-related (FIXED) globals: END **********
 
 
-# the following globals are set at runtime
+# the following globals are set or modified at runtime
 DATA_ROOT_DIR = None
 VIDEO_DIR = None
 STICHED_VIDEO_FRAMES_DIR = None
@@ -195,4 +195,6 @@ UTTERANCE_TOKEN_DS_PATH = None
 UTTERANCE_TOKEN_FRAME_DS_PATH = None
 VOCABULARY_DS_PATH = None
 MAX_DATA_FILES = None
+
+D_IN_MEMORY_VARS = dict()
 # **************************************** global variables: END ****************************************
