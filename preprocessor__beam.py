@@ -392,13 +392,16 @@ def load_corpus_index_csv(d_corpus_info):
 
 
 class RowIndexer(beam.DoFn):
-  def __init__(self, label=""):
-    self.label = label
-    self.next_id = 0
+  def __init__(self, var_name_prefix):
+    self.var_name = var_name_prefix+"_next_id"
+    # self.next_id = 0
+    # globals.D_IN_MEMORY_VARS.get(self.var_name, 0)
 
   def process(self, element):
-    tpl = (self.next_id, element)
-    self.next_id += 1
+    # tpl = (self.next_id, element)
+    tpl = (globals.D_IN_MEMORY_VARS.get(self.var_name, 0), element)
+    # self.next_id += 1
+    globals.D_IN_MEMORY_VARS[self.var_name] = globals.D_IN_MEMORY_VARS.get(self.var_name, 0)+1
     return [tpl]
 
 
@@ -582,14 +585,14 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll, global_var_
   )
   corpus_index_csv_path_indexed = (
     corpus_index_csv_path
-    | "Beam PL: apply RowIndex to corpus index csv path" >> beam.ParDo(RowIndexer())
+    | "Beam PL: apply RowIndex to corpus index csv path" >> beam.ParDo(RowIndexer(var_name_prefix="corpus_index_csv_path_id"))
     # debug
     # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
   )
   max_xml_b64_len_indexed = (
     max_xml_b64_len
     | "Beam PL: assign to global var (globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
-    | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer())
+    | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer(var_name_prefix="max_xml_b64_len_id"))
     # debug
     # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
   )
@@ -709,6 +712,172 @@ def get_ss_xml_db_media(d_parsed_ss_xml_db_row):
   return [(ss_xml_db_docid, (ss_xml_db_fname, media_list))]
 
 
+def get_ss_xml_db_participants(d_parsed_ss_xml_db_row):
+  d_parsed_ss_xml_db = d_parsed_ss_xml_db_row[0]
+  """
+  d_parsed_ss_xml_db: {
+    globals.SCHEMA_COL_NAMES__VIDEO_DS[0]:  <ss_xml_db documentID>,   # documentID from corpus index
+    globals.SCHEMA_COL_NAMES__VIDEO_DS[3]:  <ss_xml_db filename>,     # filename from corpus index
+    'ss_xml_db':                            <ss_xml_db object>        # this is the in-memory object (already parsed via the SignStream DOM API)
+  }
+  """
+  ss_xml_db_docid = d_parsed_ss_xml_db[globals.SCHEMA_COL_NAMES__VIDEO_DS[0]]
+  ss_xml_db_fname = d_parsed_ss_xml_db[globals.SCHEMA_COL_NAMES__VIDEO_DS[3]]
+  ss_xml_db = d_parsed_ss_xml_db['ss_xml_db']
+  participant_list = []
+  for participant in ss_xml_db.get_participants():
+    participant_data = {
+      globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]: participant.get_name(),
+      globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: participant.get_age(),
+      globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: participant.get_gender()
+      # , 'language': participant.get_language()
+    }
+    participant_list.append(participant_data)
+  return [(ss_xml_db_docid, (ss_xml_db_fname, participant_list))]
+
+
+import re 
+def validate_ds_asl_consultant_preprocessing(tpl_aggregated_results):
+  """
+    tpl_aggregated_results: (
+      <participant name>, # this is the key
+      list_of(
+        {
+          globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: <participant age>,
+          globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: <participant gender>
+        }
+      )
+    )
+  """
+  participant_name = tpl_aggregated_results[0]
+  particpant_infos_list = tpl_aggregated_results[1]
+  if len(particpant_infos_list) > 0:
+    age = -1
+    gender = ""
+    not_unique = False
+    for d_participant_info_mapping_instance in particpant_infos_list:
+      _age = d_participant_info_mapping_instance[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]] # we receive this as a string 
+      _age_list = list(map(int, re.findall(r'\d+', _age))) # we must parse using regex since it is possible to receive age string as '42 years' for example
+      _age = int(_age_list[0]) if len(_age_list)>0 else -1 # -1 indicates no age provided
+      _gender = d_participant_info_mapping_instance[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]]
+      if age is None:
+        age = _age
+        gender = _gender
+      else:
+        if _age != age:
+          not_unique = True
+          if _age > age:
+            age = _age
+            print(f"***WARNING!!!*** participant {participant_name} age is not unique; assigning greatest value (most recent): {age}")
+        if _gender != gender:
+          not_unique = True
+          s_notification = "***WARNING!!!*** participant {participant_name} gender is not unique"
+          if len(_gender)>0 and len(gender)==0:
+            s_notification += f"; current gender is '{gender}'; assigning first (non-empty) gender: '{_gender}'"
+            gender = _gender
+    return [(participant_name, {globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]:age,globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]:gender})]
+  else:
+    print(f"***FATAL ERROR!!!*** participant {participant_name} does not have any associated info")
+    return [tpl_aggregated_results] # passthrough
+class DSASLConsultantPreprocessingValidator(PipelinePcollElementProcessor):
+  def __init__(self):
+    super(DSASLConsultantPreprocessingValidator, self).__init__(
+      fn_pcoll_element_processor=validate_ds_asl_consultant_preprocessing,
+      kargs=None,
+      return_result=True
+    )
+def pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll):
+  # get list of participants
+  #   note that we separate 'explosion' into a separate step since we will use ss_doc_participant_list_pcoll again later
+  ss_doc_participant_list_pcoll = (
+    ss_parsed_xmldb_pcoll
+    | "Beam PL: get participants associated with this ss_parsed_xmldb, keyed by doc_id" >> beam.Map(get_ss_xml_db_participants) # outputs pcoll with each row as (ss_xml_db_docid, (ss_xml_db_fname, media_list))
+  )
+  # now transform participant_list to pcoll
+  participant_list_pcoll = (
+    ss_doc_participant_list_pcoll
+    | "Beam PL: 'explode' associated particpants to participant_list pcoll" >> beam.FlatMap(lambda tpl_doc_participant_list_row: tpl_doc_participant_list_row[0][1][1])
+    # debug
+    | "Beam PL: print participants associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tparticipant"))
+  )
+
+  asl_consultant_index_schemad_pcoll = (
+    participant_list_pcoll
+    | "Beam PL: transform participant_list dict entries to tuples" >> beam.Map(
+        lambda d_participant: (
+          d_participant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]],
+          d_participant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]],
+          d_participant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]]
+        )
+      )
+    | "Beam PL: aggregate distinct participants" >> beam.Distinct()
+    | "Beam PL: key by participant name" >> beam.Map(
+        lambda tpl_participant: (
+          tpl_participant[0], 
+          {
+            globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: tpl_participant[1],
+            globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: tpl_participant[2]
+          }
+        )
+      )
+    | "Beam PL: group by key (participant name)" >> beam.GroupByKey()
+    | "Beam PL: preprocess/validate participant info" >> beam.ParDo(DSASLConsultantPreprocessingValidator()) # yields tuple containing unique (and most recent) info for particpant, in the form ('Freda Norman', {'Age': -1, 'Gender': 'female'}) for example
+    | "Beam PL: apply RowIndex to participant_list_pcoll" >> beam.ParDo(RowIndexer(var_name_prefix="asl_consultant_id")) # now we have tuples of the form (1, ('Norma Bowers Tourangeau', {'Age': 29, 'Gender': 'female'}))
+    | "Beam PL: apply schema to particpant_list pcoll" >> beam.Map(lambda tpl: beam.Row(
+          # SCHEMA_COL_NAMES__ASL_CONSULTANT_DS = [
+          #   'ASLConsultantID',
+          #   'Name',
+          #   'Age',
+          #   'Gender'
+          # ]
+          ASLConsultantID=int(tpl[0]),
+          Name=str(tpl[1][0]),
+          Age=int(tpl[1][1][globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]]),                  
+          Gender=str(tpl[1][1][globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]])
+        )
+      )
+    # debug
+    # | "Beam PL: print distinct participants" >> beam.ParDo(PipelinePcollPrinter("distinct participant"))
+  )
+
+  # # now create pcoll associating doc_id with asl_consultant_info (key)
+  # participant_doc_mapping_pcoll = (
+  #   ss_doc_participant_list_pcoll
+  #   | "Beam PL: 'explode' associated participants to participant_list tuple pcoll" >> beam.Map(
+  #         lambda tpl_doc_particpant_list_row: [
+  #           (
+  #             media_fname, # (key)
+  #             {
+  #               globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: tpl_doc_particpant_list_row[0][0],      # DocumentID
+  #               globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: tpl_doc_particpant_list_row[0][1][0]    # Filename (corpus)
+  #             }
+  #           ) for media_fname in tpl_doc_media_list_row[0][1][1]
+  #         ]
+  #       )
+  #   | "Beam PL: 'explode' media_list tuple pcoll" >> beam.FlatMap(lambda list_media_tpl: list_media_tpl)
+  #   # debug
+  #   # | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
+  # )
+
+  return asl_consultant_index_schemad_pcoll
+
+
+def pl__5__write_asl_consultant_index_to_storage(asl_consultant_index_schemad_pcoll):
+  # asl_consultant_index_csv_path = (
+  return (
+    asl_consultant_index_schemad_pcoll
+    | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: row_to_string(asl_consultant_index_schemad_pcoll_row))
+    | "Beam PL: write asl consultant index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.ASL_CONSULTANT_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
+      )
+    | "Beam PL: print path to asl consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="ASL CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
+  )
+
+
 def validate_ds_video_preprocessing(tpl_combined_results_row):
   d_combined_results = tpl_combined_results_row[1]
   media_fname = tpl_combined_results_row[0]
@@ -739,7 +908,7 @@ def validate_ds_video_preprocessing(tpl_combined_results_row):
       else:
         if _camera_perspective != camera_perspective:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** media {media_fname} camera perspecctive not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          print(f"***FATAL ERROR!!!*** media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
           break
   return [tpl_combined_results_row] # passthrough
 class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
@@ -749,18 +918,19 @@ class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
       kargs=None,
       return_result=True
     )
-def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll):
+def pl__5__create_initial_video_dataset(ss_parsed_xmldb_pcoll, asl_consultant_index_pcoll, full_vid_index_schemad_pcoll):
+  # get list of media
+  #   note that we separate 'explosion' into a separate step since we will use ss_doc_media_list_pcoll again later
   ss_doc_media_list_pcoll = (
     ss_parsed_xmldb_pcoll
     | "Beam PL: get media associated with this ss_parsed_xmldb, keyed by doc_id" >> beam.Map(get_ss_xml_db_media) # outputs pcoll with each row as (ss_xml_db_docid, (ss_xml_db_fname, media_list))
   )
-
   # now transform media_list to pcoll
   media_list_pcoll = (
     ss_doc_media_list_pcoll
     | "Beam PL: 'explode' associated video segments to media_list pcoll" >> beam.FlatMap(lambda tpl_doc_media_list_row: tpl_doc_media_list_row[0][1][1])
     # debug
-    # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\t\tmedia"))
+    | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
   )
 
   # now we need to filter from full_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
@@ -804,7 +974,7 @@ def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_sc
         )
     | "Beam PL: 'explode' media_list tuple pcoll" >> beam.FlatMap(lambda list_media_tpl: list_media_tpl)
     # debug
-    | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
+    # | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
   )
 
   initial_video_dataset_pcoll = (
@@ -832,8 +1002,21 @@ def pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_sc
              } for media_corpus_doc_mapping_instance in tpl_row[1]['media_corpus_doc_mapping']
           ]
         )
-    | "Beam PL: 'explode' list of ds_video entries into final final ds_video pcoll" >> beam.FlatMap(lambda list_ds_video_entry: list_ds_video_entry)
-
+    | "Beam PL: 'explode' list of ds_video entries into initial ds_video pcoll" >> beam.FlatMap(lambda list_ds_video_entry: list_ds_video_entry)
+    | "Beam PL: apply schema to initial ds_video pcoll" >> beam.Map(lambda x: beam.Row(
+          # SCHEMA_COL_NAMES__VIDEO_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'CameraPerspective',
+          #   'Filename'
+          # ]
+          DocumentID=int(x[globals.SCHEMA_COL_NAMES__VIDEO_DS[0]]),
+          ASLConsultantID=int(-1), # again, we don't have this info just yet                           
+          CameraPerspective=int(x[globals.SCHEMA_COL_NAMES__VIDEO_DS[2]]),                  
+          Filename=str(x[globals.SCHEMA_COL_NAMES__VIDEO_DS[3]])
+        )
+      )
+    
     # debug
     # | "Beam PL: print initial_video_dataset_pcoll" >> beam.ParDo(PipelinePcollPrinter())
   )
@@ -1029,7 +1212,13 @@ def run():
     corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
     ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
     # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
-    pl__4__append_initial_video_dataset(ss_parsed_xmldb_pcoll, full_vid_index_schemad_pcoll)
+    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll)
+    pl__5__write_asl_consultant_index_to_storage(asl_consultant_index_schemad_pcoll)
+    initial_video_dataset_pcoll = pl__5__create_initial_video_dataset(ss_parsed_xmldb_pcoll, asl_consultant_index_schemad_pcoll, full_vid_index_schemad_pcoll)
+    # _ = (
+    #   initial_video_dataset_pcoll
+    #   | "Beam PL: print initial_video_dataset_pcoll" >> beam.ParDo(PipelinePcollPrinter())
+    # )
 
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   full_vid_index_schemad_pcoll = pl__1__load_vid_index_csv(pl)

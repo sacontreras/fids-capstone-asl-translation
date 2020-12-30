@@ -16,7 +16,6 @@ VIDEO_INDEX_BASE = 'video_index-20120129'
 VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
 VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
 SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
-CORPUS_ARCHIVE = 'ncslgr-xml.zip'
 DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant.csv'
 ASL_CONSULTANT_DS_FNAME = 'asl-consultant.csv'
 VIDEO_DS_FNAME = 'video.csv'
@@ -28,15 +27,9 @@ CORPUS_BASE = 'ncslgr-xml'
 CORPUS_ARCHIVE = CORPUS_BASE+'.zip'
 CORPUS_DIR = os.path.join(TMP_DIR, CORPUS_BASE)
 CORPUS_DS_FNAME = 'ncslgr-corpus.csv'
-DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant.csv'
-ASL_CONSULTANT_DS_FNAME = 'asl-consultant.csv'
-VIDEO_DS_FNAME = 'video.csv'
 VIDEO_SEGMENT_DS_FNAME = 'video-segment.csv'
-UTTERANCE_DS_FNAME = 'utterance.csv'
-UTTERANCE_VIDEO_DS_FNAME = 'utterance-video.csv'
-UTTERANCE_TOKEN_DS_FNAME = 'utterance-token.csv'
 UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame.csv'
-VOCABULARY_DS_FNAME = 'vocabulary.csv'
+
 
 
 # ********** SCHEMA-related (FIXED) globals: BEGIN **********
@@ -186,7 +179,6 @@ UTTERANCE_TOKEN_DS_PATH = None
 VOCABULARY_DS_PATH = None
 CORPUS_DS_PATH = None
 DOCUMENT_ASL_CONSULTANT_DS_PATH = None
-ASL_CONSULTANT_DS_PATH = None
 VIDEO_DS_PATH = None
 VIDEO_SEGMENT_DS_PATH = None
 UTTERANCE_DS_PATH = None
