@@ -786,12 +786,53 @@ class DSASLConsultantPreprocessingValidator(PipelinePcollElementProcessor):
       kargs=None,
       return_result=True
     )
-def pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll):
+def validate_ds_document_asl_consultant_preprocessing(tpl_combined_results_row):
+  # ('Michael Schlang', {'particpant_corpus_doc_mapping': [{'DocumentID': '28'}, {'DocumentID': '32'}, {'DocumentID': '36'}, {'DocumentID': '37'}, {'DocumentID': '1'}, {'DocumentID': '2'}, {'DocumentID': '3'}, {'DocumentID': '4'}, {'DocumentID': '6'}, {'DocumentID': '9'}, {'DocumentID': '12'}, {'DocumentID': '14'}, {'DocumentID': '15'}, {'DocumentID': '17'}, {'DocumentID': '19'}, {'DocumentID': '23'}], 'participant_asl_consultant_mapping': [3]})
+  participant_name = tpl_combined_results_row[0]
+  d_combined_results = tpl_combined_results_row[1]
+  """
+  d_combined_results: 
+    {
+      'particpant_corpus_doc_mapping': list_of({'DocumentID': <document id (as string)>}),
+      'participant_asl_consultant_mapping': list_of(<asl consultant id (as int)>)
+    }
+  """
+  particpant_corpus_doc_mapping = d_combined_results['particpant_corpus_doc_mapping']
+  participant_asl_consultant_mapping = d_combined_results['participant_asl_consultant_mapping']
+  set_doc_id = set()
+  if len(particpant_corpus_doc_mapping) > 0:
+    for d_particpant_corpus_doc_mapping_instance in particpant_corpus_doc_mapping:
+      set_doc_id.add(int(d_particpant_corpus_doc_mapping_instance[globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]]))
+  else:
+    print(f"***FATAL ERROR!!!*** participant {participant_name} is not associated with any corpus documents")
+  asl_consultant_id = None
+  if len(participant_asl_consultant_mapping) > 0:
+    asl_consultant_id = None
+    not_unique = False
+    for _asl_consultant_id in participant_asl_consultant_mapping:
+      if asl_consultant_id is None:
+        asl_consultant_id = _asl_consultant_id
+      else:
+        if _asl_consultant_id != asl_consultant_id:
+          not_unique = True
+          print(f"***FATAL ERROR!!!*** participant {participant_name} asl consultant id is not unique (in document-asl-consultant mapping)! It has asl consultant ids: {asl_consultant_id} and {_asl_consultant_id}")
+          break
+  else:
+    print(f"***FATAL ERROR!!!*** participant {participant_name} is not assigned an asl consultant id (in document-asl-consultant mapping)")
+  return [(asl_consultant_id, sorted(list(set_doc_id)))]
+class DSDocumentASLConsultantPreprocessingValidator(PipelinePcollElementProcessor):
+  def __init__(self):
+    super(DSDocumentASLConsultantPreprocessingValidator, self).__init__(
+      fn_pcoll_element_processor=validate_ds_document_asl_consultant_preprocessing,
+      kargs=None,
+      return_result=True
+    )
+def pl__4__create_asl_consultant_index_datasets(ss_parsed_xmldb_pcoll):
   # get list of participants
   #   note that we separate 'explosion' into a separate step since we will use ss_doc_participant_list_pcoll again later
   ss_doc_participant_list_pcoll = (
     ss_parsed_xmldb_pcoll
-    | "Beam PL: get participants associated with this ss_parsed_xmldb, keyed by doc_id" >> beam.Map(get_ss_xml_db_participants) # outputs pcoll with each row as (ss_xml_db_docid, (ss_xml_db_fname, media_list))
+    | "Beam PL: get participants associated with this ss_parsed_xmldb, keyed by doc_id" >> beam.Map(get_ss_xml_db_participants) # outputs pcoll with each row as (ss_xml_db_docid, (ss_xml_db_fname, participant_list))
   )
   # now transform participant_list to pcoll
   participant_list_pcoll = (
@@ -801,7 +842,8 @@ def pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll):
     | "Beam PL: print participants associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tparticipant"))
   )
 
-  asl_consultant_index_schemad_pcoll = (
+  # asl_consultant_index_schemad_pcoll = (
+  asl_consultant_index_pcoll = (
     participant_list_pcoll
     | "Beam PL: transform participant_list dict entries to tuples" >> beam.Map(
         lambda d_participant: (
@@ -823,6 +865,11 @@ def pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll):
     | "Beam PL: group by key (participant name)" >> beam.GroupByKey()
     | "Beam PL: preprocess/validate participant info" >> beam.ParDo(DSASLConsultantPreprocessingValidator()) # yields tuple containing unique (and most recent) info for particpant, in the form ('Freda Norman', {'Age': -1, 'Gender': 'female'}) for example
     | "Beam PL: apply RowIndex to participant_list_pcoll" >> beam.ParDo(RowIndexer(var_name_prefix="asl_consultant_id")) # now we have tuples of the form (1, ('Norma Bowers Tourangeau', {'Age': 29, 'Gender': 'female'}))
+    # debug
+    # | "Beam PL: print distinct participants" >> beam.ParDo(PipelinePcollPrinter("distinct participant"))
+  )
+  asl_consultant_index_schemad_pcoll = (
+    asl_consultant_index_pcoll
     | "Beam PL: apply schema to particpant_list pcoll" >> beam.Map(lambda tpl: beam.Row(
           # SCHEMA_COL_NAMES__ASL_CONSULTANT_DS = [
           #   'ASLConsultantID',
@@ -837,34 +884,87 @@ def pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll):
         )
       )
     # debug
-    # | "Beam PL: print distinct participants" >> beam.ParDo(PipelinePcollPrinter("distinct participant"))
+    # | "Beam PL: print particpant_list schemad pcoll" >> beam.ParDo(PipelinePcollPrinter("asl_consultant_index_schemad_pcoll row"))
   )
 
-  # # now create pcoll associating doc_id with asl_consultant_info (key)
-  # participant_doc_mapping_pcoll = (
-  #   ss_doc_participant_list_pcoll
-  #   | "Beam PL: 'explode' associated participants to participant_list tuple pcoll" >> beam.Map(
-  #         lambda tpl_doc_particpant_list_row: [
-  #           (
-  #             media_fname, # (key)
-  #             {
-  #               globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: tpl_doc_particpant_list_row[0][0],      # DocumentID
-  #               globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: tpl_doc_particpant_list_row[0][1][0]    # Filename (corpus)
-  #             }
-  #           ) for media_fname in tpl_doc_media_list_row[0][1][1]
-  #         ]
-  #       )
-  #   | "Beam PL: 'explode' media_list tuple pcoll" >> beam.FlatMap(lambda list_media_tpl: list_media_tpl)
-  #   # debug
-  #   # | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
-  # )
+  participant_doc_mapping_pcoll = (
+    ss_doc_participant_list_pcoll # pcoll with rows as (ss_xml_db_docid, (ss_xml_db_fname, participant_list))
+    | "Beam PL: 'explode' associated participants to participant_list tuple pcoll" >> beam.Map(
+          lambda tpl_doc_particpant_list_row: [
+            (
+              participant_data[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]],                             # participant name (key)
+              {
+                globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]: tpl_doc_particpant_list_row[0][0]  # DocumentID
+              }
+            ) for participant_data in tpl_doc_particpant_list_row[0][1][1]
+            # participant_data = {
+            #   globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]: participant.get_name(),
+            #   globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: participant.get_age(),
+            #   globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: participant.get_gender()
+            #   # , 'language': participant.get_language()
+            # }
+          ]
+        ) # yields tuples in the form of ('Michael Schlang', {'DocumentID': '37'})
+    | "Beam PL: 'explode' participant_list tuple pcoll" >> beam.FlatMap(lambda list_participant_tpl: list_participant_tpl)
+    # debug
+    # | "Beam PL: print explosion of participant_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tdocument-participant"))
+  )
 
-  return asl_consultant_index_schemad_pcoll
+  """
+  we need to use asl_consultant_index_pcoll to key by participant name (so that we can merge with participant_doc_mapping_pcoll)
+    asl_consultant_index_pcoll has rows as (<asl consultant id>, (<participant name>, {'Age': <participant age>, 'Gender': <participant gender>}))
+      but we need (<participant name>, <asl consultant id>) 
+    participant_doc_mapping_pcoll has rows as (<participant name>, {'DocumentID': <document id>})
+    
+    our goal is to produce document_asl_consultant_index_schemad_pcoll with rows as (<document id>, <asl consultant id>)
+  """
+  participant_asl_consultant_mapping_pcoll = (
+    asl_consultant_index_pcoll
+    | "Beam PL: extract (<participant name>, <asl consultant id>) from asl_consultant_index_pcoll" >> beam.Map(
+        lambda tpl_participant_doc_mapping: (
+          tpl_participant_doc_mapping[1][0],  # <participant name>
+          tpl_participant_doc_mapping[0]      # <asl consultant id>
+        )
+      )
+    # debug
+    # | "Beam PL: print participant-document mapping" >> beam.ParDo(PipelinePcollPrinter("\tparticipant-document"))
+  )
+  document_asl_consultant_index_schemad_pcoll = (
+    ({
+      'particpant_corpus_doc_mapping': participant_doc_mapping_pcoll,
+      'participant_asl_consultant_mapping': participant_asl_consultant_mapping_pcoll
+    })
+    | "Beam PL: merge particpant_corpus_doc_mapping and participant_asl_consultant_mapping" >> beam.CoGroupByKey() # the key in this case is media_fname
+    # the above step produces output like the following:
+    #   ('Michael Schlang', {'particpant_corpus_doc_mapping': [{'DocumentID': '28'}, {'DocumentID': '32'}, {'DocumentID': '36'}, {'DocumentID': '37'}, {'DocumentID': '1'}, {'DocumentID': '2'}, {'DocumentID': '3'}, {'DocumentID': '4'}, {'DocumentID': '6'}, {'DocumentID': '9'}, {'DocumentID': '12'}, {'DocumentID': '14'}, {'DocumentID': '15'}, {'DocumentID': '17'}, {'DocumentID': '19'}, {'DocumentID': '23'}], 'participant_asl_consultant_mapping': [3]})
+    | "Beam PL: validate/preprocess asl_document_mapping" >> beam.ParDo(DSDocumentASLConsultantPreprocessingValidator()) # outputs rows as [(asl_consultant_id, sorted(list(set_doc_id)))]
+    | "Beam PL: 'explode' associated documents to create (single) list of ds_document_asl_consultant entries" >> beam.Map(
+          lambda tpl: [
+            {
+              globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]: corpus_doc_id,
+              globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[1]: tpl[0]  # asl consultant id
+             } for corpus_doc_id in tpl[1]
+          ]
+        )
+    | "Beam PL: 'explode' list of ds_video entries into initial ds_document_asl_consultant pcoll" >> beam.FlatMap(lambda list_ds_document_asl_consultant_entry: list_ds_document_asl_consultant_entry)
+    | "Beam PL: apply schema to initial ds_video ds_document_asl_consultant" >> beam.Map(lambda x: beam.Row(
+          # SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID'
+          # ]
+          DocumentID=int(x[globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]]),
+          ASLConsultantID=int(x[globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[1]])
+        )
+      )
+    # debug
+    # | "Beam PL: print document_asl_consultant_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter())
+  )
+
+  return asl_consultant_index_schemad_pcoll, document_asl_consultant_index_schemad_pcoll
 
 
 def pl__5__write_asl_consultant_index_to_storage(asl_consultant_index_schemad_pcoll):
-  # asl_consultant_index_csv_path = (
-  return (
+  return ( # asl_consultant_index_csv_path
     asl_consultant_index_schemad_pcoll
     | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: row_to_string(asl_consultant_index_schemad_pcoll_row))
     | "Beam PL: write asl consultant index to storage as csv" >> beam.io.WriteToText(
@@ -876,6 +976,42 @@ def pl__5__write_asl_consultant_index_to_storage(asl_consultant_index_schemad_pc
       )
     | "Beam PL: print path to asl consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="ASL CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
   )
+
+
+def pl__5__write_document_asl_consultant_index_to_storage(document_asl_consultant_index_schemad_pcoll):
+  return ( # document_asl_consultant_index_csv_path
+    document_asl_consultant_index_schemad_pcoll
+    | beam.Map(lambda document_asl_consultant_index_schemad_pcoll_row: row_to_string(document_asl_consultant_index_schemad_pcoll_row))
+    | "Beam PL: write document-asl-consultant index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
+      )
+    | "Beam PL: print path to document-asl-consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
+  )
+
+
+# def pl__5__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll, asl_consultant_index_schemad_pcoll):
+#   # now create pcoll associating doc_id with asl_consultant_info (key)
+#   participant_doc_mapping_pcoll = (
+#     ss_doc_participant_list_pcoll
+#     | "Beam PL: 'explode' associated participants to participant_list tuple pcoll" >> beam.Map(
+#           lambda tpl_doc_particpant_list_row: [
+#             (
+#               media_fname, # (key)
+#               {
+#                 globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: tpl_doc_particpant_list_row[0][0],      # DocumentID
+#                 globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: tpl_doc_particpant_list_row[0][1][0]    # Filename (corpus)
+#               }
+#             ) for media_fname in tpl_doc_media_list_row[0][1][1]
+#           ]
+#         )
+#     | "Beam PL: 'explode' media_list tuple pcoll" >> beam.FlatMap(lambda list_media_tpl: list_media_tpl)
+#     # debug
+#     # | "Beam PL: print explosion of media_list tuple pcoll" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
+#   )
 
 
 def validate_ds_video_preprocessing(tpl_combined_results_row):
@@ -1212,8 +1348,9 @@ def run():
     corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
     ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
     # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
-    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_dataset(ss_parsed_xmldb_pcoll)
+    asl_consultant_index_schemad_pcoll, document_asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_datasets(ss_parsed_xmldb_pcoll)
     pl__5__write_asl_consultant_index_to_storage(asl_consultant_index_schemad_pcoll)
+    pl__5__write_document_asl_consultant_index_to_storage(document_asl_consultant_index_schemad_pcoll)
     initial_video_dataset_pcoll = pl__5__create_initial_video_dataset(ss_parsed_xmldb_pcoll, asl_consultant_index_schemad_pcoll, full_vid_index_schemad_pcoll)
     # _ = (
     #   initial_video_dataset_pcoll
