@@ -16,19 +16,19 @@ VIDEO_INDEX_BASE = 'video_index-20120129'
 VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
 VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
 SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
-DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant.csv'
-ASL_CONSULTANT_DS_FNAME = 'asl-consultant.csv'
+DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant-index.csv'
+ASL_CONSULTANT_DS_FNAME = 'asl-consultant-index.csv'
 VIDEO_DS_FNAME = 'video.csv'
-UTTERANCE_DS_FNAME = 'utterance.csv'
-UTTERANCE_VIDEO_DS_FNAME = 'utterance-video.csv'
-UTTERANCE_TOKEN_DS_FNAME = 'utterance-token.csv'
-VOCABULARY_DS_FNAME = 'vocabulary.csv'
+UTTERANCE_DS_FNAME = 'utterance-index.csv'
+UTTERANCE_VIDEO_DS_FNAME = 'utterance-video-index.csv'
+UTTERANCE_TOKEN_DS_FNAME = 'utterance-token-index.csv'
+VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
 CORPUS_BASE = 'ncslgr-xml'
 CORPUS_ARCHIVE = CORPUS_BASE+'.zip'
 CORPUS_DIR = os.path.join(TMP_DIR, CORPUS_BASE)
-CORPUS_DS_FNAME = 'ncslgr-corpus.csv'
-VIDEO_SEGMENT_DS_FNAME = 'video-segment.csv'
-UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame.csv'
+CORPUS_DS_FNAME = 'ncslgr-corpus-index.csv'
+VIDEO_SEGMENT_DS_FNAME = 'video-segment-index.csv'
+UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame-index.csv'
 
 
 
