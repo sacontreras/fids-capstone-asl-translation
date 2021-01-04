@@ -306,7 +306,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
         seg_path = local_vid_segment_paths[i]
         seg_fname = seg_path.split(os.path.sep)[-1]
         if n_frames != _n_frames_expected:
-          print(f"{label+': ' if len(label)>0 else ''}***WARNING!!!*** Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
+          print(f"{label+': ' if len(label)>0 else ''}{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
           failed_target_videos.append(video_fname)
           fail = True
           break
@@ -321,7 +321,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
       segment_dict['n_frames_extracted'] = n_frames
 
   else:
-    print(f"\t***WARNING!!!*** Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    print(f"\t{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
     failed_target_videos.append(video_fname)
     fail = True  
 
@@ -761,42 +761,6 @@ def pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll):
   return (
     corpus_index_decoded_XML_pcoll
     | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
-    # the above products pcoll with rows as:
-      # {
-      #   'CORPUS_DOCUMENT_FILENAME': <corpus doc filename>, 
-
-      #   'PARTICIPANT_SEQUENCE': [
-      #     {
-      #       'PARTICIPANT_NAME': <participant name>,
-      #       'PARTICIPANT_AGE': <participant age>,
-      #       'PARTICIPANT_GENDER': <participant gender>,
-
-      #       'UTTERANCE_SEQUENCE': [
-      #         {
-      #           'UTTERANCE_ENGLISH_TRANSLATION': <utterance English translation>,
-      #           'UTTERANCE_START_TIME': <utterance start time (time code)>,
-      #           'UTTERANCE_END_TIME': <utterance end time (time code)>,
-
-      #           'MEDIA_SEQUENCE': [
-      #             {
-      #               'MEDIA_FNAME': <media fname>,
-      #               'MEDIA_CAMERA_PERSPECTIVE': <media camera perspective>,
-      #               'MEDIA_URL': <media url>
-      #             }
-      #           ]
-
-      #           'TOKEN_SEQUENCE': [
-      #             {
-      #               'TOKEN_LINGUSTIC_TEXT': <token linguistic text>,
-      #               'TOKEN_START_TIME': <token start time (time code)>,
-      #               'TOKEN_END_TIME': <token end time (time code)>,
-      #             }
-      #           ]
-      #         }
-      #       ]
-      #     }
-      #   ]
-      # }
   )
 
 def debug_print_signstream_db(d_corpus_index_decoded_XML_row):
@@ -877,59 +841,6 @@ def get_ss_xml_db_participants(d_parsed_ss_xml_db_row):
   return [(ss_xml_db_docid, (ss_xml_db_fname, participant_object_list))]
 
 
-def validate_preprocess_asl_consultant_id_to_participant_object_mapping(tpl_aggregated_results):
-  """
-    tpl_aggregated_results: (
-      <participant name>, # this is the key
-      list_of(<participant object>)
-    )
-  """
-  participant_name = tpl_aggregated_results[0]
-  particpant_object_list = copy.deepcopy(tpl_aggregated_results[1])
-  if len(particpant_object_list) > 0:
-    age = -1
-    gender = ""
-    not_unique = False
-    for participant_object in particpant_object_list:
-      _age = participant_object.get_age()
-      _age_list = list(map(int, re.findall(r'\d+', _age))) # we must parse using regex since it is possible to receive age string as '42 years' for example
-      _age = int(_age_list[0]) if len(_age_list)>0 else -1 # -1 indicates no age provided
-      _gender = participant_object.get_gender()
-      if age is None:
-        age = _age
-        gender = _gender
-      else:
-        if _age != age:
-          not_unique = True
-          if _age > age:
-            age = _age
-            print(f"***WARNING!!!*** participant {participant_name} age is not unique; assigning greatest value (most recent): {age}")
-        if _gender != gender:
-          not_unique = True
-          s_notification = "***WARNING!!!*** participant {participant_name} gender is not unique"
-          if len(_gender)>0 and len(gender)==0:
-            s_notification += f"; current gender is '{gender}'; assigning first (non-empty) gender: '{_gender}'"
-            gender = _gender
-    return [(
-      participant_name, 
-      {
-        globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]:age,
-        globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]:gender,
-        'participant_object_list': particpant_object_list
-      }
-    )]
-  else:
-    print(f"***FATAL ERROR!!!*** participant {participant_name} does not have any associated info")
-    return [tpl_aggregated_results] # passthrough
-
-class DSASLConsultantIDToParticipantObjectMappingValidator(PipelinePcollElementProcessor):
-  def __init__(self):
-    super(DSASLConsultantIDToParticipantObjectMappingValidator, self).__init__(
-      fn_pcoll_element_processor=validate_preprocess_asl_consultant_id_to_participant_object_mapping,
-      kargs=None,
-      return_result=True
-    )
-
 def validate_ds_document_asl_consultant_preprocessing(tpl_combined_results_row):
   # ('Michael Schlang', {'particpant_corpus_doc_mapping': [{'DocumentID': '28'}, {'DocumentID': '32'}, {'DocumentID': '36'}, {'DocumentID': '37'}, {'DocumentID': '1'}, {'DocumentID': '2'}, {'DocumentID': '3'}, {'DocumentID': '4'}, {'DocumentID': '6'}, {'DocumentID': '9'}, {'DocumentID': '12'}, {'DocumentID': '14'}, {'DocumentID': '15'}, {'DocumentID': '17'}, {'DocumentID': '19'}, {'DocumentID': '23'}], 'participant_asl_consultant_mapping': [3]})
   participant_name = tpl_combined_results_row[0]
@@ -948,7 +859,7 @@ def validate_ds_document_asl_consultant_preprocessing(tpl_combined_results_row):
     for d_particpant_corpus_doc_mapping_instance in particpant_corpus_doc_mapping:
       set_doc_id.add(int(d_particpant_corpus_doc_mapping_instance[globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]]))
   else:
-    print(f"***FATAL ERROR!!!*** participant {participant_name} is not associated with any corpus documents")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} is not associated with any corpus documents")
   asl_consultant_id = None
   if len(participant_asl_consultant_mapping) > 0:
     asl_consultant_id = None
@@ -959,10 +870,10 @@ def validate_ds_document_asl_consultant_preprocessing(tpl_combined_results_row):
       else:
         if _asl_consultant_id != asl_consultant_id:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** participant {participant_name} asl consultant id is not unique (in document-asl-consultant mapping)! It has asl consultant ids: {asl_consultant_id} and {_asl_consultant_id}")
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} asl consultant id is not unique (in document-asl-consultant mapping)! It has asl consultant ids: {asl_consultant_id} and {_asl_consultant_id}")
           break
   else:
-    print(f"***FATAL ERROR!!!*** participant {participant_name} is not assigned an asl consultant id (in document-asl-consultant mapping)")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} is not assigned an asl consultant id (in document-asl-consultant mapping)")
   return [(asl_consultant_id, sorted(list(set_doc_id)))]
 
 class DSDocumentASLConsultantPreprocessingValidator(PipelinePcollElementProcessor):
@@ -1005,7 +916,7 @@ def validate_preprocess_asl_consultant_to_document_participant_list_mapping(tpl_
         )
       )
   else:
-    print(f"***FATAL ERROR!!!*** participant {participant_name} is not associated with any corpus documents")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} is not associated with any corpus documents")
   asl_consultant_id = None
   if len(participant_asl_consultant_mapping) > 0:
     asl_consultant_id = None
@@ -1017,10 +928,10 @@ def validate_preprocess_asl_consultant_to_document_participant_list_mapping(tpl_
       else:
         if _asl_consultant_id != asl_consultant_id:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** participant {participant_name} asl consultant id is not unique (in document-asl-consultant mapping)! It has asl consultant ids: {asl_consultant_id} and {_asl_consultant_id}")
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} asl consultant id is not unique (in document-asl-consultant mapping)! It has asl consultant ids: {asl_consultant_id} and {_asl_consultant_id}")
           break
   else:
-    print(f"***FATAL ERROR!!!*** participant {participant_name} is not assigned an asl consultant id (in document-asl-consultant mapping)")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} is not assigned an asl consultant id (in document-asl-consultant mapping)")
   return [
     (
       asl_consultant_id, 
@@ -1179,31 +1090,39 @@ def validate_preprocess_participant_to_asl_consultant_id(tpl_participant_info_gr
     particpant_info_tpl_list = tpl_participant_info_grouped_by_name[1]
     if len(particpant_info_tpl_list) > 0:
       age = -1
+      multiple_ages = []
       gender = ""
-      not_unique = False
+      multiple_genders = []
+
       for participant_info_tpl in particpant_info_tpl_list:
         _age = participant_info_tpl[0]
         _age_list = list(map(int, re.findall(r'\d+', _age))) # we must parse using regex since it is possible to receive age string as '42 years' for example
         _age = int(_age_list[0]) if len(_age_list)>0 else -1 # -1 indicates no age provided
+        multiple_ages.append(_age)
         _gender = participant_info_tpl[1]
-        if age is None:
-          age = _age
-          gender = _gender
-        else:
-          if _age != age:
-            not_unique = True
-            if _age > age:
-              age = _age
-              print(f"***WARNING!!!*** participant {participant_name} age is not unique; assigning greatest value (most recent): {age}")
-          if _gender != gender:
-            not_unique = True
-            s_notification = "***WARNING!!!*** participant {participant_name} gender is not unique"
-            if len(_gender)>0 and len(gender)==0:
-              s_notification += f"; current gender is '{gender}'; assigning first (non-empty) gender: '{_gender}'"
-              gender = _gender
+        multiple_genders.append(_gender)
+
+      multiple_ages = set(multiple_ages)
+      if len(multiple_ages) > 0:
+        age = max(multiple_ages)
+        if len(multiple_ages) > 1:
+          print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} age is not unique: {multiple_ages}; assigning greatest value (most recent): {age}")
+      else:
+        print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} age info does not exist; assigning default age (-1)")
+        age = -1
+
+      multiple_genders = set(multiple_genders)
+      if len(multiple_genders) > 0 and (gender is None or len(gender)==0):
+        for _gender in multiple_genders:
+          if len(_gender)>0:
+            gender = _gender
+            if len(multiple_genders) > 1:
+              print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} gender is not unique: {multiple_genders}; current gender is {gender}; assigning first (non-empty) gender: {_gender}")              
+            break
+
       return [(participant_name, age, gender)]
     else:
-      print(f"***FATAL ERROR!!!*** participant {participant_name} does not have any associated info")
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} does not have any associated info")
       return [tpl_participant_info_grouped_by_name] # passthrough
       
 def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
@@ -1473,6 +1392,142 @@ def pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(ss_parse
   return document_asl_consultant_utterance_index_schemad_pcoll
 
 
+def pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_utterance_index_schemad_pcoll):
+  """
+  have:
+    ss_parsed_xmldb_pcoll (each row is): 
+      {
+        'CORPUS_DOCUMENT_FILENAME': <corpus doc filename>, 
+
+        'PARTICIPANT_SEQUENCE': [
+          {
+            'PARTICIPANT_NAME': <participant name>,
+            'PARTICIPANT_AGE': <participant age>,
+            'PARTICIPANT_GENDER': <participant gender>,
+
+            'UTTERANCE_SEQUENCE': [
+              {
+                'UTTERANCE_ENGLISH_TRANSLATION': <utterance English translation>,
+                'UTTERANCE_START_TIME': <utterance start time (time code)>,
+                'UTTERANCE_END_TIME': <utterance end time (time code)>,
+
+                'MEDIA_SEQUENCE': [
+                  {
+                    'MEDIA_FNAME': <media fname>,
+                    'MEDIA_CAMERA_PERSPECTIVE': <media camera perspective>,
+                    'MEDIA_URL': <media url>
+                  }
+                ]
+
+                'TOKEN_SEQUENCE': [
+                  {
+                    'TOKEN_LINGUSTIC_TEXT': <token linguistic text>,
+                    'TOKEN_START_TIME': <token start time (time code)>,
+                    'TOKEN_END_TIME': <token end time (time code)>,
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+  have:
+    document_asl_consultant_utterance_index_schemad_pcoll:
+      beam.Row(
+        Filename=doc_participant_utterances_tpl[0][0],
+        DocumentID=int(doc_participant_utterances_tpl[1][0][0]),
+        ParticipantName=doc_participant_utterances_tpl[0][1],
+        ASLConsultantID=int(doc_participant_utterances_tpl[1][0][1]),
+        UtteranceSequence=doc_participant_utterances_tpl[1][1][0],
+        StartTime=doc_participant_utterances_tpl[1][1][3],
+        EndTime=doc_participant_utterances_tpl[1][1][4],
+        Tokens=doc_participant_utterances_tpl[1][1][1],
+        Translation=doc_participant_utterances_tpl[1][1][2]
+      )
+
+  want:
+    SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
+      'DocumentID',
+      'ASLConsultantID',
+      'UtteranceSequence',
+      'TokenSequence',
+      'StartTime',
+      'EndTime',
+      'TokenID',
+      'Field',
+      'FieldValue'
+    ]
+  """
+
+  doc_participant_utterance_token_mapping = (
+    ss_parsed_xmldb_pcoll
+    | "Beam PL: get token associated with this ss_parsed_xmldb, participant, utterance, keyed by doc filename, participant name, utterance seq id, token seq id" >> beam.Map(
+        lambda ss_parsed_xmldb_pcoll_row_dict: [
+          (
+            (
+              doc_participant_utterance_token_tpl[0], # <corpus doc filename>
+              doc_participant_utterance_token_tpl[1], # <participant name>
+              doc_participant_utterance_token_tpl[2], # <utterance seq id>
+              doc_participant_utterance_token_tpl[3], # <token seq id>
+            ), # key
+
+            (
+              doc_participant_utterance_token_tpl[4], # <token linguistic text>
+              doc_participant_utterance_token_tpl[5], # <token start time>
+              doc_participant_utterance_token_tpl[6], # <token end time>
+            ) # token data
+          ) for doc_participant_utterance_token_tpl in [
+              (
+                ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
+                d_participant['PARTICIPANT_NAME'],
+                utterance_seq_id,
+                token_seq_id, 
+                d_token['TOKEN_LINGUSTIC_TEXT'], 
+                d_token['TOKEN_START_TIME'], 
+                d_token['TOKEN_END_TIME']
+              ) for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
+                  for utterance_seq_id, d_utterance in enumerate(d_participant['UTTERANCE_SEQUENCE']) 
+                    for token_seq_id, d_token in enumerate(d_utterance['TOKEN_SEQUENCE'])
+            ] 
+        ]
+      ) # outputs pcoll with each row list of ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
+    | "Beam PL: 'explode' list of doc_participant_utterance_token_mapping tuples" >> beam.FlatMap(lambda list_doc_participant_utterance_token_mapping_tpl: list_doc_participant_utterance_token_mapping_tpl)
+    # the above produces a pcoll with rows as:
+    #   ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
+    | "Beam PL: select distinct doc_participant_utterance_token_mapping tuples" >> beam.Distinct()
+    # debug
+    # | "Beam PL: print pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll result"))
+  )
+
+  # now extract distinct token linguistic text from doc_participant_utterance_token_mapping to build the final vocabulary index
+  vocabulary_index_pcoll = (
+    doc_participant_utterance_token_mapping
+    # ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
+    | "Beam PL: extract token linguistic text" >> beam.Map(lambda doc_participant_utterance_token_mapping_row_tpl: doc_participant_utterance_token_mapping_row_tpl[1][0])
+    | "Beam PL: select distinct token linguistic text" >> beam.Distinct()
+    | "Beam PL: apply RowIndex to vocab index" >> beam.ParDo(RowIndexer(var_name_prefix="vocab_token_id"))
+    # the above produces tuples of the form:
+      # (<vocab token id>, <vocab token linguistic text>)
+    | "Beam PL: apply schema to vocabulary_index_pcoll rows" >> beam.Map(
+        lambda vocabulary_index_pcoll_row_tpl: beam.Row(
+          # SCHEMA_COL_NAMES__VOCABULARY_DS = [
+          #   'TokenID',
+          #   'Token'
+          # ]
+          TokenID=int(vocabulary_index_pcoll_row_tpl[0]),
+          Token=vocabulary_index_pcoll_row_tpl[1]
+        )
+      )
+    # debug
+    # | "Beam PL: print vocabulary" >> beam.ParDo(PipelinePcollPrinter("vocabulary token"))
+  )
+
+  document_asl_consultant_utterance_token_index_schemad_pcoll = None
+
+  return vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll
+
+
 def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
   return ( # asl_consultant_index_csv_path
     asl_consultant_index_schemad_pcoll
@@ -1512,6 +1567,7 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
     | "Beam PL: print path to document-asl-consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_index_csv_path
 
+
 def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll):
   return (
     document_asl_consultant_utterance_index_schemad_pcoll
@@ -1546,31 +1602,29 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
     | "Beam PL: print path to document-asl-consultant-utterance index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_utterance_index_csv_path
 
+
 def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll):
-  # beam.Row(
-  #   # SCHEMA_COL_NAMES__VIDEO_DS = [
-  #   #   'DocumentID',
-  #   #   'ASLConsultantID',
-  #   #   'CameraPerspective',
-  #   #   'Filename'
-  #   # ]
-  #   DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
-  #   DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
-  #   ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
-  #   ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
-  #   CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][3]),                  
-  #   MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
-  # )
+  """
+  document_asl_consultant_video_index_schemad_pcoll:
+    beam.Row(
+      # SCHEMA_COL_NAMES__VIDEO_DS = [
+      #   'DocumentID',
+      #   'ASLConsultantID',
+      #   'CameraPerspective',
+      #   'Filename'
+      # ]
+      DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
+      DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
+      ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
+      ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
+      CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][3]),                  
+      MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
+    )
+  """
   return (
     document_asl_consultant_video_index_schemad_pcoll
     | "Beam PL: extract SCHEMA_COL_NAMES__VIDEO_DS columns from document_asl_consultant_video_index_schemad_pcoll" >> beam.Map(
         lambda document_asl_consultant_video_index_schemad_pcoll_row: beam.Row(
-          # SCHEMA_COL_NAMES__VIDEO_DS = [
-          #   'DocumentID',
-          #   'ASLConsultantID',
-          #   'CameraPerspective',
-          #   'Filename'
-          # ]
           DocumentID=int(document_asl_consultant_video_index_schemad_pcoll_row.DocumentID),
           ASLConsultantID=int(document_asl_consultant_video_index_schemad_pcoll_row.ASLConsultantID),
           CameraPerspective=int(document_asl_consultant_video_index_schemad_pcoll_row.CameraPerspective),
@@ -1587,6 +1641,32 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
       )
     | "Beam PL: print path to document-asl-consultant-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-VIDEO INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_video_index_csv_path
+
+
+def pl__8__write_vocabulary_index_csv(vocabulary_index_pcoll):
+  """
+  vocabulary_index_pcoll:
+    beam.Row(
+      # SCHEMA_COL_NAMES__VOCABULARY_DS = [
+      #   'TokenID',
+      #   'Token'
+      # ]
+      TokenID=int(vocabulary_index_pcoll_row_tpl[0]),
+      Token=vocabulary_index_pcoll_row_tpl[1]
+    )
+  """
+  return (
+    vocabulary_index_pcoll
+    | beam.Map(lambda vocabulary_index_pcoll_row: row_to_string(vocabulary_index_pcoll_row))
+    | "Beam PL: write vocabulary index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.VOCABULARY_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
+      )
+    | "Beam PL: print path to vocabulary index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VOCABULARY INDEX CSV WRITTEN TO STORAGE"))
+  ) # vocabulary_index_csv_path
 
 
 def validate_ds_video_preprocessing(tpl_combined_results_row):
@@ -1607,7 +1687,7 @@ def validate_ds_video_preprocessing(tpl_combined_results_row):
       else:
         if _doc_id != doc_id:
           not_unique = True
-          print(f"***WARNING!!!*** media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
+          print(f"{globals.VALIDATION_WARNING_TEXT} media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
           break
   if len(media_camera_perspective_mapping) > 0:
     camera_perspective = None
@@ -1619,7 +1699,7 @@ def validate_ds_video_preprocessing(tpl_combined_results_row):
       else:
         if _camera_perspective != camera_perspective:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
           break
   return [tpl_combined_results_row] # passthrough
 class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
@@ -1630,94 +1710,118 @@ class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
       return_result=True
     )
 
-def validate_preprocess_merged_media_doc_participant_camera_perspective_mapping(merged_media_doc_participant_camera_perspective_mapping_row_tpl):
+def validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping(merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl):
   """
-  merged_media_doc_participant_camera_perspective_mapping_row_tpl:
-    (<media fname>, {'media_doc_participant_mapping': [(<corpus doc filename>, <participant_name>)], 'media_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
+  merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl:
+    (<media fname>, {'video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
 
   return:
     listof(
-      ((<document fname>, <participant name>), (<media fname>, <camera perspective>))
+      ((<document fname>, <participant name>), (<utterance seq id>, <media fname>, <camera perspective>))
     )
   """
-  media_fname = merged_media_doc_participant_camera_perspective_mapping_row_tpl[0]
-  media_doc_participant_mapping = merged_media_doc_participant_camera_perspective_mapping_row_tpl[1]['media_doc_participant_mapping']
-  media_camera_perspective_mapping = merged_media_doc_participant_camera_perspective_mapping_row_tpl[1]['media_camera_perspective_mapping']
+  video_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[0]
+  video_doc_participant_utterance_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['video_doc_participant_utterance_mapping']
+  video_camera_perspective_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['video_camera_perspective_mapping']
 
   validated_results = []
 
-  # there should always only be ONE camera perspective per media file
+  # there should always only be ONE camera perspective per video_fname file
   camera_perspective = None
-  if len(media_camera_perspective_mapping) > 0:
+  if len(video_camera_perspective_mapping) > 0:
     not_unique = False
-    for d_media_camera_perspectivec_mapping_instance in media_camera_perspective_mapping:
-      _camera_perspective = d_media_camera_perspectivec_mapping_instance['CameraPerspective']
+    for d_video_camera_perspectivec_mapping_instance in video_camera_perspective_mapping:
+      _camera_perspective = d_video_camera_perspectivec_mapping_instance['CameraPerspective']
       if camera_perspective is None:
         camera_perspective = _camera_perspective
       else:
         if _camera_perspective != camera_perspective:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
           break
   else:
-    print(f"***FATAL ERROR!!!*** media {media_fname} has no associated camera perspective!")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} has no associated camera perspective!")
   
   doc_fname = None
   participant_name = None
-  if len(media_doc_participant_mapping) > 0:
-    not_unique = False
-    for media_doc_participant_mapping_instance in media_doc_participant_mapping:
-      _doc_fname = media_doc_participant_mapping_instance[0]
-      _participant_name = media_doc_participant_mapping_instance[1]
-      if doc_fname is None:
+  utterance_seq_id = None
+  if len(video_doc_participant_utterance_mapping) > 0:
+    multiple_docs = []
+    multiple_participants = []
+    multiple_utterances = []
+    for video_doc_participant_utterance_mapping_instance in video_doc_participant_utterance_mapping:
+      _doc_fname = video_doc_participant_utterance_mapping_instance[0]
+      _participant_name = video_doc_participant_utterance_mapping_instance[1]
+      _utterance_seq_id = video_doc_participant_utterance_mapping_instance[2]
+
+      if doc_fname is None or len(doc_fname)==0:
         doc_fname = _doc_fname
+        multiple_docs.append(_doc_fname)
       else:
         if _doc_fname != doc_fname:
-          not_unique = True
-          print(f"***WARNING!!!*** media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} and {_doc_fname}")
-      if participant_name is None:
+          multiple_docs.append(_doc_fname)
+
+      if participant_name is None or len(participant_name)==0:
         participant_name = _participant_name
+        multiple_participants.append(_participant_name)
       else:
         if _participant_name != participant_name:
-          not_unique = True
-          print(f"***WARNING!!!*** media {media_fname} participant occurrence is not unique! It has participants: {participant_name} and {_participant_name}")
+          multiple_participants.append(_participant_name)
+
+      if utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
+        utterance_seq_id = _utterance_seq_id
+        multiple_utterances.append(_utterance_seq_id)
+      else:
+        if _utterance_seq_id != utterance_seq_id:
+          multiple_utterances.append(_utterance_seq_id)
+
       validated_results.append(
         (
           (_doc_fname, _participant_name), 
-          (media_fname, camera_perspective)
+          (_utterance_seq_id, video_fname, camera_perspective)
         )
       )
+    multiple_docs = set(multiple_docs)
+    if len(multiple_docs) > 1:
+      print(f"{globals.VALIDATION_WARNING_TEXT} video {video_fname} document occurrence is not unique! It occurs in documents: {multiple_docs}")
+
+    multiple_participants = set(multiple_participants)
+    if len(multiple_participants) > 1:
+      print(f"{globals.VALIDATION_WARNING_TEXT} video {video_fname} participant occurrence is not unique! It has participants: {multiple_participants}")
+    # if len(multiple_utterances) > 1: # this is actually expected
+    #   print(f"{globals.VALIDATION_WARNING_TEXT}video {video_fname} utterance seq id occurrence is not unique! It has utterance seq ids: {multiple_utterances}")
+
   else:
-    print(f"***FATAL ERROR!!!*** media {media_fname} is not associated with a corpus document!")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} is not associated with a corpus document!")
     validated_results.append(
       (None, participant_name),
-      (media_fname, camera_perspective)
+      (utterance_seq_id, video_fname, camera_perspective)
     )
 
   return validated_results
 
-def validate_preprocess_media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl(media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl):
+def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl(video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl):
   """
-  media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl:
-    ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_media_doc_participant_camera_perspective_mapping': [(<media filename>, <camera perspective>)]})
+  video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl:
+    ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_video_doc_participant_utterance_camera_perspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]})
 
   return:
     listof(
-      ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <media filename>, <camera perspective>))
+      ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
     )
   """
-  doc_fname = media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl[0][0]
+  doc_fname = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[0][0]
   if doc_fname is None or len(doc_fname)==0:
-    print(f"***FATAL ERROR!!!*** media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl {media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl} has no associated corpus document filename")
-    return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl} has no associated corpus document filename")
+    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
-  participant_name = media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl[0][1]
+  participant_name = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[0][1]
   if participant_name is None or len(participant_name)==0:
-    print(f"***FATAL ERROR!!!*** media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl {media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl} has no associated participant name")
-    return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl} has no associated participant name")
+    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
-  document_participant_with_ids_mapping = media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl[1]['document_participant_with_ids_mapping']
-  merged_media_doc_participant_camera_perspective_mapping = media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl[1]['merged_media_doc_participant_camera_perspective_mapping']
+  document_participant_with_ids_mapping = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[1]['document_participant_with_ids_mapping']
+  merged_video_doc_participant_utterance_camera_perspective_mapping = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[1]['merged_video_doc_participant_utterance_camera_perspective_mapping']
 
   validated_results = []
 
@@ -1735,77 +1839,87 @@ def validate_preprocess_media_doc_participant_camera_perspective_with_ids_pcoll_
       else:
         if _doc_id != doc_id:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** document {doc_fname} doc_id is not unique! It has doc ids: {doc_id} and {_doc_id}")
-          return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} doc_id is not unique! It has doc ids: {doc_id} and {_doc_id}")
+          return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
       if asl_consultant_id is None:
         asl_consultant_id = _asl_consultant_id
       else:
         if _asl_consultant_id != asl_consultant_id:
           not_unique = True
-          print(f"***FATAL ERROR!!!*** document {doc_fname} asl_consultant_id is not unique! It has doc ids: {asl_consultant_id} and {_asl_consultant_id}")
-          return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} asl_consultant_id is not unique! It has doc ids: {asl_consultant_id} and {_asl_consultant_id}")
+          return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
   else:
-    print(f"***FATAL ERROR!!!*** document {doc_fname} has no document_participant_with_ids_mapping!")
-    return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no document_participant_with_ids_mapping!")
+    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
   
-  if len(merged_media_doc_participant_camera_perspective_mapping) > 0:
+  if len(merged_video_doc_participant_utterance_camera_perspective_mapping) > 0:
     not_unique = False
-    for merged_media_doc_participant_camera_perspective_mapping_instance in merged_media_doc_participant_camera_perspective_mapping:
-      _media_fname = merged_media_doc_participant_camera_perspective_mapping_instance[0]
+    for merged_video_doc_participant_utterance_camera_perspective_mapping_instance in merged_video_doc_participant_utterance_camera_perspective_mapping:
+      # (<utterance seq id>, <video fname>, <camera perspective>)
+      _utterance_seq_id = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[0]
+      if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid utterance seq id: {_utterance_seq_id}")
+        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+
+      _media_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[1]
       if _media_fname is None or len(_media_fname)==0:
-        print(f"***FATAL ERROR!!!*** document {doc_fname} has an empty (or None) media filename")
-        return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an empty (or None) media filename")
+        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
-      _camera_perspective = merged_media_doc_participant_camera_perspective_mapping_instance[1]
+      _camera_perspective = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[2]
       if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
-        print(f"***FATAL ERROR!!!*** document {doc_fname} has an invalid camera perspective: {_camera_perspective}")
-        return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid camera perspective: {_camera_perspective}")
+        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
-      # ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <media filename>, <camera perspective>))
+      # ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
       validated_results.append(
         (
           (doc_id, asl_consultant_id), 
-          (doc_fname, participant_name, _media_fname, _camera_perspective)
+          (doc_fname, participant_name, _utterance_seq_id, _media_fname, _camera_perspective)
         )
       )
   else:
-    print(f"***FATAL ERROR!!!*** document {doc_fname} has no merged_media_doc_participant_camera_perspective_mapping entries")
-    return media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no merged_video_doc_participant_utterance_camera_perspective_mapping entries")
+    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
   return validated_results
 
 def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_index_schemad_pcoll, full_vid_index_schemad_pcoll):
   # get list of media
-  #   note that we separate 'explosion' into a separate step since we will use ss_doc_media_list_pcoll again later
-  media_doc_participant_mapping = (
+  video_doc_participant_utterance_mapping = (
     ss_parsed_xmldb_pcoll
-    | "Beam PL: get media associated with this ss_parsed_xmldb, keyed by media filename" >> beam.Map(
+    | "Beam PL: get doc filename, participant name, utterance seq id associated with this video, keyed by video filename" >> beam.Map(
         lambda ss_parsed_xmldb_pcoll_row_dict: [
-          (
-            str(urllib.parse.quote(media_participant_tpl[0])), # there may be spaces!
+          ( # key
+            doc_participant_utterance_video_tpl[3], # <video filename>
             (
-              ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
-              media_participant_tpl[1]
+              doc_participant_utterance_video_tpl[0], # <corpus doc filename>
+              doc_participant_utterance_video_tpl[1], # <participant name>
+              doc_participant_utterance_video_tpl[2]  # <utterance seq id>
             )
-          ) for media_participant_tpl in [
-              (d_media['MEDIA_FNAME'], d_participant['PARTICIPANT_NAME']) 
-                for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
-                  for d_utterance in d_participant['UTTERANCE_SEQUENCE'] 
+          ) for doc_participant_utterance_video_tpl in [
+              (
+                ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
+                d_participant['PARTICIPANT_NAME'],
+                utterance_seq_id,
+                str(urllib.parse.quote(d_media['MEDIA_FNAME'])) # there may be spaces!
+              ) for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
+                  for utterance_seq_id, d_utterance in enumerate(d_participant['UTTERANCE_SEQUENCE']) 
                     for d_media in d_utterance['MEDIA_SEQUENCE']
             ] 
         ]
-      ) # outputs pcoll with each row list of (<media filename>, (<corpus doc filename>, <participant_name>))
-    | "Beam PL: 'explode' list of media_doc_participant_mapping tuples" >> beam.FlatMap(lambda list_media_doc_participant_mapping_tpl: list_media_doc_participant_mapping_tpl)
-    | "Beam PL: select distinct media_doc_participant_mapping tuples" >> beam.Distinct()
+      ) # outputs pcoll with each row list of (<video filename>, (<corpus doc filename>, <participant name>, <utterance seq id>))
+    | "Beam PL: 'explode' list of video_doc_participant_utterance_mapping tuples" >> beam.FlatMap(lambda list_video_doc_participant_utterance_mapping_mapping_tpl: list_video_doc_participant_utterance_mapping_mapping_tpl)
+    | "Beam PL: select distinct list_video_doc_participant_utterance_mapping_tpl tuples" >> beam.Distinct()
     # debug
     # | "Beam PL: print pl__6__create_document_asl_consultant_video_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__6__create_document_asl_consultant_video_index_schemad_pcoll result"))
   )
 
   # now extract distinct media fnames from media_doc_participant_mapping
-  media_list_pcoll = (
-    media_doc_participant_mapping
-    | "Beam PL: extract media fname" >> beam.Map(lambda media_doc_participant_mapping_row_tpl: media_doc_participant_mapping_row_tpl[0])
+  video_list_pcoll = (
+    video_doc_participant_utterance_mapping
+    | "Beam PL: extract media fname" >> beam.Map(lambda video_doc_participant_utterance_mapping_row_tpl: video_doc_participant_utterance_mapping_row_tpl[0])
     | "Beam PL: select distinct media filenames" >> beam.Distinct()
     # debug
     # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
@@ -1822,11 +1936,11 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
     #     uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
     #     uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     #   )
-  media_camera_perspective_mapping = (
+  video_camera_perspective_mapping = (
     full_vid_index_schemad_pcoll
     | "Beam PL: filter matching rows from vid index" >> beam.Filter(
         lambda vid_index_entry, matching_media_fnames: vid_index_entry.filename in matching_media_fnames,
-        matching_media_fnames=beam.pvalue.AsIter(media_list_pcoll),
+        matching_media_fnames=beam.pvalue.AsIter(video_list_pcoll),
       )
     | "Beam PL: extract column vals from matching vid index entries for new video dataset" >> beam.Map(
         lambda matching_vid_index_entry: (
@@ -1839,19 +1953,19 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
   )
 
   # merge doc, participant, and camera perspective keyed by media filename
-  merged_media_doc_participant_camera_perspective_mapping = (
+  merged_video_doc_participant_utterance_camera_perspective_mapping = (
     ({
-      'media_doc_participant_mapping': media_doc_participant_mapping,
-      'media_camera_perspective_mapping': media_camera_perspective_mapping
+      'video_doc_participant_utterance_mapping': video_doc_participant_utterance_mapping,
+      'video_camera_perspective_mapping': video_camera_perspective_mapping
     })
-    | "Beam PL: merge media_doc_participant_mapping and media_camera_perspective_mapping" >> beam.CoGroupByKey()
+    | "Beam PL: merge video_doc_participant_utterance_mapping and video_camera_perspective_mapping" >> beam.CoGroupByKey()
     # the above produces tuples in the form:
-      # (<media fname>, {'media_doc_participant_mapping': [(<corpus doc filename>, <participant_name>)], 'media_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
-    | "Beam PL: validate/preprocess merged_media_doc_participant_camera_perspective_mapping" >> beam.FlatMap(validate_preprocess_merged_media_doc_participant_camera_perspective_mapping)
+      # (<media fname>, {'video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
+    | "Beam PL: validate/preprocess merged_video_doc_participant_utterance_camera_perspective_mapping" >> beam.FlatMap(validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping)
     # the above produces tuples in the form:
-    #   ((<document fname>, <participant name>), (<media fname>, <camera perspective>))
+    #   ((<document fname>, <participant name>), (<utterance seq id>, <video fname>, <camera perspective>))
     # debug
-    # | "Beam PL: print merged media_doc_participant_mapping and media_camera_perspective_mapping" >> beam.ParDo(PipelinePcollPrinter("merged_media_doc_participant_camera_perspective_mapping entry"))
+    # | "Beam PL: print merged video_doc_participant_utterance_mapping and video_camera_perspective_mapping" >> beam.ParDo(PipelinePcollPrinter("merged_video_doc_participant_utterance_camera_perspective_mapping entry"))
   )
 
   # now use document_asl_consultant_index_schemad_pcoll in order to associate doc id and asl consultant id:
@@ -1869,14 +1983,14 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
   document_asl_consultant_video_index_schemad_pcoll = (
     ({
       'document_participant_with_ids_mapping': document_participant_with_ids_mapping,
-      'merged_media_doc_participant_camera_perspective_mapping': merged_media_doc_participant_camera_perspective_mapping
+      'merged_video_doc_participant_utterance_camera_perspective_mapping': merged_video_doc_participant_utterance_camera_perspective_mapping
     })
-    | "Beam PL: merge document_participant_with_ids_mapping and merged_media_doc_participant_camera_perspective_mapping" >> beam.CoGroupByKey()
+    | "Beam PL: merge document_participant_with_ids_mapping and merged_video_doc_participant_utterance_camera_perspective_mapping" >> beam.CoGroupByKey()
     # the above produces tuples in the form:
-      # ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_media_doc_participant_camera_perspective_mapping': [(<media filename>, <camera perspective>)]})
-    | "Beam PL: validate/preprocess media_doc_participant_camera_perspective_with_ids_pcoll" >> beam.FlatMap(validate_preprocess_media_doc_participant_camera_perspective_with_ids_pcoll_row_tpl)
+      # ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_video_doc_participant_utterance_camera_perspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]})
+    | "Beam PL: validate/preprocess video_doc_participant_utterance_camera_perspective_with_ids_pcoll" >> beam.FlatMap(validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl)
     # the above produces tuples in the form:
-    #   ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <media filename>, <camera perspective>))
+    #   ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
     | "Beam PL: apply schema to create final document_asl_consultant_video_index_schemad_pcoll" >> beam.Map(
         lambda document_asl_consultant_video_index_pcoll_row_tpl: beam.Row(
           # SCHEMA_COL_NAMES__VIDEO_DS = [
@@ -1889,8 +2003,9 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
           DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
           ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
           ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
-          CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][3]),                  
-          MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
+          UtteranceSequence=int(document_asl_consultant_video_index_pcoll_row_tpl[1][2]),
+          CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][4]),                  
+          MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][3])
         )
       )
     # debug
@@ -2088,26 +2203,37 @@ def run():
     corpus_index_schemad_pcoll = pl__1__read_corpus_index_csv(pl)
     corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
     ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+
     # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+
     asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
     pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+
     document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
       corpus_index_schemad_pcoll, 
       asl_consultant_index_schemad_pcoll
     )
     pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
+
     document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
       document_asl_consultant_index_schemad_pcoll
     )
     pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
+
     document_asl_consultant_video_index_schemad_pcoll = pl__6__create_document_asl_consultant_video_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
       document_asl_consultant_index_schemad_pcoll, 
       full_vid_index_schemad_pcoll
     )
     pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
+
+    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_utterance_index_schemad_pcoll
+    )
+    pl__8__write_vocabulary_index_csv(vocabulary_index_pcoll)
 
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   full_vid_index_schemad_pcoll = pl__1__read_vid_index_csv(pl)

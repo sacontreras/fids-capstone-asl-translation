@@ -6,29 +6,39 @@ _1KB = 1024
 _1MB = _1KB**2
 FPS = 30
 
+VALIDATION_WARNING_TEXT = "***VALIDATION WARNING!!!***:"
+VALIDATION_FATAL_ERROR_TEXT = "***FATAL ERROR!!!***:"
+
 
 # Good for debugging beam pipelines
 FORCE_DISABLE_MULTIPROCESSING = False
 
 
 TMP_DIR = '/tmp'
-VIDEO_INDEX_BASE = 'video_index-20120129'
-VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
-VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
-SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
-DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-asl-consultant-index.csv'
-ASL_CONSULTANT_DS_FNAME = 'asl-consultant-index.csv'
-VIDEO_DS_FNAME = 'document-asl-consultant-video-index.csv'
-UTTERANCE_DS_FNAME = 'utterance-index.csv'
-UTTERANCE_VIDEO_DS_FNAME = 'utterance-video-index.csv'
-UTTERANCE_TOKEN_DS_FNAME = 'utterance-token-index.csv'
-VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
+
 CORPUS_BASE = 'ncslgr-xml'
 CORPUS_ARCHIVE = CORPUS_BASE+'.zip'
 CORPUS_DIR = os.path.join(TMP_DIR, CORPUS_BASE)
 CORPUS_DS_FNAME = 'ncslgr-corpus-index.csv'
+
+VIDEO_INDEX_BASE = 'video_index-20120129'
+VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
+VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
+SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
+
+DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-consultant-index.csv'
+ASL_CONSULTANT_DS_FNAME = 'consultant-index.csv'
+
+VIDEO_DS_FNAME = 'document-consultant-video-index.csv'
+UTTERANCE_DS_FNAME = 'document-consultant-utterance-index.csv'
+
+UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-video-index.csv'
+UTTERANCE_TOKEN_DS_FNAME = 'document-consultant-utterance-token-index.csv'
+
 VIDEO_SEGMENT_DS_FNAME = 'video-segment-index.csv'
 UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame-index.csv'
+
+VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
 
 
 
