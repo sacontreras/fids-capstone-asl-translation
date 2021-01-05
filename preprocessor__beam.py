@@ -1392,88 +1392,242 @@ def pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(ss_parse
   return document_asl_consultant_utterance_index_schemad_pcoll
 
 
-def pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_utterance_index_schemad_pcoll):
+def validate_preprocess_merged_corpus_doc_asl_consultant_utterance_token(merged_doc_participant_utterance_token):
   """
-  have:
-    ss_parsed_xmldb_pcoll (each row is): 
+  merged_doc_participant_utterance_token:
+    (
+      (<document fname>, <participant name>),   # key
       {
-        'CORPUS_DOCUMENT_FILENAME': <corpus doc filename>, 
-
-        'PARTICIPANT_SEQUENCE': [
-          {
-            'PARTICIPANT_NAME': <participant name>,
-            'PARTICIPANT_AGE': <participant age>,
-            'PARTICIPANT_GENDER': <participant gender>,
-
-            'UTTERANCE_SEQUENCE': [
-              {
-                'UTTERANCE_ENGLISH_TRANSLATION': <utterance English translation>,
-                'UTTERANCE_START_TIME': <utterance start time (time code)>,
-                'UTTERANCE_END_TIME': <utterance end time (time code)>,
-
-                'MEDIA_SEQUENCE': [
-                  {
-                    'MEDIA_FNAME': <media fname>,
-                    'MEDIA_CAMERA_PERSPECTIVE': <media camera perspective>,
-                    'MEDIA_URL': <media url>
-                  }
-                ]
-
-                'TOKEN_SEQUENCE': [
-                  {
-                    'TOKEN_LINGUSTIC_TEXT': <token linguistic text>,
-                    'TOKEN_START_TIME': <token start time (time code)>,
-                    'TOKEN_END_TIME': <token end time (time code)>,
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        'utterance_token_mapping': [(
+          <utterance seq id>, 
+          <token linguistic text>, 
+          <token (new) seq id>, 
+          <token start time>, 
+          <token end time>
+        )], 
+        'document_id_asl_consultant_id_mapping': [(
+          <corpus doc id>, 
+          <asl consultant id>
+        )]
       }
+    )
 
-  have:
-    document_asl_consultant_utterance_index_schemad_pcoll:
-      beam.Row(
-        Filename=doc_participant_utterances_tpl[0][0],
-        DocumentID=int(doc_participant_utterances_tpl[1][0][0]),
-        ParticipantName=doc_participant_utterances_tpl[0][1],
-        ASLConsultantID=int(doc_participant_utterances_tpl[1][0][1]),
-        UtteranceSequence=doc_participant_utterances_tpl[1][1][0],
-        StartTime=doc_participant_utterances_tpl[1][1][3],
-        EndTime=doc_participant_utterances_tpl[1][1][4],
-        Tokens=doc_participant_utterances_tpl[1][1][1],
-        Translation=doc_participant_utterances_tpl[1][1][2]
-      )
+  return: (
+    (<corpus doc id>, <asl consultant id>, <utterance seq id>, <token seq id>), # key
 
-  want:
-    SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
-      'DocumentID',
-      'ASLConsultantID',
-      'UtteranceSequence',
-      'TokenSequence',
-      'StartTime',
-      'EndTime',
-      'TokenID',
-      'Field',
-      'FieldValue'
-    ]
+    # associated data (validated)
+    (<document fname>, <participant name>, <token linguistic text>, <token start time>, <token end time>)
+  )
   """
+  doc_fname = merged_doc_participant_utterance_token[0][0]
+  if len(doc_fname)==0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid doc_fname {doc_fname}!")
+    return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+  participant_name = merged_doc_participant_utterance_token[0][1]
+  if len(participant_name)==0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid participant_name {participant_name}!")
+    return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
 
+  utterance_token_mapping = merged_doc_participant_utterance_token[1]['utterance_token_mapping']
+  document_id_asl_consultant_id_mapping = merged_doc_participant_utterance_token[1]['document_id_asl_consultant_id_mapping']
+
+  validated_results = []
+
+  multiple_docs = []
+  multiple_asl_consultants = []
+
+  # there should always only be ONE (<corpus doc id>, <asl consultant id>) in document_id_asl_consultant_id_mapping
+  doc_id = None
+  asl_consultant_id = None
+  if len(document_id_asl_consultant_id_mapping) > 0:
+    for document_id_asl_consultant_id_mapping_instance in document_id_asl_consultant_id_mapping:
+      _doc_id = document_id_asl_consultant_id_mapping_instance[0]
+      if isinstance(_doc_id, int) and _doc_id>-1 and _doc_id not in multiple_docs:
+        multiple_docs.append(_doc_id)
+      _asl_consultant_id = document_id_asl_consultant_id_mapping_instance[1]
+      if isinstance(_asl_consultant_id, int) and _asl_consultant_id>-1 and _asl_consultant_id not in multiple_asl_consultants:
+        multiple_asl_consultants.append(_asl_consultant_id)
+    if len(multiple_docs)>1 or len(multiple_asl_consultants)>1:
+      multiple_associations = zip(multiple_docs, multiple_asl_consultants)
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} (<corpus doc id>, <asl consultant id>) association is not unique! It occurs has the following (<corpus doc id>, <asl consultant id>) associations: {multiple_associations}")
+      return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+    else:
+      doc_id = multiple_docs[0]
+      asl_consultant_id = multiple_asl_consultants[0]
+  else:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} does not have a (<corpus doc id>, <asl consultant id>) association!")
+    return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+  
+  if len(utterance_token_mapping) > 0:
+    for utterance_token_mapping_instance in utterance_token_mapping:
+      _utterance_seq_id = utterance_token_mapping_instance[0]
+      if not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _utterance_seq_id {_utterance_seq_id} in utterance_token_mapping!")
+        return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+      _token_ling_text = utterance_token_mapping_instance[1]
+      if len(_token_ling_text)==0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_ling_text {_token_ling_text} in utterance_token_mapping!")
+        return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+      _token_new_seq_id = utterance_token_mapping_instance[2]
+      if not isinstance(_token_new_seq_id, int) or _token_new_seq_id<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_new_seq_id {_token_new_seq_id} in utterance_token_mapping!")
+        return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+      _token_start_time = utterance_token_mapping_instance[3]
+      if not isinstance(_token_start_time, int) or _token_start_time<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_start_time {_token_start_time} in utterance_token_mapping!")
+        return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+      _token_end_time = utterance_token_mapping_instance[4]
+      if not isinstance(_token_end_time, int) or _token_end_time<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_end_time {_token_end_time} in utterance_token_mapping!")
+        return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+      
+      validated_results.append(
+        (
+          (doc_id, asl_consultant_id, _utterance_seq_id, _token_new_seq_id), 
+          (doc_fname, participant_name, _token_ling_text, _token_start_time, _token_end_time)
+        )
+      )
+  else:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} is not associated with an utterance_token_mapping!")
+    return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
+
+  return validated_results 
+
+
+def validate_preprocess_document_asl_consultant_utterance_token_tpl(document_asl_consultant_utterance_token_tpl):
+  """
+  document_asl_consultant_utterance_token_tpl:
+    document_asl_consultant_utterance_token_index_schemad_pcoll
+    (
+      <token linguistic text>, 
+      {
+        'vocabulary_token_id_map': [<vocab token id>], 
+        'doc_participant_utterance_token_info_map': [(
+          <corpus doc id>, 
+          <document fname>, 
+          <asl consultant id>, 
+          <participant name>, 
+          <utterance seq id>, 
+          <token (new) seq id>, 
+          <token start time>, 
+          <token end time>
+        )]
+      }
+    )
+
+  return:
+    listof(
+      (
+        <corpus doc id>,
+        <corpus document fname>,
+        <asl consultant id>,
+        <participant name>,
+        <utterance seq id>,
+        <vocab token id>,
+        <token linguistic text>,
+        <token (new) seq id>,
+        <token start time>,
+        <token end time>
+      )
+    )
+  """
+  token_ling_text = document_asl_consultant_utterance_token_tpl[0]
+  if len(token_ling_text)==0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl key is invalid: {token_ling_text}!")
+    return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+
+  vocabulary_token_id_map = document_asl_consultant_utterance_token_tpl[1]['vocabulary_token_id_map']
+  if len(vocabulary_token_id_map) == 0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a <vocab token id> association!")
+    return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+
+  doc_participant_utterance_token_info_map = document_asl_consultant_utterance_token_tpl[1]['doc_participant_utterance_token_info_map']
+  if len(doc_participant_utterance_token_info_map) == 0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a doc_participant_utterance_token_info_map!")
+    return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+
+  validated_results = []
+
+  multiple_token_ids = []
+
+  vocab_token_id = None
+  for vocabulary_token_id_map_instance in vocabulary_token_id_map:
+    _vocab_token_id = vocabulary_token_id_map_instance
+    if isinstance(_vocab_token_id, int) and _vocab_token_id>-1 and _vocab_token_id not in multiple_token_ids:
+      multiple_token_ids.append(_vocab_token_id)
+  if len(multiple_token_ids) > 1:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) <vocab token id> association is not unique! It occurs has the following <vocab token id> associations: {multiple_token_ids}")
+    return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+  else:
+    vocab_token_id = multiple_token_ids[0]
+
+  for doc_participant_utterance_token_info_map_instance in doc_participant_utterance_token_info_map:
+    _corpus_doc_id = doc_participant_utterance_token_info_map_instance[0]
+    if not isinstance(_corpus_doc_id, int) or _corpus_doc_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _corpus_doc_id {_corpus_doc_id} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _doc_fname = doc_participant_utterance_token_info_map_instance[1]
+    if len(_doc_fname)==0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _doc_fname {_doc_fname} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _asl_consultant_id = doc_participant_utterance_token_info_map_instance[2]
+    if not isinstance(_asl_consultant_id, int) or _asl_consultant_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _asl_consultant_id {_asl_consultant_id} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _participant_name = doc_participant_utterance_token_info_map_instance[3]
+    if len(_participant_name)==0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _participant_name {_participant_name} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _utterance_seq_id = doc_participant_utterance_token_info_map_instance[4]
+    if not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _utterance_seq_id {_utterance_seq_id} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _token_new_seq_id = doc_participant_utterance_token_info_map_instance[5]
+    if not isinstance(_token_new_seq_id, int) or _token_new_seq_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_new_seq_id {_token_new_seq_id} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _token_start_time = doc_participant_utterance_token_info_map_instance[6]
+    if not isinstance(_token_start_time, int) or _token_start_time<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_start_time {_token_start_time} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+    _token_end_time = doc_participant_utterance_token_info_map_instance[7]
+    if not isinstance(_token_end_time, int) or _token_end_time<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_end_time {_token_end_time} in doc_participant_utterance_token_info_map!")
+      return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
+
+    validated_results.append(
+      (
+        _corpus_doc_id,
+        _doc_fname,
+        _asl_consultant_id,
+        _participant_name,
+        _utterance_seq_id,
+        vocab_token_id,
+        token_ling_text,
+        _token_new_seq_id,
+        _token_start_time,
+        _token_end_time
+      )
+    )
+
+  return validated_results
+
+
+def pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_index_schemad_pcoll):
   doc_participant_utterance_token_mapping = (
     ss_parsed_xmldb_pcoll
-    | "Beam PL: get token associated with this ss_parsed_xmldb, participant, utterance, keyed by doc filename, participant name, utterance seq id, token seq id" >> beam.Map(
+    | "Beam PL: get token associated with this ss_parsed_xmldb, participant, utterance, keyed by doc filename, participant name, utterance seq id, token linguistic text" >> beam.Map(
         lambda ss_parsed_xmldb_pcoll_row_dict: [
           (
             (
               doc_participant_utterance_token_tpl[0], # <corpus doc filename>
               doc_participant_utterance_token_tpl[1], # <participant name>
               doc_participant_utterance_token_tpl[2], # <utterance seq id>
-              doc_participant_utterance_token_tpl[3], # <token seq id>
+              doc_participant_utterance_token_tpl[4], # <token linguistic text> (ascii representation of the byte-string)
             ), # key
 
             (
-              doc_participant_utterance_token_tpl[4], # <token linguistic text>
+              doc_participant_utterance_token_tpl[3], # <token (new) seq id>
               doc_participant_utterance_token_tpl[5], # <token start time>
               doc_participant_utterance_token_tpl[6], # <token end time>
             ) # token data
@@ -1482,29 +1636,29 @@ def pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
                 ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
                 d_participant['PARTICIPANT_NAME'],
                 utterance_seq_id,
-                token_seq_id, 
-                d_token['TOKEN_LINGUSTIC_TEXT'], 
+                token_new_seq_id, 
+                d_token['TOKEN_LINGUSTIC_TEXT'], # we get an ascii representation of the byte-string
                 d_token['TOKEN_START_TIME'], 
                 d_token['TOKEN_END_TIME']
               ) for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
                   for utterance_seq_id, d_utterance in enumerate(d_participant['UTTERANCE_SEQUENCE']) 
-                    for token_seq_id, d_token in enumerate(d_utterance['TOKEN_SEQUENCE'])
+                    for token_new_seq_id, d_token in enumerate(d_utterance['TOKEN_SEQUENCE'])
             ] 
         ]
-      ) # outputs pcoll with each row list of ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
+      ) # outputs pcoll with each row list of ((<corpus doc filename>, <participant name>, <utterance seq id>, <token linguistic text>), (<token (new) seq id>, <token start time>, <token end time>))
     | "Beam PL: 'explode' list of doc_participant_utterance_token_mapping tuples" >> beam.FlatMap(lambda list_doc_participant_utterance_token_mapping_tpl: list_doc_participant_utterance_token_mapping_tpl)
     # the above produces a pcoll with rows as:
-    #   ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
+    #   ((<corpus doc filename>, <participant name>, <utterance seq id>, <token linguistic text>), (<token (new) seq id>, <token start time>, <token end time>))
     | "Beam PL: select distinct doc_participant_utterance_token_mapping tuples" >> beam.Distinct()
     # debug
-    # | "Beam PL: print pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll result"))
+    # | "Beam PL: print doc_participant_utterance_token_mapping" >> beam.ParDo(PipelinePcollPrinter("doc_participant_utterance_token_mapping entry"))
   )
 
   # now extract distinct token linguistic text from doc_participant_utterance_token_mapping to build the final vocabulary index
   vocabulary_index_pcoll = (
     doc_participant_utterance_token_mapping
-    # ((<corpus doc filename>, <participant name>, <utterance seq id>, <token seq id>), (<token linguistic text>, <token start time>, <token end time>))
-    | "Beam PL: extract token linguistic text" >> beam.Map(lambda doc_participant_utterance_token_mapping_row_tpl: doc_participant_utterance_token_mapping_row_tpl[1][0])
+    # ((<corpus doc filename>, <participant name>, <utterance seq id>, <token linguistic text>), (<token (new) seq id>, <token start time>, <token end time>))
+    | "Beam PL: extract token linguistic text" >> beam.Map(lambda doc_participant_utterance_token_mapping_row_tpl: doc_participant_utterance_token_mapping_row_tpl[0][3])
     | "Beam PL: select distinct token linguistic text" >> beam.Distinct()
     | "Beam PL: apply RowIndex to vocab index" >> beam.ParDo(RowIndexer(var_name_prefix="vocab_token_id"))
     # the above produces tuples of the form:
@@ -1523,7 +1677,179 @@ def pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
     # | "Beam PL: print vocabulary" >> beam.ParDo(PipelinePcollPrinter("vocabulary token"))
   )
 
-  document_asl_consultant_utterance_token_index_schemad_pcoll = None
+  document_asl_consultant_mapping = (
+    document_asl_consultant_index_schemad_pcoll
+    | beam.Map(
+        lambda document_asl_consultant_index_schemad_pcoll_row: (
+          (document_asl_consultant_index_schemad_pcoll_row.Filename, document_asl_consultant_index_schemad_pcoll_row.ParticipantName),
+          (document_asl_consultant_index_schemad_pcoll_row.DocumentID, document_asl_consultant_index_schemad_pcoll_row.ASLConsultantID)
+        )
+      ) # outputs rows as ((<corpus doc filename>, <participant name>), (<corpus doc id>, <asl consultant id>))
+  )
+
+  doc_participant_utterance_token_mapping_2 = (
+    doc_participant_utterance_token_mapping 
+    # have: ((<corpus doc filename>, <participant name>, <utterance seq id>, <token linguistic text>), (<token (new) seq id>, <token start time>, <token end time>))
+    # need: ((<corpus doc filename>, <participant name>), (<utterance seq id>, <token linguistic text>, <token (new) seq id>, <token start time>, <token end time>))
+    | beam.Map(
+        lambda doc_participant_utterance_token_mapping_row_tpl: (
+          (
+            doc_participant_utterance_token_mapping_row_tpl[0][0],  # <corpus doc filename>
+            doc_participant_utterance_token_mapping_row_tpl[0][1]   # <participant name>
+          ),
+          (
+            doc_participant_utterance_token_mapping_row_tpl[0][2],   # <utterance seq id>
+            doc_participant_utterance_token_mapping_row_tpl[0][3],   # <token linguistic text>
+            doc_participant_utterance_token_mapping_row_tpl[1][0],   # <token (new) seq id>
+            doc_participant_utterance_token_mapping_row_tpl[1][1],   # <token start time>
+            doc_participant_utterance_token_mapping_row_tpl[1][2],   # <token end time>
+          )
+        )
+      )
+  )
+
+  # merge <corpus doc id>, <asl consultant id>, <token (new) seq id>, <token start time>, <token end time>
+  merged_doc_participant_utterance_token = (
+    ({
+      'utterance_token_mapping': doc_participant_utterance_token_mapping_2,
+      'document_id_asl_consultant_id_mapping': document_asl_consultant_mapping
+    })
+    | "Beam PL: merge utterance_token_mapping and document_id_asl_consultant_id_mapping" >> beam.CoGroupByKey()
+    # (
+    #   (<document fname>, <participant name>),   # key
+    #   {
+    #     'utterance_token_mapping': [(
+    #       <utterance seq id>, 
+    #       <token linguistic text>, 
+    #       <token (new) seq id>, 
+    #       <token start time>, 
+    #       <token end time>
+    #     )], 
+    #     'document_id_asl_consultant_id_mapping': [(
+    #       <corpus doc id>, 
+    #       <asl consultant id>
+    #     )]
+    #   }
+    # )
+    | "Beam PL: validate/preprocess merged_doc_participant_utterance_token" >> beam.FlatMap(validate_preprocess_merged_corpus_doc_asl_consultant_utterance_token)
+    # the above produces tuples in the form:
+    #   ((<corpus doc id>, <asl consultant id>, <utterance seq id>, <token (new) seq id>), (<document fname>, <participant name>, <token linguistic text>, <token start time>, <token end time>))
+    # debug
+    # | "Beam PL: print validated merged_doc_participant_utterance_token" >> beam.ParDo(PipelinePcollPrinter("merged_doc_participant_utterance_token (validated) entry"))
+  )
+
+  # transform merged_doc_participant_utterance_token tuples:
+  #   have:
+  #     ((<corpus doc id>, <asl consultant id>, <utterance seq id>, <token (new) seq id>), (<document fname>, <participant name>, <token linguistic text>, <token start time>, <token end time>))
+  #   need:
+  #     (<token linguistic text>, (<corpus doc id>, <document fname>, <asl consultant id>, <participant name>, <utterance seq id>, <token (new) seq id>, <token start time>, <token end time>))
+  doc_participant_utterance_by_token_ling_text = (
+    merged_doc_participant_utterance_token
+    | beam.Map(
+        lambda merged_doc_participant_utterance_token_row_tpl: (
+          merged_doc_participant_utterance_token_row_tpl[1][2],   # <token linguistic text> (key)
+          (
+            merged_doc_participant_utterance_token_row_tpl[0][0], # <corpus doc id>
+            merged_doc_participant_utterance_token_row_tpl[1][0], # <document fname>
+            merged_doc_participant_utterance_token_row_tpl[0][1], # <asl consultant id>
+            merged_doc_participant_utterance_token_row_tpl[1][1], # <participant name>
+            merged_doc_participant_utterance_token_row_tpl[0][2], # <utterance seq id>
+            merged_doc_participant_utterance_token_row_tpl[0][3], # <token (new) seq id>
+            merged_doc_participant_utterance_token_row_tpl[1][3], # <token start time>
+            merged_doc_participant_utterance_token_row_tpl[1][4], # <token end time>
+          )
+        )
+      )
+  )
+
+  # transform vocabulary_index_pcoll tuples
+    # have:
+      # beam.Row(
+      #   # SCHEMA_COL_NAMES__VOCABULARY_DS = [
+      #   #   'TokenID',
+      #   #   'Token'
+      #   # ]
+      #   TokenID=int(vocabulary_index_pcoll_row_tpl[0]),
+      #   Token=vocabulary_index_pcoll_row_tpl[1]
+      # )
+    # need:
+      # (<token linguistic text>, <vocab token id>)
+  vocabulary_by_token_ling_text = (
+    vocabulary_index_pcoll
+    | beam.Map(
+        lambda vocabulary_index_pcoll_row: (
+          vocabulary_index_pcoll_row.Token,
+          vocabulary_index_pcoll_row.TokenID
+        )
+      )
+  )
+
+  document_asl_consultant_utterance_token_index_schemad_pcoll = (
+    ({
+      'vocabulary_token_id_map': vocabulary_by_token_ling_text,
+      'doc_participant_utterance_token_info_map': doc_participant_utterance_by_token_ling_text
+    })
+    | "Beam PL: merge vocabulary_by_token_ling_text and doc_participant_utterance_by_token_ling_text" >> beam.CoGroupByKey()
+    # the above produces tuples in the form:
+      # (
+      #   <token linguistic text>, 
+      #   {
+      #     'vocabulary_token_id_map': [1057], 
+      #     'doc_participant_utterance_token_info_map': [(
+      #       <corpus doc id>, 
+      #       <document fname>, 
+      #       <asl consultant id>, 
+      #       <participant name>, 
+      #       <utterance seq id>, 
+      #       <token (new) seq id>, 
+      #       <token start time>, 
+      #       <token end time>
+      #     )]
+      #   }
+      # )
+    | "Beam PL: validate/preprocess document_asl_consultant_utterance_token_tpl" >> beam.FlatMap(validate_preprocess_document_asl_consultant_utterance_token_tpl)
+    # the above produces tuples in the form:
+      # (
+      #   <corpus doc id>,
+      #   <document fname>,
+      #   <asl consultant id>,
+      #   <participant name>,
+      #   <utterance seq id>,
+      #   vocab_token_id,
+      #   token_ling_text,
+      #   _token_new_seq_id,
+      #   _token_start_time,
+      #   _token_end_time
+      # )
+    | "Beam PL: apply schema to document_asl_consultant_utterance_token rows" >> beam.Map(
+        lambda document_asl_consultant_utterance_token_tpl: beam.Row(
+          # SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'UtteranceSequence',
+          #   'TokenSequence',
+          #   'StartTime',
+          #   'EndTime',
+          #   'TokenID',
+          #   'Field',
+          #   'FieldValue'
+          # ]
+          DocumentID=document_asl_consultant_utterance_token_tpl[0],
+          DocumentFilename=document_asl_consultant_utterance_token_tpl[1],
+          ASLConsultantID=document_asl_consultant_utterance_token_tpl[2],
+          ParticipantName=document_asl_consultant_utterance_token_tpl[3],
+          UtteranceSequence=document_asl_consultant_utterance_token_tpl[4],
+          TokenSequence=document_asl_consultant_utterance_token_tpl[7],
+          StartTime=document_asl_consultant_utterance_token_tpl[8],
+          EndTime=document_asl_consultant_utterance_token_tpl[9],
+          TokenID=document_asl_consultant_utterance_token_tpl[5],
+          Field='', # blank for now
+          FieldValue='' # blank for now
+        )
+      )
+    # debug
+    # | "Beam PL: print document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_token_index_schemad_pcoll entry"))
+  )
 
   return vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll
 
@@ -1643,7 +1969,7 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
   ) # document_asl_consultant_video_index_csv_path
 
 
-def pl__8__write_vocabulary_index_csv(vocabulary_index_pcoll):
+def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
   """
   vocabulary_index_pcoll:
     beam.Row(
@@ -1667,6 +1993,61 @@ def pl__8__write_vocabulary_index_csv(vocabulary_index_pcoll):
       )
     | "Beam PL: print path to vocabulary index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VOCABULARY INDEX CSV WRITTEN TO STORAGE"))
   ) # vocabulary_index_csv_path
+
+
+def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll):
+  """
+  document_asl_consultant_utterance_token_index_schemad_pcoll:
+    beam.Row(
+      # SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
+      #   'DocumentID',
+      #   'ASLConsultantID',
+      #   'UtteranceSequence',
+      #   'TokenSequence',
+      #   'StartTime',
+      #   'EndTime',
+      #   'TokenID',
+      #   'Field',
+      #   'FieldValue'
+      # ]
+      DocumentID=document_asl_consultant_utterance_token_tpl[0],
+      DocumentFilename=document_asl_consultant_utterance_token_tpl[1],
+      ASLConsultantID=document_asl_consultant_utterance_token_tpl[2],
+      ParticipantName=document_asl_consultant_utterance_token_tpl[3],
+      UtteranceSequence=document_asl_consultant_utterance_token_tpl[4],
+      TokenSequence=document_asl_consultant_utterance_token_tpl[7],
+      StartTime=document_asl_consultant_utterance_token_tpl[8],
+      EndTime=document_asl_consultant_utterance_token_tpl[9],
+      TokenID=document_asl_consultant_utterance_token_tpl[5],
+      Field='', # blank for now
+      FieldValue='' # blank for now
+    )
+  """
+  return (
+    document_asl_consultant_utterance_token_index_schemad_pcoll
+    | "Beam PL: extract SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS columns from document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.Map(
+        lambda document_asl_consultant_utterance_token_index_schemad_pcoll_row: beam.Row(
+          DocumentID=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.DocumentID),
+          ASLConsultantID=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.ASLConsultantID),
+          UtteranceSequence=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.UtteranceSequence),
+          TokenSequence=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenSequence),
+          StartTime=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime),
+          EndTime=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime),
+          TokenID=int(document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenID),
+          Field=str(document_asl_consultant_utterance_token_index_schemad_pcoll_row.Field),
+          FieldValue=str(document_asl_consultant_utterance_token_index_schemad_pcoll_row.FieldValue),
+        )
+      )
+    | beam.Map(lambda document_asl_consultant_utterance_token_index_schemad_pcoll_row: row_to_string(document_asl_consultant_utterance_token_index_schemad_pcoll_row))
+    | "Beam PL: write document-asl-consult-utterance-token index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=", ".join(globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
+      )
+    | "Beam PL: print path to document-asl-consult-utterance-token index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE-TOKEN INDEX CSV WRITTEN TO STORAGE"))
+  ) # document_asl_consultant_utterance_token_index_csv_path
 
 
 def validate_ds_video_preprocessing(tpl_combined_results_row):
@@ -2229,11 +2610,12 @@ def run():
     )
     pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
 
-    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__7__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_utterance_index_schemad_pcoll
+      document_asl_consultant_index_schemad_pcoll
     )
-    pl__8__write_vocabulary_index_csv(vocabulary_index_pcoll)
+    pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
+    pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   full_vid_index_schemad_pcoll = pl__1__read_vid_index_csv(pl)
