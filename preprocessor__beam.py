@@ -12,7 +12,8 @@ import apache_beam as beam
 import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
-from apache_beam.transforms.sql import SqlTransform
+# from apache_beam.transforms.sql import SqlTransform
+import apache_beam.transforms.sql
 
 import globals
 import utils
@@ -101,12 +102,19 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     return []
 
 
-# class SignstreamCorpusBootsrapper(beam.DoFn):
-#   def __init__(self, label=""):
-#     self.label = label
+def beam_row_to_csv_string(row):
+  d_row = row.as_dict()
+  return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
 
-#   def process(self, d_corpus_info):
-#     return boostrap_signstream_corpus(d_corpus_info, self.label)
+
+def sort_keyed_tuple_data(keyed_tuple):
+  """
+  keyed_tuple:
+    (<key>, <data to be sorted (must be a list)>)
+  """
+  (key, data_list) = keyed_tuple
+  data_list.sort() # in-place
+  return data_list # now sorted
 
 
 def _load_csv(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None, max_len=None):
@@ -327,11 +335,6 @@ class SegmentFrameExtractor(beam.DoFn):
     return beam_extract_frames(tpl_target_video_extraction_info, self.label)
 
 
-def row_to_string(row):
-  d_row = row.as_dict()
-  return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
-
-
 class CorpusDocumentFileProcessor(beam.DoFn):
   def __init__(self, label=""):
     self.label = label
@@ -454,7 +457,7 @@ def pl__1__bootstrap_video_index(pl):
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
-    # now we want to apply the schema so that we can ultimately use beam's SqlTransform (very similar to pandas sqldf) when necessary
+    # now we want to apply the schema so that we can ultimately use beam's beam.transforms.sql.SqlTransform (very similar to pandas sqldf) when necessary
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
           filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
           video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
@@ -474,7 +477,7 @@ def pl__2__write_vid_index_to_storage(full_vid_index_schemad_pcoll):
   # ******************** write video index to storage as CSV: BEGIN ********************
   return (
     full_vid_index_schemad_pcoll
-    | beam.Map(lambda vid_index_schemad_pcoll_row: row_to_string(vid_index_schemad_pcoll_row))
+    | beam.Map(lambda vid_index_schemad_pcoll_row: beam_row_to_csv_string(vid_index_schemad_pcoll_row))
     | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -506,12 +509,12 @@ def pl__1__read_vid_index_csv(pl):
 
 
 def pl__2__filter_vid_index(full_vid_index_schemad_pcoll):
-  # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
+  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
   return (
     full_vid_index_schemad_pcoll
-    | SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
+    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
   )
-  # ******************** filter schemad video index pcoll as desired (if necessary) using SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
+  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
 
 
 def pl__1__bootstrap_corpus_index(pl):
@@ -540,7 +543,7 @@ def pl__1__bootstrap_corpus_index(pl):
           corpus_docs_dir=str(x)
         )
       )
-    # | SqlTransform(f"SELECT * FROM PCOLLECTION")
+    # | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION")
     # | "Beam PL: print path to corpus dir" >> beam.ParDo(PipelinePcollPrinter())
   )
   return corpus_documents_dir_path_schemad_pcoll
@@ -560,7 +563,20 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll, global_var_
   # ******************** write corpus index to storage as CSV: BEGIN ********************
   corpus_index_csv_path = (
     corpus_index_schemad_pcoll
-    | beam.Map(lambda corpus_index_schemad_pcoll_row: row_to_string(corpus_index_schemad_pcoll_row))
+    | "Beam PL: key corpus_index_schemad_pcoll for sort" >> beam.Map(
+        lambda corpus_index_schemad_pcoll_row: (1, corpus_index_schemad_pcoll_row)
+      )
+    | "Beam PL: 'implode' keyed corpus_index_schemad_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed corpus_index_schemad_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
+    | "Beam PL: re-apply schema to sorted_corpus_index" >> beam.Map(
+        lambda sorted_corpus_index_schemad_pcoll_row: beam.Row(
+          DocumentID=sorted_corpus_index_schemad_pcoll_row.DocumentID,
+          Filename=sorted_corpus_index_schemad_pcoll_row.Filename,
+          XML_B64=sorted_corpus_index_schemad_pcoll_row.XML_B64,
+          LEN=sorted_corpus_index_schemad_pcoll_row.LEN
+        )
+      )
+    | beam.Map(lambda corpus_index_schemad_pcoll_row: beam_row_to_csv_string(corpus_index_schemad_pcoll_row))
     | "Beam PL: write corpus index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -872,7 +888,19 @@ def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
 def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
   return ( # asl_consultant_index_csv_path
     asl_consultant_index_schemad_pcoll
-    | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: row_to_string(asl_consultant_index_schemad_pcoll_row))
+    | "Beam PL: key asl_consultant_index_schemad_pcoll for sort" >> beam.Map(
+        lambda asl_consultant_index_schemad_pcoll_row: (1, asl_consultant_index_schemad_pcoll_row)
+      )
+    | "Beam PL: 'implode' keyed asl_consultant_index_schemad_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed asl_consultant_index_schemad_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
+    | "Beam PL: re-apply schema to sorted_asl_consultant_index" >> beam.Map(lambda sorted_asl_consultant_index_schemad_pcoll_row: beam.Row(
+        ASLConsultantID=sorted_asl_consultant_index_schemad_pcoll_row.ASLConsultantID,
+        Name=sorted_asl_consultant_index_schemad_pcoll_row.Name,
+        Age=sorted_asl_consultant_index_schemad_pcoll_row.Age,                  
+        Gender=sorted_asl_consultant_index_schemad_pcoll_row.Gender
+      )
+    )
+    | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: beam_row_to_csv_string(asl_consultant_index_schemad_pcoll_row))
     | "Beam PL: write asl consultant index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.ASL_CONSULTANT_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -1005,13 +1033,18 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
         )
       )
     | "Beam PL: select distinct document_asl_consultant_index rows" >> beam.Distinct()
+    | "Beam PL: key distinct_document_asl_consultant_index for sort" >> beam.Map(
+        lambda distinct_document_asl_consultant_index_row: (1, distinct_document_asl_consultant_index_row)
+      )
+    | "Beam PL: 'implode' keyed distinct_document_asl_consultant_index_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed distinct_document_asl_consultant_index_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
     | "Beam PL: apply minimal schema to create final document_asl_consultant_index_schemad_pcoll of distinct rows" >> beam.Map(
-        lambda distinct_document_asl_consultant_index_row: beam.Row(
-          DocumentID=int(distinct_document_asl_consultant_index_row[0]),
-          ASLConsultantID=int(distinct_document_asl_consultant_index_row[1])
+        lambda sorted_distinct_document_asl_consultant_index_row: beam.Row(
+          DocumentID=int(sorted_distinct_document_asl_consultant_index_row[0]),
+          ASLConsultantID=int(sorted_distinct_document_asl_consultant_index_row[1])
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_index_schemad_pcoll_row: row_to_string(distinct_document_asl_consultant_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_index_schemad_pcoll_row))
     | "Beam PL: write document-asl-consultant index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -1163,6 +1196,11 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
         )
       )
     | "Beam PL: select distinct document_asl_consultant_utterance_index rows" >> beam.Distinct()
+    | "Beam PL: key distinct_document_asl_consultant_utterance_index for sort" >> beam.Map(
+        lambda distinct_document_asl_consultant_utterance_index_row: (1, distinct_document_asl_consultant_utterance_index_row)
+      )
+    | "Beam PL: 'implode' keyed distinct_document_asl_consultant_utterance_index_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed distinct_document_asl_consultant_utterance_index_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
     | "Beam PL: apply minimal schema to create final document_asl_consultant_utterance_index_schemad_pcoll of distinct rows" >> beam.Map(
         lambda distinct_document_asl_consultant_utterance_index_row: beam.Row(
           DocumentID=int(distinct_document_asl_consultant_utterance_index_row[0]),
@@ -1174,7 +1212,7 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
           Translation=distinct_document_asl_consultant_utterance_index_row[6]
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_utterance_index_row: row_to_string(distinct_document_asl_consultant_utterance_index_row))
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_index_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_index_row))
     | "Beam PL: write document-asl-consultant-utterance index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -1662,7 +1700,22 @@ def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
   """
   return (
     vocabulary_index_pcoll
-    | beam.Map(lambda vocabulary_index_pcoll_row: row_to_string(vocabulary_index_pcoll_row))
+    | "Beam PL: key vocabulary_index for sort" >> beam.Map(
+        lambda vocabulary_index_pcoll_row: (1, vocabulary_index_pcoll_row)
+      )
+    | "Beam PL: 'implode' keyed vocabulary_index_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed vocabulary_index_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
+    | "Beam PL: re-apply schema to sorted_vocabulary_index_pcoll rows" >> beam.Map(
+        lambda sorted_vocabulary_index_pcoll_row: beam.Row(
+          # SCHEMA_COL_NAMES__VOCABULARY_DS = [
+          #   'TokenID',
+          #   'Token'
+          # ]
+          TokenID=sorted_vocabulary_index_pcoll_row.TokenID,
+          Token=sorted_vocabulary_index_pcoll_row.Token
+        )
+      )
+    | beam.Map(lambda vocabulary_index_pcoll_row: beam_row_to_csv_string(vocabulary_index_pcoll_row))
     | "Beam PL: write vocabulary index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.VOCABULARY_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -1718,6 +1771,11 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
         )
       )
     | "Beam PL: select distinct document_asl_consultant_utterance_token_index rows" >> beam.Distinct()
+    | "Beam PL: key distinct_document_asl_consultant_utterance_token_index_index for sort" >> beam.Map(
+        lambda distinct_document_asl_consultant_utterance_token_index_row: (1, distinct_document_asl_consultant_utterance_token_index_row)
+      )
+    | "Beam PL: 'implode' keyed distinct_document_asl_consultant_utterance_token_index_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed distinct_document_asl_consultant_utterance_token_index_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
     | "Beam PL: apply minimal schema to create final document_asl_consultant_utterance_token_index_schemad_pcoll of distinct rows" >> beam.Map(
         lambda distinct_document_asl_consultant_utterance_token_index_row: beam.Row(
           DocumentID=int(distinct_document_asl_consultant_utterance_token_index_row[0]),
@@ -1731,7 +1789,7 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
           FieldValue=str(distinct_document_asl_consultant_utterance_token_index_row[8]),
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row: row_to_string(distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row))
     | "Beam PL: write document-asl-consult-utterance-token index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -1741,14 +1799,6 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
       )
     | "Beam PL: print path to document-asl-consult-utterance-token index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE-TOKEN INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_utterance_token_index_csv_path
-
-
-def pl__7__create_document_asl_consultant_utterance_video_index_schemad_pcoll(
-  ss_parsed_xmldb_pcoll,
-  document_asl_consultant_utterance_index_schemad_pcoll, 
-  document_asl_consultant_video_index_schemad_pcoll
-):
-  pass
 
 
 def validate_ds_video_preprocessing(tpl_combined_results_row):
@@ -2129,6 +2179,11 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
         )
       )
     | "Beam PL: select distinct document_asl_consultant_video_index rows" >> beam.Distinct()
+    | "Beam PL: key distinct_document_asl_consultant_video_index for sort" >> beam.Map(
+        lambda distinct_document_asl_consultant_video_index_row: (1, distinct_document_asl_consultant_video_index_row)
+      )
+    | "Beam PL: 'implode' keyed distinct_document_asl_consultant_video_index_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the 'imploded' keyed distinct_document_asl_consultant_video_index_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
     | "Beam PL: apply minimal schema to create final document_asl_consultant_video_index_schemad_pcoll of distinct rows" >> beam.Map(
         lambda distinct_document_asl_consultant_video_index_row: beam.Row(
           DocumentID=int(distinct_document_asl_consultant_video_index_row[0]),
@@ -2137,7 +2192,7 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
           Filename=str(distinct_document_asl_consultant_video_index_row[3])
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_video_index_schemad_pcoll_row: row_to_string(distinct_document_asl_consultant_video_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_video_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_video_index_schemad_pcoll_row))
     | "Beam PL: write document-asl-consultant-video index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_DS_FNAME.split('.')[0]), 
         file_name_suffix=".csv", 
@@ -2147,6 +2202,48 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
       )
     | "Beam PL: print path to document-asl-consultant-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-VIDEO INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_video_index_csv_path
+
+def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_video_index_schemad_pcoll):
+  return (
+    document_asl_consultant_video_index_schemad_pcoll
+    | "Beam PL: extract (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) from document_asl_consultant_video_index_schemad_pcoll" >> beam.Map(
+        lambda document_asl_consultant_video_index_schemad_pcoll_row: (
+          document_asl_consultant_video_index_schemad_pcoll_row.DocumentID,
+          document_asl_consultant_video_index_schemad_pcoll_row.ASLConsultantID,
+          document_asl_consultant_video_index_schemad_pcoll_row.UtteranceSequence,
+          document_asl_consultant_video_index_schemad_pcoll_row.CameraPerspective
+        )
+      )
+    | "Beam PL: select distinct (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) extracted from document_asl_consultant_video_index_schemad_pcoll" >> beam.Distinct()
+    | "Beam PL: key distinct (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) extracted from document_asl_consultant_video_index_schemad_pcoll for sort" >> beam.Map(
+        lambda distinct_document_asl_consultant_video_index_row: (1, distinct_document_asl_consultant_video_index_row)
+      )
+    | "Beam PL: 'implode' keyed distinct (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) extracted from document_asl_consultant_video_index_schemad_pcoll for sort" >> beam.GroupByKey()
+    | "Beam PL: sort and 'explode' the results" >> beam.FlatMap(sort_keyed_tuple_data)
+    | "Beam PL: apply schema to create final document_asl_consultant_utterance_video_index_schemad_pcoll" >> beam.Map(
+        lambda distinct_document_asl_consultant_video_index_row: beam.Row(
+          # SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'UtteranceSequence',
+          #   'CameraPerspective'
+          # ]
+          DocumentID=int(distinct_document_asl_consultant_video_index_row[0]),
+          ASLConsultantID=int(distinct_document_asl_consultant_video_index_row[1]),
+          UtteranceSequence=int(distinct_document_asl_consultant_video_index_row[2]),
+          CameraPerspective=int(distinct_document_asl_consultant_video_index_row[3])
+        )
+      )
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row))
+    | "Beam PL: write document-asl-consultant-utterance-video index to storage as csv" >> beam.io.WriteToText(
+        os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_VIDEO_DS_FNAME.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=",".join(globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
+      )
+    | "Beam PL: print path to document-asl-consultant-utterance-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE-VIDEO INDEX CSV WRITTEN TO STORAGE"))
+  ) # document_asl_consultant_utterance_video_index_csv_path
 
 
 def pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
@@ -2287,7 +2384,7 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
           video_fname=str(x[0]),
           n_stitched_frames=int(x[1])
         ))
-    # | "Beam PL: count total frames extracted" >> SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
+    # | "Beam PL: count total frames extracted" >> beam.transforms.sql.SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
     | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames) # on DirectRunner, this is literally about 100 times faster!
     | "Beam PL: count total frames extracted" >> beam.CombineGlobally(sum)
     | f"Beam PL: print total frames extracted" >> beam.ParDo(PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
@@ -2366,6 +2463,7 @@ def run():
       full_vid_index_schemad_pcoll
     )
     pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
+    pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
 
     vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
@@ -2373,12 +2471,6 @@ def run():
     )
     pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
     pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
-
-    pl__7__create_document_asl_consultant_utterance_video_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_utterance_index_schemad_pcoll,
-      document_asl_consultant_video_index_schemad_pcoll
-    )
 
 
   with beam.Pipeline(options=pipeline_options) as pl:
