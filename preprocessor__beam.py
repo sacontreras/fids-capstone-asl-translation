@@ -61,7 +61,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     or not tf.io.gfile.exists(d_corpus_info['utterance_token_ds_path']) \
     or not tf.io.gfile.exists(d_corpus_info['vocabulary_ds_path']):
 
-    print(prepare_output_str(f"CORPUS INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
+    print(prepare_output_str(f"CORPUS-INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
 
     # download archive
     """
@@ -194,7 +194,7 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
   """
   vid_index_schemad_pcoll_row:
     beam.Row(
-      filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),
+      target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),
       video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
       perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
       compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),
@@ -202,19 +202,29 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
       uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
       uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     )
+
+  return:
+    listof(
+      {
+        'target_video_fname': target_video_fname, 
+        'target_video_frames_dir': target_video_frames_dir, 
+        'segment_url': str(url), 
+        'segment_fname': str(url).split('/')[-1]
+      }
+    )
   """
-  video_fname = vid_index_schemad_pcoll_row.filename
-  frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
-  urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
-  return [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in urls]
+  target_video_fname = vid_index_schemad_pcoll_row.target_video_filename
+  target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
+  segment_urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
+  return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
 
-def beam_download_video_segment(d_vid_seg_download_info, max_fail=3, label=""):
+def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=3, label=""):
   """
-  expects d_vid_seg_download_info: {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
+  expects d_target_vid_seg_download_info: {'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
   """
-  segment_url = d_vid_seg_download_info['segment_url']
-  segment_fname = d_vid_seg_download_info['segment_fname']
+  segment_url = d_target_vid_seg_download_info['segment_url']
+  segment_fname = d_target_vid_seg_download_info['segment_fname']
   if not tf.io.gfile.exists(globals.VIDEO_DIR):
     tf.io.gfile.makedirs(globals.VIDEO_DIR)
   local_segment_path = os.path.join(globals.VIDEO_DIR, segment_fname)
@@ -236,25 +246,25 @@ def beam_download_video_segment(d_vid_seg_download_info, max_fail=3, label=""):
         else:
           print(f"{label+': ' if len(label)>0 else ''}*** {e} ***: fail count: {n_fail}, max fail: {max_fail} --> giving up!")
   else:
-    print(f"{label+': ' if len(label)>0 else ''}Found target segment {local_segment_path} (from {segment_url})".format(local_segment_path, segment_url))
-  return [d_vid_seg_download_info] # passthrough
+    print(f"{label+': ' if len(label)>0 else ''}Found target video ({d_target_vid_seg_download_info['target_video_fname']}) segment {local_segment_path} (downloaded from {segment_url})".format(local_segment_path, segment_url))
+  return [d_target_vid_seg_download_info] # passthrough
 
 
 class VideoSegmentDownloader(beam.DoFn):
   def __init__(self, label=""):
     self.label = label
 
-  def process(self, d_vid_seg_download_info):
-    return beam_download_video_segment(d_vid_seg_download_info, label=self.label)
+  def process(self, d_target_vid_seg_download_info):
+    return beam_download_target_video_segment(d_target_vid_seg_download_info, label=self.label)
 
 
 def beam_extract_frames(tpl_target_video_extraction_info, label=""):
   """
-  expects tpl_target_video_extraction_info: (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+  expects tpl_target_video_extraction_info: (video_fname, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
   """
 
   # # log_results = []
-  video_fname = tpl_target_video_extraction_info[0]
+  target_video_fname = tpl_target_video_extraction_info[0]
   segment_dicts = sorted(tpl_target_video_extraction_info[1], key=lambda segment_dict: segment_dict['segment_fname'])
   frames_dir = segment_dicts[0]['frames_dir']
 
@@ -305,12 +315,12 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
         seg_path = local_vid_segment_paths[i]
         seg_fname = seg_path.split(os.path.sep)[-1]
         if n_frames != _n_frames_expected:
-          print(f"{label+': ' if len(label)>0 else ''}{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
-          failed_target_videos.append(video_fname)
+          print(f"{label+': ' if len(label)>0 else ''}{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {target_video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
+          failed_target_videos.append(target_video_fname)
           fail = True
           break
         else:
-          print(f"{label+': ' if len(label)>0 else ''}Added {n_stitched_frames} frames from segment {seg_fname} for target video {video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
+          print(f"{label+': ' if len(label)>0 else ''}Added {n_stitched_frames} frames from segment {seg_fname} for target video {target_video_fname} (stitched-frames dir {target_stitched_vid_frames_dir})")
 
       else:
         n_frames = _n_frames_expected
@@ -320,8 +330,8 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
       segment_dict['n_frames_extracted'] = n_frames
 
   else:
-    print(f"\t{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
-    failed_target_videos.append(video_fname)
+    print(f"\t{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {target_video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    failed_target_videos.append(target_video_fname)
     fail = True  
 
   return [(tpl_target_video_extraction_info[0], n_stitched_frames, segment_dicts)]
@@ -432,13 +442,35 @@ def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
     return [max_xml_b64_len]
 
 
+# class PcollSorter(PipelinePcollElementProcessor):
+#   def __init__(self, kargs=None):
+#     super(PcollSorter, self).__init__(
+#       fn_pcoll_element_processor=sort_keyed_tuple_data,
+#       kargs=kargs,
+#       return_result=True
+#     )
+
+#   def process(self, pcoll_element):
+#     # | "Beam PL: key corpus_index_schemad_pcoll for sort" >> beam.Map(
+#     #     lambda corpus_index_schemad_pcoll_row: (1, corpus_index_schemad_pcoll_row)
+#     #   )
+#     # | "Beam PL: 'implode' keyed corpus_index_schemad_pcoll for sort" >> beam.GroupByKey()
+#     # | "Beam PL: sort and 'explode' the 'imploded' keyed corpus_index_schemad_pcoll" >> beam.FlatMap(sort_keyed_tuple_data)
+#     keyed_pcoll_element = beam.Map(
+#         lambda _pcoll_element: (1, _pcoll_element)
+#       ).process(pcoll_element)
+#     super(PcollSorter, self).process()
+#     result = super(PcollSorter, self).process(keyed_pcoll_element)
+#     return super(PcollSorter, self).process(keyed_pcoll_element)
 
 
-def pl__1__bootstrap_video_index(pl):
+
+
+def pl__1__bootstrap_target_video_index(pl):
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
   return (
     pl
-    | "Beam PL: create initial pcoll containing information for boostrap_video_index" >> beam.Create(
+    | "Beam PL: create initial pcoll containing information for boostrap_target_video_index" >> beam.Create(
         [ # one row containing dict of:
             # 1. url of video indexes archive
             # 2. local destination (path) for the downloaded archive
@@ -453,13 +485,13 @@ def pl__1__bootstrap_video_index(pl):
           }
         ]
       )
-    | "Beam PL: bootstrap video index" >> beam.Map(preprocessor__common.boostrap_video_index) # boostrap_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+    | "Beam PL: bootstrap target video index" >> beam.Map(preprocessor__common.boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
     # now we want to apply the schema so that we can ultimately use beam's beam.transforms.sql.SqlTransform (very similar to pandas sqldf) when necessary
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-          filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
           video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
           perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
           compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
@@ -469,34 +501,34 @@ def pl__1__bootstrap_video_index(pl):
         )
       )
     # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
-  ) # full_vid_index_schemad_pcoll
+  ) # full_target_vid_index_schemad_pcoll
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
 
 
-def pl__2__write_vid_index_to_storage(full_vid_index_schemad_pcoll):
+def pl__2__write_target_vid_index_to_storage(full_target_vid_index_schemad_pcoll):
   # ******************** write video index to storage as CSV: BEGIN ********************
   return (
-    full_vid_index_schemad_pcoll
+    full_target_vid_index_schemad_pcoll
     | beam.Map(lambda vid_index_schemad_pcoll_row: beam_row_to_csv_string(vid_index_schemad_pcoll_row))
-    | "Beam PL: write video index to storage as csv" >> beam.io.WriteToText(
+    | "Beam PL: write target video index to storage as csv" >> beam.io.WriteToText(
         os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]), 
         file_name_suffix=".csv", 
         append_trailing_newlines=True,
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
       )
-    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VIDEO INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="TARGET-VIDEO-INDEX CSV WRITTEN TO STORAGE"))
   )
   # ******************** write video index to storage as CSV: END ********************
 
 
-def pl__1__read_vid_index_csv(pl):
+def pl__1__read_target_vid_index_csv(pl):
   return (
     pl
     | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-          filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
           video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
           perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
           compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
@@ -505,13 +537,13 @@ def pl__1__read_vid_index_csv(pl):
           uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
         )
       )
-  )
+  ) # full_target_vid_index_schemad_pcoll
 
 
-def pl__2__filter_vid_index(full_vid_index_schemad_pcoll):
-  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
+def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
+  # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
   return (
-    full_vid_index_schemad_pcoll
+    full_target_vid_index_schemad_pcoll
     | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
   )
   # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
@@ -584,7 +616,7 @@ def pl__2__write_corpus_index_to_storage(corpus_index_schemad_pcoll, global_var_
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__CORPUS_DS)
       )
-    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="CORPUS INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="CORPUS-INDEX CSV WRITTEN TO STORAGE"))
   )
   max_xml_b64_len = (
     corpus_index_schemad_pcoll
@@ -674,11 +706,10 @@ def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
               'UTTERANCE_START_TIME': <utterance start time (time code)>,
               'UTTERANCE_END_TIME': <utterance end time (time code)>,
 
-              'MEDIA_SEQUENCE': [
+              'TARGET_VIDEO_SEQUENCE': [
                 {
-                  'MEDIA_FNAME': <media fname>,
-                  'MEDIA_CAMERA_PERSPECTIVE': <media camera perspective>,
-                  'MEDIA_URL': <media url>
+                  'TARGET_VIDEO_FNAME': <target vid fname>,
+                  'TARGET_VIDEO_CAMERA_PERSPECTIVE': <target vid camera perspective>
                 }
               ]
 
@@ -725,16 +756,16 @@ def parse_signstream_database(corpus_index_decoded_XML_pcoll_row):
       utterance_record['UTTERANCE_END_TIME'] = utterance_time_codes[1]
 
       media_sequence = []
-      for media in utterance.get_media():
-        media_record = {}
-        media_fname = str(urllib.parse.quote(media.get_filename().split(':')[-1]))
-        media_record['MEDIA_FNAME'] = media_fname
+      for target_video in utterance.get_media():
+        target_video_record = {}
+        target_video_fname = str(urllib.parse.quote(target_video.get_filename().split(':')[-1]))
+        target_video_record['TARGET_VIDEO_FNAME'] = target_video_fname
         media_camera_perspective = -1 # need to look this up!
-        media_record['MEDIA_CAMERA_PERSPECTIVE'] = media_camera_perspective
+        target_video_record['TARGET_VIDEO_CAMERA_PERSPECTIVE'] = media_camera_perspective
         media_url = "<need to look this up!>"
-        media_record['MEDIA_URL'] = media_url
-        media_sequence.append(media_record)
-      utterance_record['MEDIA_SEQUENCE'] = media_sequence
+        target_video_record['MEDIA_URL'] = media_url
+        media_sequence.append(target_video_record)
+      utterance_record['TARGET_VIDEO_SEQUENCE'] = media_sequence
 
       token_sequence = []
       for ti, token in enumerate(main_gloss_token_sequence):
@@ -908,7 +939,7 @@ def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
       )
-    | "Beam PL: print path to asl consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="ASL CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to asl consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="ASLCONSULTANT-INDEX CSV WRITTEN TO STORAGE"))
   )
 
 
@@ -1052,7 +1083,7 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
       )
-    | "Beam PL: print path to document-asl-consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to document-asl-consultant index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASLCONSULTANT-INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_index_csv_path
 
 
@@ -1220,7 +1251,7 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__UTTERANCE_DS)
       )
-    | "Beam PL: print path to document-asl-consultant-utterance index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to document-asl-consultant-utterance index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASLCONSULTANT-UTTERANCE-INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_utterance_index_csv_path
 
 
@@ -1723,7 +1754,7 @@ def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
       )
-    | "Beam PL: print path to vocabulary index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VOCABULARY INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to vocabulary index csv" >> beam.ParDo(PipelinePcollPrinter(msg="VOCABULARY-INDEX CSV WRITTEN TO STORAGE"))
   ) # vocabulary_index_csv_path
 
 
@@ -1797,7 +1828,7 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
       )
-    | "Beam PL: print path to document-asl-consult-utterance-token index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE-TOKEN INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to document-asl-consult-utterance-token index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASLCONSULTANT-UTTERANCE-TOKEN-INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_utterance_token_index_csv_path
 
 
@@ -1846,46 +1877,46 @@ class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
 def validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping(merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl):
   """
   merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl:
-    (<media fname>, {'video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
+    (<media fname>, {'target_target_video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'target_video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
 
   return:
     listof(
       ((<document fname>, <participant name>), (<utterance seq id>, <media fname>, <camera perspective>))
     )
   """
-  video_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[0]
-  video_doc_participant_utterance_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['video_doc_participant_utterance_mapping']
-  video_camera_perspective_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['video_camera_perspective_mapping']
+  target_video_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[0]
+  target_target_video_doc_participant_utterance_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['target_target_video_doc_participant_utterance_mapping']
+  target_video_camera_perspective_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['target_video_camera_perspective_mapping']
 
   validated_results = []
 
   # there should always only be ONE camera perspective per video_fname file
   camera_perspective = None
-  if len(video_camera_perspective_mapping) > 0:
+  if len(target_video_camera_perspective_mapping) > 0:
     not_unique = False
-    for d_video_camera_perspectivec_mapping_instance in video_camera_perspective_mapping:
-      _camera_perspective = d_video_camera_perspectivec_mapping_instance['CameraPerspective']
+    for d_target_video_camera_perspectivec_mapping_instance in target_video_camera_perspective_mapping:
+      _camera_perspective = d_target_video_camera_perspectivec_mapping_instance['CameraPerspective']
       if camera_perspective is None:
         camera_perspective = _camera_perspective
       else:
         if _camera_perspective != camera_perspective:
           not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
           break
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} has no associated camera perspective!")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} has no associated camera perspective!")
   
   doc_fname = None
   participant_name = None
   utterance_seq_id = None
-  if len(video_doc_participant_utterance_mapping) > 0:
+  if len(target_target_video_doc_participant_utterance_mapping) > 0:
     multiple_docs = []
     multiple_participants = []
     multiple_utterances = []
-    for video_doc_participant_utterance_mapping_instance in video_doc_participant_utterance_mapping:
-      _doc_fname = video_doc_participant_utterance_mapping_instance[0]
-      _participant_name = video_doc_participant_utterance_mapping_instance[1]
-      _utterance_seq_id = video_doc_participant_utterance_mapping_instance[2]
+    for target_target_video_doc_participant_utterance_mapping_instance in target_target_video_doc_participant_utterance_mapping:
+      _doc_fname = target_target_video_doc_participant_utterance_mapping_instance[0]
+      _participant_name = target_target_video_doc_participant_utterance_mapping_instance[1]
+      _utterance_seq_id = target_target_video_doc_participant_utterance_mapping_instance[2]
 
       if doc_fname is None or len(doc_fname)==0:
         doc_fname = _doc_fname
@@ -1911,24 +1942,24 @@ def validate_preprocess_merged_video_doc_participant_utterance_camera_perspectiv
       validated_results.append(
         (
           (_doc_fname, _participant_name), 
-          (_utterance_seq_id, video_fname, camera_perspective)
+          (_utterance_seq_id, target_video_fname, camera_perspective)
         )
       )
     multiple_docs = set(multiple_docs)
     if len(multiple_docs) > 1:
-      print(f"{globals.VALIDATION_WARNING_TEXT} video {video_fname} document occurrence is not unique! It occurs in documents: {multiple_docs}")
+      print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} document occurrence is not unique! It occurs in documents: {multiple_docs}")
 
     multiple_participants = set(multiple_participants)
     if len(multiple_participants) > 1:
-      print(f"{globals.VALIDATION_WARNING_TEXT} video {video_fname} participant occurrence is not unique! It has participants: {multiple_participants}")
+      print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} participant occurrence is not unique! It has participants: {multiple_participants}")
     # if len(multiple_utterances) > 1: # this is actually expected
-    #   print(f"{globals.VALIDATION_WARNING_TEXT}video {video_fname} utterance seq id occurrence is not unique! It has utterance seq ids: {multiple_utterances}")
+    #   print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} utterance seq id occurrence is not unique! It has utterance seq ids: {multiple_utterances}")
 
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video {video_fname} is not associated with a corpus document!")
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} is not associated with a corpus document!")
     validated_results.append(
       (None, participant_name),
-      (utterance_seq_id, video_fname, camera_perspective)
+      (utterance_seq_id, target_video_fname, camera_perspective)
     )
 
   return validated_results
@@ -2020,14 +2051,14 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
   return validated_results
 
 
-def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_index_schemad_pcoll, full_vid_index_schemad_pcoll):
-  # get list of media
-  video_doc_participant_utterance_mapping = (
+def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_index_schemad_pcoll, full_target_vid_index_schemad_pcoll):
+  # get list of target video infos
+  target_target_video_doc_participant_utterance_mapping = (
     ss_parsed_xmldb_pcoll
-    | "Beam PL: get doc filename, participant name, utterance seq id associated with this video, keyed by video filename" >> beam.Map(
+    | "Beam PL: get doc filename, participant name, utterance seq id associated with this target video, keyed by target video filename" >> beam.Map(
         lambda ss_parsed_xmldb_pcoll_row_dict: [
           ( # key
-            doc_participant_utterance_video_tpl[3], # <video filename>
+            doc_participant_utterance_video_tpl[3], # <target video filename>
             (
               doc_participant_utterance_video_tpl[0], # <corpus doc filename>
               doc_participant_utterance_video_tpl[1], # <participant name>
@@ -2038,32 +2069,32 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
                 ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
                 d_participant['PARTICIPANT_NAME'],
                 utterance_seq_id,
-                str(urllib.parse.quote(d_media['MEDIA_FNAME'])) # there may be spaces!
+                str(urllib.parse.quote(d_target_video['TARGET_VIDEO_FNAME'])) # there may be spaces!
               ) for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
                   for utterance_seq_id, d_utterance in enumerate(d_participant['UTTERANCE_SEQUENCE']) 
-                    for d_media in d_utterance['MEDIA_SEQUENCE']
+                    for d_target_video in d_utterance['TARGET_VIDEO_SEQUENCE']
             ] 
         ]
       ) # outputs pcoll with each row list of (<video filename>, (<corpus doc filename>, <participant name>, <utterance seq id>))
-    | "Beam PL: 'explode' list of video_doc_participant_utterance_mapping tuples" >> beam.FlatMap(lambda list_video_doc_participant_utterance_mapping_mapping_tpl: list_video_doc_participant_utterance_mapping_mapping_tpl)
-    | "Beam PL: select distinct list_video_doc_participant_utterance_mapping_tpl tuples" >> beam.Distinct()
+    | "Beam PL: 'explode' list of target_video_doc_participant_utterance_mapping tuples" >> beam.FlatMap(lambda list_target_video_doc_participant_utterance_mapping_mapping_tpl: list_target_video_doc_participant_utterance_mapping_mapping_tpl)
+    | "Beam PL: select distinct list_target_video_doc_participant_utterance_mapping_tpl tuples" >> beam.Distinct()
     # debug
-    # | "Beam PL: print pl__6__create_document_asl_consultant_video_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__6__create_document_asl_consultant_video_index_schemad_pcoll result"))
+    # | "Beam PL: print pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll result"))
   )
 
-  # now extract distinct media fnames from media_doc_participant_mapping
-  video_list_pcoll = (
-    video_doc_participant_utterance_mapping
-    | "Beam PL: extract media fname" >> beam.Map(lambda video_doc_participant_utterance_mapping_row_tpl: video_doc_participant_utterance_mapping_row_tpl[0])
-    | "Beam PL: select distinct media filenames" >> beam.Distinct()
+  # now extract distinct target video fnames from media_doc_participant_mapping
+  target_video_list_pcoll = (
+    target_target_video_doc_participant_utterance_mapping
+    | "Beam PL: extract media fname" >> beam.Map(lambda target_target_video_doc_participant_utterance_mapping_row_tpl: target_target_video_doc_participant_utterance_mapping_row_tpl[0])
+    | "Beam PL: select distinct target video filenames" >> beam.Distinct()
     # debug
     # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
   )
 
-  # now we need to filter from full_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
+  # now we need to filter from full_target_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
     # recall, vid_index_entry is "schemad":
     #   beam.Row(
-    #     filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+    #     target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
     #     video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
     #     perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
     #     compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
@@ -2071,16 +2102,16 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
     #     uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
     #     uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     #   )
-  video_camera_perspective_mapping = (
-    full_vid_index_schemad_pcoll
+  target_video_camera_perspective_mapping = (
+    full_target_vid_index_schemad_pcoll
     | "Beam PL: filter matching rows from vid index" >> beam.Filter(
-        lambda vid_index_entry, matching_media_fnames: vid_index_entry.filename in matching_media_fnames,
-        matching_media_fnames=beam.pvalue.AsIter(video_list_pcoll),
+        lambda vid_index_entry, matching_target_video_fnames: vid_index_entry.target_video_filename in matching_target_video_fnames,
+        matching_target_video_fnames=beam.pvalue.AsIter(target_video_list_pcoll),
       )
     | "Beam PL: extract column vals from matching vid index entries for new video dataset" >> beam.Map(
-        lambda matching_vid_index_entry: (
-          matching_vid_index_entry.filename, # key
-          {globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: matching_vid_index_entry.perspective_cam_id}
+        lambda matching_target_vid_index_entry: (
+          matching_target_vid_index_entry.target_video_filename, # key
+          {globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: matching_target_vid_index_entry.perspective_cam_id}
         )
       )
     # debug
@@ -2090,17 +2121,17 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
   # merge doc, participant, and camera perspective keyed by media filename
   merged_video_doc_participant_utterance_camera_perspective_mapping = (
     ({
-      'video_doc_participant_utterance_mapping': video_doc_participant_utterance_mapping,
-      'video_camera_perspective_mapping': video_camera_perspective_mapping
+      'target_target_video_doc_participant_utterance_mapping': target_target_video_doc_participant_utterance_mapping,
+      'target_video_camera_perspective_mapping': target_video_camera_perspective_mapping
     })
-    | "Beam PL: merge video_doc_participant_utterance_mapping and video_camera_perspective_mapping" >> beam.CoGroupByKey()
+    | "Beam PL: merge target_target_video_doc_participant_utterance_mapping and target_video_camera_perspective_mapping" >> beam.CoGroupByKey()
     # the above produces tuples in the form:
-      # (<media fname>, {'video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
+      # (<media fname>, {'target_target_video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'target_video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
     | "Beam PL: validate/preprocess merged_video_doc_participant_utterance_camera_perspective_mapping" >> beam.FlatMap(validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping)
     # the above produces tuples in the form:
     #   ((<document fname>, <participant name>), (<utterance seq id>, <video fname>, <camera perspective>))
     # debug
-    # | "Beam PL: print merged video_doc_participant_utterance_mapping and video_camera_perspective_mapping" >> beam.ParDo(PipelinePcollPrinter("merged_video_doc_participant_utterance_camera_perspective_mapping entry"))
+    # | "Beam PL: print merged target_target_video_doc_participant_utterance_mapping and target_video_camera_perspective_mapping" >> beam.ParDo(PipelinePcollPrinter("merged_video_doc_participant_utterance_camera_perspective_mapping entry"))
   )
 
   # now use document_asl_consultant_index_schemad_pcoll in order to associate doc id and asl consultant id:
@@ -2132,7 +2163,7 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
           #   'DocumentID',
           #   'ASLConsultantID',
           #   'CameraPerspective',
-          #   'Filename'
+          #   'TargetVideoFilename'
           # ]
           DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
           DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
@@ -2140,7 +2171,7 @@ def pl__6__create_document_asl_consultant_video_index_schemad_pcoll(ss_parsed_xm
           ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
           UtteranceSequence=int(document_asl_consultant_video_index_pcoll_row_tpl[1][2]),
           CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][4]),                  
-          MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][3])
+          TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][3])
         )
       )
     # debug
@@ -2158,14 +2189,14 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
       #   'DocumentID',
       #   'ASLConsultantID',
       #   'CameraPerspective',
-      #   'Filename'
+      #   'TargetVideoFilename'
       # ]
       DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
       DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
       ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
       ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
       CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][3]),                  
-      MediaFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
+      TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
     )
   """
   return (
@@ -2175,7 +2206,7 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
           document_asl_consultant_video_index_schemad_pcoll_row.DocumentID,
           document_asl_consultant_video_index_schemad_pcoll_row.ASLConsultantID,
           document_asl_consultant_video_index_schemad_pcoll_row.CameraPerspective,
-          document_asl_consultant_video_index_schemad_pcoll_row.MediaFilename
+          document_asl_consultant_video_index_schemad_pcoll_row.TargetVideoFilename
         )
       )
     | "Beam PL: select distinct document_asl_consultant_video_index rows" >> beam.Distinct()
@@ -2200,7 +2231,7 @@ def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__VIDEO_DS)
       )
-    | "Beam PL: print path to document-asl-consultant-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-VIDEO INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to document-asl-consultant-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASLCONSULTANT-VIDEO-INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_video_index_csv_path
 
 def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_video_index_schemad_pcoll):
@@ -2242,7 +2273,7 @@ def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_
         shard_name_template="",
         header=",".join(globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
       )
-    | "Beam PL: print path to document-asl-consultant-utterance-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASL-CONSULTANT-UTTERANCE-VIDEO INDEX CSV WRITTEN TO STORAGE"))
+    | "Beam PL: print path to document-asl-consultant-utterance-video index csv" >> beam.ParDo(PipelinePcollPrinter(msg="DOCUMENT-ASLCONSULTANT-UTTERANCE-TARGETVIDEO-INDEX CSV WRITTEN TO STORAGE"))
   ) # document_asl_consultant_utterance_video_index_csv_path
 
 
@@ -2295,7 +2326,7 @@ def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
       vid_index_schemad_pcoll_partition
       # | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer()) # get_video_segment_download_info(schemad_pcoll_element)
       | f"Beam PL: {p_label} get download info for video segments" >> beam.FlatMap(get_video_segment_download_info)
-      | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as [{'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}]
+      | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}]
     )
     partition_download_results[i] = p_dl_results
 
@@ -2346,9 +2377,9 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
 
   # GROUP segment videos by target video
   #   note that this depends on the DAG - i.e. will not occur until partition_download_results are ready which, of course, does not occur until all videos have been downloaded
-  frame_extraction_partitions = (
-    merged_download_results # pcoll with each row as {'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
-    | f"Beam PL: group extraction info for video segments by target video" >> beam.GroupBy(lambda d: d['video_fname']) # yields pcoll of rows as (video_fname, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
+  target_vid_seg_frame_extraction_partitions = (
+    merged_download_results # pcoll with each row as {'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}
+    | f"Beam PL: group extraction info for video segments by target video" >> beam.GroupBy(lambda d: d['target_video_fname']) # yields pcoll of rows as (target_video_fname, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
     | f"Beam PL: partition target video segment info for extraction parallelization" >> beam.Partition(
         lambda vid_index_row, num_partitions: random.randint(0,num_partitions-1), 
         # lambda vid_index_row, num_partitions: np.random.uniform(0,num_partitions), # not working yet
@@ -2357,13 +2388,13 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
   )
 
   partition_extraction_results = [None for i in range(n_partitions)]
-  for i, p in enumerate(frame_extraction_partitions):
+  for i, p in enumerate(target_vid_seg_frame_extraction_partitions):
     p_label = f"p{i+1}"
     p_label_indented = f"\t{p_label}"
 
     p_extraction_results = (
       p
-      | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
+      | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (target_video_fname, n_stitched_frames, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
     )
     partition_extraction_results[i] = p_extraction_results
 
@@ -2375,7 +2406,7 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
   
   merged_extraction_results = (
     (p_extraction_results for p_extraction_results in partition_extraction_results) 
-    | f"Beam PL: merge extraction results" >> beam.Flatten() # outputs pcoll of rows as tpl_target_video_extraction_info: (video_fname, n_stitched_frames, list({'video_fname': video_fname, 'frames_dir': frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
+    | f"Beam PL: merge extraction results" >> beam.Flatten() # outputs pcoll of rows as tpl_target_video_extraction_info: (target_video_fname, n_stitched_frames, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
     # | f"Beam PL: print merged extraction results" >> beam.ParDo(PipelinePcollPrinter(label="\t"))
   )
   _ = (
@@ -2417,8 +2448,8 @@ def run():
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    full_vid_index_schemad_pcoll = pl__1__bootstrap_video_index(pl)
-    pl__2__write_vid_index_to_storage(full_vid_index_schemad_pcoll)
+    full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
+    pl__2__write_target_vid_index_to_storage(full_target_vid_index_schemad_pcoll)
 
 
   with beam.Pipeline(options=pipeline_options) as pl:
@@ -2434,7 +2465,7 @@ def run():
 
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    full_vid_index_schemad_pcoll = pl__1__read_vid_index_csv(pl)
+    full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
     corpus_index_schemad_pcoll = pl__1__read_corpus_index_csv(pl)
     corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
     ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
@@ -2457,10 +2488,10 @@ def run():
     )
     pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
 
-    document_asl_consultant_video_index_schemad_pcoll = pl__6__create_document_asl_consultant_video_index_schemad_pcoll(
+    document_asl_consultant_video_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
       document_asl_consultant_index_schemad_pcoll, 
-      full_vid_index_schemad_pcoll
+      full_target_vid_index_schemad_pcoll
     )
     pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
     pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
@@ -2473,11 +2504,11 @@ def run():
     pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_vid_index_schemad_pcoll = pl__1__read_vid_index_csv(pl)
-    vid_index_schemad_pcoll = pl__2__filter_vid_index(full_vid_index_schemad_pcoll)
-    merged_download_results = pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions)
-    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
+  #   filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
+  #   merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
+  #   merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
     
 
   print(f"Beam PL: ALL DONE!")

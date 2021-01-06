@@ -18,7 +18,7 @@ import utils
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
-from preprocessr__common import *
+import preprocessor__common
 
 import globals
 
@@ -688,8 +688,8 @@ def download_video_segment(segment_url, data_dir):
     tf.io.gfile.makedirs(data_dir)
   local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
   if not tf.io.gfile.exists(local_segment_path):
-    # memfile, _ = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False)
-    memfile = utils.download_to_memfile(segment_url, block_sz=_1MB, display=False) # returns with memfile.seek(0)
+    # memfile, _ = utils.download_to_memfile(segment_url, block_sz=globals._1MB, display=False)
+    memfile = utils.download_to_memfile(segment_url, block_sz=globals._1MB, display=False) # returns with memfile.seek(0)
     memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
       f.write(memfile.getvalue())
@@ -766,7 +766,7 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
   return df_decomposition
 
 def run():
-  boostrap_video_index(d_vid_indexes_info={
+  preprocessor__common.boostrap_target_video_index(d_vid_indexes_info={
       'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
       'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
       'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 

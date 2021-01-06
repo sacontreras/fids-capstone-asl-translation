@@ -29,10 +29,10 @@ SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name
 DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-consultant-index.csv'
 ASL_CONSULTANT_DS_FNAME = 'consultant-index.csv'
 
-VIDEO_DS_FNAME = 'document-consultant-video-index.csv'
+VIDEO_DS_FNAME = 'document-consultant-targetvideo-index.csv'
 UTTERANCE_DS_FNAME = 'document-consultant-utterance-index.csv'
 
-UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-video-index.csv'
+UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-targetvideo-index.csv'
 UTTERANCE_TOKEN_DS_FNAME = 'document-consultant-utterance-token-index.csv'
 
 VIDEO_SEGMENT_DS_FNAME = 'video-segment-index.csv'
@@ -72,7 +72,7 @@ SCHEMA_COL_NAMES__VIDEO_DS = [
   'DocumentID',
   'ASLConsultantID',
   'CameraPerspective',
-  'Filename'
+  'TargetVideoFilename'
 ]
 SCHEMA_PK__VIDEO_DS = [
   SCHEMA_COL_NAMES__VIDEO_DS[0],
@@ -163,10 +163,10 @@ SCHEMA_PK__VOCABULARY_DS = [SCHEMA_COL_NAMES__VOCABULARY_DS[0]]
 
 # note that this "schema" assumes intimate knowledge of 'files_by_video_name.csv' layout (i.e. the column-name/order mappings in it)
 SCHEMA_COL_NAMES__VIDEO_INDEX = [
-  'filename', 
-  'video_seq_id', 
+  'target_video_filename', 
+  'target_video_seq_id', 
   'perspective_cam_id', 
-  'compressed_mov_url', 
+  'compressed_mov_url',             # has a list of segment video urls, delimetted by ';'
   'uncompressed_avi_url', 
   'uncompressed_avi_mirror_1_url', 
   'uncompressed_avi_mirror_2_url'
