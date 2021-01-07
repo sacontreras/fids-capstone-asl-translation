@@ -1816,6 +1816,18 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
     globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
   ) # document_asl_consultant_utterance_token_index_csv_path
 
+def pl__7__create_target_vid_segment_index_schemad_pcoll(document_asl_consultant_video_index_schemad_pcoll):
+  # SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
+  #   'DocumentID',
+  #   'ASLConsultantID',
+  #   'CameraPerspective',
+  #   'SegmentSequence',
+  #   'Filename',
+  #   'URL'
+  # ]
+  target_vid_segment_index_schemad_pcoll = None
+  return target_vid_segment_index_schemad_pcoll
+
 
 def validate_ds_video_preprocessing(tpl_combined_results_row):
   d_combined_results = tpl_combined_results_row[1]
@@ -1859,28 +1871,52 @@ class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
     )
 
 
-def validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping(merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl):
+def validate_preprocess_doc_participant_to_utterance_video_cameraperspective_mapping(tvftmdputftvimt):
   """
-  merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl:
-    (<media fname>, {'target_target_video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'target_video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
+  tvftmdputftvimt (abbreviation for target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping_tpl):
+    (
+      <media fname>, # key
+      {
+        'target_video_doc_participant_utterance_mapping': [
+          (
+            <corpus doc filename>, 
+            <participant_name>, 
+            <utterance seq id>
+          )
+        ], 
+        'target_full_target_vid_index_mapping': [
+          beam.Row(
+            target_video_filename=<target_video_filename>, 
+            video_seq_id=<video_seq_id>, 
+            perspective_cam_id=<perspective_cam_id>, 
+            compressed_mov_url=<compressed_mov_url>, 
+            compressed_mov_url=<compressed_mov_url>, 
+            uncompressed_avi_url=<uncompressed_avi_url>, 
+            uncompressed_avi_mirror_1_url=<uncompressed_avi_mirror_1_url>, 
+            <uncompressed_avi_mirror_2_url>
+          )
+        ]
+      }
+    )
 
   return:
     listof(
       ((<document fname>, <participant name>), (<utterance seq id>, <media fname>, <camera perspective>))
     )
   """
-  target_video_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[0]
-  target_target_video_doc_participant_utterance_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['target_target_video_doc_participant_utterance_mapping']
-  target_video_camera_perspective_mapping = merged_video_doc_participant_utterance_camera_perspective_mapping_row_tpl[1]['target_video_camera_perspective_mapping']
+  target_video_fname = tvftmdputftvimt[0]
+  target_video_doc_participant_utterance_mapping = tvftmdputftvimt[1]['target_video_doc_participant_utterance_mapping']
+  target_full_target_vid_index_mapping = tvftmdputftvimt[1]['target_full_target_vid_index_mapping']
 
   validated_results = []
 
   # there should always only be ONE camera perspective per video_fname file
   camera_perspective = None
-  if len(target_video_camera_perspective_mapping) > 0:
+  if len(target_full_target_vid_index_mapping) > 0:
     not_unique = False
-    for d_target_video_camera_perspectivec_mapping_instance in target_video_camera_perspective_mapping:
-      _camera_perspective = d_target_video_camera_perspectivec_mapping_instance['CameraPerspective']
+    for full_target_vid_index_pcoll_row in target_full_target_vid_index_mapping:
+      # _camera_perspective = full_target_vid_index_pcoll_row['CameraPerspective']
+      _camera_perspective = full_target_vid_index_pcoll_row.perspective_cam_id
       if camera_perspective is None:
         camera_perspective = _camera_perspective
       else:
@@ -1894,14 +1930,14 @@ def validate_preprocess_merged_video_doc_participant_utterance_camera_perspectiv
   doc_fname = None
   participant_name = None
   utterance_seq_id = None
-  if len(target_target_video_doc_participant_utterance_mapping) > 0:
+  if len(target_video_doc_participant_utterance_mapping) > 0:
     multiple_docs = []
     multiple_participants = []
     multiple_utterances = []
-    for target_target_video_doc_participant_utterance_mapping_instance in target_target_video_doc_participant_utterance_mapping:
-      _doc_fname = target_target_video_doc_participant_utterance_mapping_instance[0]
-      _participant_name = target_target_video_doc_participant_utterance_mapping_instance[1]
-      _utterance_seq_id = target_target_video_doc_participant_utterance_mapping_instance[2]
+    for target_video_doc_participant_utterance_mapping_instance in target_video_doc_participant_utterance_mapping:
+      _doc_fname = target_video_doc_participant_utterance_mapping_instance[0]
+      _participant_name = target_video_doc_participant_utterance_mapping_instance[1]
+      _utterance_seq_id = target_video_doc_participant_utterance_mapping_instance[2]
 
       if doc_fname is None or len(doc_fname)==0:
         doc_fname = _doc_fname
@@ -1950,28 +1986,38 @@ def validate_preprocess_merged_video_doc_participant_utterance_camera_perspectiv
   return validated_results
 
 
-def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl(video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl):
+def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl(vdpucpwiprt):
   """
-  video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl:
-    ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_video_doc_participant_utterance_camera_perspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]})
+  vdpucpwiprt (video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl):
+    (
+      (<doc filename>, <participant name>),           # key
+      {
+        'document_participant_with_ids_mapping': [
+          (<doc id>, <asl consultant id>)
+        ], 
+        'doc_participant_to_utterance_video_cameraperspective_mapping': [
+          (<utterance seq id>, <video fname>, <camera perspective>)
+        ]
+      }
+    )
 
   return:
     listof(
       ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
     )
   """
-  doc_fname = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[0][0]
+  doc_fname = vdpucpwiprt[0][0]
   if doc_fname is None or len(doc_fname)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl} has no associated corpus document filename")
-    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated corpus document filename")
+    return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
-  participant_name = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[0][1]
+  participant_name = vdpucpwiprt[0][1]
   if participant_name is None or len(participant_name)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl} has no associated participant name")
-    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated participant name")
+    return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
-  document_participant_with_ids_mapping = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[1]['document_participant_with_ids_mapping']
-  merged_video_doc_participant_utterance_camera_perspective_mapping = video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl[1]['merged_video_doc_participant_utterance_camera_perspective_mapping']
+  document_participant_with_ids_mapping = vdpucpwiprt[1]['document_participant_with_ids_mapping']
+  doc_participant_to_utterance_video_cameraperspective_mapping = vdpucpwiprt[1]['doc_participant_to_utterance_video_cameraperspective_mapping']
 
   validated_results = []
 
@@ -1990,7 +2036,7 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
         if _doc_id != doc_id:
           not_unique = True
           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} doc_id is not unique! It has doc ids: {doc_id} and {_doc_id}")
-          return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+          return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       if asl_consultant_id is None:
         asl_consultant_id = _asl_consultant_id
@@ -1998,29 +2044,29 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
         if _asl_consultant_id != asl_consultant_id:
           not_unique = True
           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} asl_consultant_id is not unique! It has doc ids: {asl_consultant_id} and {_asl_consultant_id}")
-          return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+          return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
   else:
     print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no document_participant_with_ids_mapping!")
-    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
   
-  if len(merged_video_doc_participant_utterance_camera_perspective_mapping) > 0:
+  if len(doc_participant_to_utterance_video_cameraperspective_mapping) > 0:
     not_unique = False
-    for merged_video_doc_participant_utterance_camera_perspective_mapping_instance in merged_video_doc_participant_utterance_camera_perspective_mapping:
+    for doc_participant_to_utterance_video_cameraperspective_mapping_instance in doc_participant_to_utterance_video_cameraperspective_mapping:
       # (<utterance seq id>, <video fname>, <camera perspective>)
-      _utterance_seq_id = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[0]
+      _utterance_seq_id = doc_participant_to_utterance_video_cameraperspective_mapping_instance[0]
       if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
         print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid utterance seq id: {_utterance_seq_id}")
-        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+        return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
-      _media_fname = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[1]
+      _media_fname = doc_participant_to_utterance_video_cameraperspective_mapping_instance[1]
       if _media_fname is None or len(_media_fname)==0:
         print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an empty (or None) media filename")
-        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+        return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
-      _camera_perspective = merged_video_doc_participant_utterance_camera_perspective_mapping_instance[2]
+      _camera_perspective = doc_participant_to_utterance_video_cameraperspective_mapping_instance[2]
       if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
         print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid camera perspective: {_camera_perspective}")
-        return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+        return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       # ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
       validated_results.append(
@@ -2030,15 +2076,103 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
         )
       )
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no merged_video_doc_participant_utterance_camera_perspective_mapping entries")
-    return video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no doc_participant_to_utterance_video_cameraperspective_mapping entries")
+    return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
   return validated_results
 
 
-def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_parsed_xmldb_pcoll, document_asl_consultant_index_schemad_pcoll, full_target_vid_index_schemad_pcoll):
+def validate_preprocess_target_video_to_segment_mapping(target_video_to_segment_mapping_tpl):
+  """
+  target_video_to_segment_mapping_tpl:
+    # (
+    #   <target video fname>,
+    #   {
+    #     'doc_consultant_camera_perspective_mapping': [ 
+    #       (
+    #         <doc id>,               # <target video fname> can occur in more than one document
+    #         <asl consultant id>,    # must map 1-to-1 to <target video fname>
+    #         <camera perspective>    # must map 1-to-1 to <target video fname>
+    #       ) # there can be more than one
+    #     ],
+    #     'video_to_segment_url_list_as_str': [<target video segment url list (as string)>] should be only one string
+    #   }
+    # )
+
+  return:
+    listof(
+      (
+        (<corpus doc id>, <asl consultant id>, <camera perspective>, <seg seq id>), # key
+        (<target video fname>, <seg filename>, <seg url>)) # data
+      )
+    )
+  """
+  validated_results = []
+
+  target_video_fname = target_video_to_segment_mapping_tpl[0]
+
+  doc_consultant_camera_perspective_mapping = list(set(target_video_to_segment_mapping_tpl[1]['doc_consultant_camera_perspective_mapping']))
+  if len(doc_consultant_camera_perspective_mapping) == 0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} doc_consultant_camera_perspective_mapping is empty")
+    return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+
+  video_to_segment_url_list_as_str = list(set(target_video_to_segment_mapping_tpl[1]['video_to_segment_url_list_as_str']))
+  if len(video_to_segment_url_list_as_str) != 1:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} segment list is either empty or not unique: {video_to_segment_url_list_as_str}")
+    return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+  video_to_segment_url_list_as_str = video_to_segment_url_list_as_str[0]
+
+  segments = []
+  asl_consultant_id = None
+  multiple_asl_consultants = []
+  camera_perspective = None
+  multiple_camera_perspectives = []
+
+  for seg_seg_id, seg_url in enumerate(video_to_segment_url_list_as_str.split(';')):
+    seg_fname = str(seg_url).split('/')[-1]
+
+    for doc_consultant_camera_perspective_mapping_instance in doc_consultant_camera_perspective_mapping:
+      _doc_id = doc_consultant_camera_perspective_mapping_instance[0]
+      _asl_consultant_id = doc_consultant_camera_perspective_mapping_instance[1]
+      if _asl_consultant_id not in multiple_asl_consultants:
+        multiple_asl_consultants.append(_asl_consultant_id)
+      _camera_perspective = doc_consultant_camera_perspective_mapping_instance[2]
+      if _camera_perspective not in multiple_camera_perspectives:
+        multiple_camera_perspectives.append(_camera_perspective)
+
+      validated_results.append(
+        (
+          (
+            _doc_id,
+            _asl_consultant_id,
+            _camera_perspective,
+            seg_seg_id
+          ),
+          (
+            target_video_fname,
+            seg_fname,
+            seg_url
+          )
+        )
+      )
+
+  if len(multiple_asl_consultants) != 1:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} asl consultant is either either empty or not unique: {multiple_asl_consultants}")
+    return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+  if len(multiple_camera_perspectives) != 1:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective is either either empty or not unique: {multiple_camera_perspectives}")
+    return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
+
+  return validated_results
+
+
+def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(
+  ss_parsed_xmldb_pcoll, 
+  document_asl_consultant_index_schemad_pcoll, 
+  full_target_vid_index_schemad_pcoll
+):
   # get list of target video infos
-  target_target_video_doc_participant_utterance_mapping = (
+  target_video_doc_participant_utterance_mapping = (
     ss_parsed_xmldb_pcoll
     | "Beam PL: get doc filename, participant name, utterance seq id associated with this target video, keyed by target video filename" >> beam.Map(
         lambda ss_parsed_xmldb_pcoll_row_dict: [
@@ -2066,16 +2200,14 @@ def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_pa
     # debug
     # | "Beam PL: print pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll result" >> beam.ParDo(PipelinePcollPrinter("pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll result"))
   )
-
   # now extract distinct target video fnames from media_doc_participant_mapping
   target_video_list_pcoll = (
-    target_target_video_doc_participant_utterance_mapping
-    | "Beam PL: extract media fname" >> beam.Map(lambda target_target_video_doc_participant_utterance_mapping_row_tpl: target_target_video_doc_participant_utterance_mapping_row_tpl[0])
+    target_video_doc_participant_utterance_mapping
+    | "Beam PL: extract media fname" >> beam.Map(lambda target_video_doc_participant_utterance_mapping_row_tpl: target_video_doc_participant_utterance_mapping_row_tpl[0])
     | "Beam PL: select distinct target video filenames" >> beam.Distinct()
     # debug
     # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
   )
-
   # now we need to filter from full_target_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
     # recall, vid_index_entry is "schemad":
     #   beam.Row(
@@ -2087,38 +2219,60 @@ def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_pa
     #     uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
     #     uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     #   )
-  target_video_camera_perspective_mapping = (
+  target_full_target_vid_index_mapping = (
     full_target_vid_index_schemad_pcoll
     | "Beam PL: filter matching rows from vid index" >> beam.Filter(
         lambda vid_index_entry, matching_target_video_fnames: vid_index_entry.target_video_filename in matching_target_video_fnames,
         matching_target_video_fnames=beam.pvalue.AsIter(target_video_list_pcoll),
       )
-    | "Beam PL: extract column vals from matching vid index entries for new video dataset" >> beam.Map(
-        lambda matching_target_vid_index_entry: (
-          matching_target_vid_index_entry.target_video_filename, # key
-          {globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: matching_target_vid_index_entry.perspective_cam_id}
-        )
+    | "Beam PL: key matching vid index entries by target vid fname" >> beam.Map(
+        lambda matching_target_vid_index_entry: (matching_target_vid_index_entry.target_video_filename, matching_target_vid_index_entry)
       )
     # debug
     # | "Beam PL: print vid index entries matching media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmatching vid index media"))
   )
-
   # merge doc, participant, and camera perspective keyed by media filename
-  merged_video_doc_participant_utterance_camera_perspective_mapping = (
+  #   this pcoll will be used to produce final pcolls:
+  #     document_asl_consultant_video_index_schemad_pcoll
+  target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping = (
     ({
-      'target_target_video_doc_participant_utterance_mapping': target_target_video_doc_participant_utterance_mapping,
-      'target_video_camera_perspective_mapping': target_video_camera_perspective_mapping
+      'target_video_doc_participant_utterance_mapping': target_video_doc_participant_utterance_mapping,
+      'target_full_target_vid_index_mapping': target_full_target_vid_index_mapping
     })
-    | "Beam PL: merge target_target_video_doc_participant_utterance_mapping and target_video_camera_perspective_mapping" >> beam.CoGroupByKey()
+    | "Beam PL: merge target_video_doc_participant_utterance_mapping and target_full_target_vid_index_mapping" >> beam.CoGroupByKey()
     # the above produces tuples in the form:
-      # (<media fname>, {'target_target_video_doc_participant_utterance_mapping': [(<corpus doc filename>, <participant_name>, <utterance seq id>)], 'target_video_camera_perspective_mapping': [{'CameraPerspective': <camera perspective>}]})
-    | "Beam PL: validate/preprocess merged_video_doc_participant_utterance_camera_perspective_mapping" >> beam.FlatMap(validate_preprocess_merged_video_doc_participant_utterance_camera_perspective_mapping)
-    # the above produces tuples in the form:
-    #   ((<document fname>, <participant name>), (<utterance seq id>, <video fname>, <camera perspective>))
+      # (
+      #   <target video fname>, # key
+      #   {
+      #     'target_video_doc_participant_utterance_mapping': [
+      #       (
+      #         <corpus doc filename>, 
+      #         <participant_name>, 
+      #         <utterance seq id>
+      #       )
+      #     ], 
+      #     'target_video_camera_perspective_mapping': [
+      #       beam.Row(
+      #         target_video_filename=<target_video_filename>, 
+      #         video_seq_id=<video_seq_id>, 
+      #         perspective_cam_id=<perspective_cam_id>, 
+      #         compressed_mov_url=<compressed_mov_url>, 
+      #         compressed_mov_url=<compressed_mov_url>, 
+      #         uncompressed_avi_url=<uncompressed_avi_url>, 
+      #         uncompressed_avi_mirror_1_url=<uncompressed_avi_mirror_1_url>, 
+      #         <uncompressed_avi_mirror_2_url>
+      #       )
+      #     ]
+      #   }
+      # )
     # debug
-    # | "Beam PL: print merged target_target_video_doc_participant_utterance_mapping and target_video_camera_perspective_mapping" >> beam.ParDo(PipelinePcollPrinter("merged_video_doc_participant_utterance_camera_perspective_mapping entry"))
+    # | "Beam PL: print target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping" >> beam.ParDo(PipelinePcollPrinter("target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping entry"))
   )
 
+  doc_participant_to_utterance_video_cameraperspective_mapping = (
+    target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping
+    | "Beam PL: validate/preprocess doc_participant_to_utterance_video_cameraperspective_mapping" >> beam.FlatMap(validate_preprocess_doc_participant_to_utterance_video_cameraperspective_mapping)
+  )
   # now use document_asl_consultant_index_schemad_pcoll in order to associate doc id and asl consultant id:
   document_participant_with_ids_mapping = (
     document_asl_consultant_index_schemad_pcoll
@@ -2129,16 +2283,22 @@ def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_pa
         )
       )
   )
-
   # merge doc, participant, and camera perspective keyed by media filename
   document_asl_consultant_video_index_schemad_pcoll = (
     ({
       'document_participant_with_ids_mapping': document_participant_with_ids_mapping,
-      'merged_video_doc_participant_utterance_camera_perspective_mapping': merged_video_doc_participant_utterance_camera_perspective_mapping
+      'doc_participant_to_utterance_video_cameraperspective_mapping': doc_participant_to_utterance_video_cameraperspective_mapping
     })
-    | "Beam PL: merge document_participant_with_ids_mapping and merged_video_doc_participant_utterance_camera_perspective_mapping" >> beam.CoGroupByKey()
+    | "Beam PL: merge document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping" >> beam.CoGroupByKey()
     # the above produces tuples in the form:
-      # ((<doc filename>, <participant name>), {'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 'merged_video_doc_participant_utterance_camera_perspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]})
+      # (
+      #   (<doc filename>, <participant name>),     # key
+      #   {
+      #     'document_participant_with_ids_mapping': [(<doc id>, <asl consultant id>)], 
+      #     'doc_participant_to_utterance_video_cameraperspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]
+      #   }
+      # )
+    # | "Beam PL: print merged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping" >> beam.ParDo(PipelinePcollPrinter("\tmerged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping entry"))
     | "Beam PL: validate/preprocess video_doc_participant_utterance_camera_perspective_with_ids_pcoll" >> beam.FlatMap(validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl)
     # the above produces tuples in the form:
     #   ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
@@ -2162,8 +2322,75 @@ def pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(ss_pa
     # debug
     # | "Beam PL: print document_asl_consultant_video_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_video_index_schemad_pcoll entry"))
   )
+  
+  target_video_fname_to_doc_consultant_camera_perspective_mapping = (
+    document_asl_consultant_video_index_schemad_pcoll
+    | "Beam PL: extract (<target video filename>, (<corpus doc id>, <asl consultant id>, <camera perspective>)) from document_asl_consultant_video_index_schemad_pcoll" >> beam.Map(
+        lambda document_asl_consultant_video_index_schemad_pcoll_row: (
+          document_asl_consultant_video_index_schemad_pcoll_row.TargetVideoFilename, # key
+          (
+            document_asl_consultant_video_index_schemad_pcoll_row.DocumentID,
+            document_asl_consultant_video_index_schemad_pcoll_row.ASLConsultantID,
+            document_asl_consultant_video_index_schemad_pcoll_row.CameraPerspective
+          )
+        )
+      )
+  )
 
-  return document_asl_consultant_video_index_schemad_pcoll
+  target_video_to_segment_url_list = (
+    target_full_target_vid_index_mapping # (matching_target_vid_index_entry.target_video_filename, matching_target_vid_index_entry)
+    | "Beam PL: extract (<target video filename>, <segment video url list as string>) from full_target_vid_index_mapping" >> beam.Map(
+        lambda target_full_target_vid_index_mapping_row_tpl: (
+          target_full_target_vid_index_mapping_row_tpl[0],
+          target_full_target_vid_index_mapping_row_tpl[1].compressed_mov_url
+        )
+      )
+  )
+
+  target_video_segment_index_pcoll = (
+    ({
+      'doc_consultant_camera_perspective_mapping': target_video_fname_to_doc_consultant_camera_perspective_mapping,
+      'video_to_segment_url_list_as_str': target_video_to_segment_url_list
+    })
+    | "Beam PL: merge doc_consultant_camera_perspective_mapping and video_to_segment_url_list_as_str" >> beam.CoGroupByKey()
+    # the above produces tuples of the form:
+      # (
+      #   <target video fname>,
+      #   {
+      #     'doc_consultant_camera_perspective_mapping': listof( (<doc id>, <asl consultant id>, <camera perspective>) ),
+      #     'video_to_segment_url_list_as_str': listof( (<target video segment url list (as string)>) )
+      #   }
+      # )
+    | "Beam PL: validate/preprocess target_video_to_segment_mapping_pcoll" >> beam.FlatMap(validate_preprocess_target_video_to_segment_mapping)
+    # the above produces tuples of the form:
+      # (
+      #   (<corpus doc id>, <asl consultant id>, <camera perspective>, <seg seq id>), # key
+      #   (<target video fname>, <seg filename>, <seg url>)) # data
+      # )
+    | "Beam PL: apply schema to create final target_video_segment_index_pcoll" >> beam.Map(
+        lambda target_video_to_segment_mapping_pcoll_row_tpl: beam.Row(
+          # SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'CameraPerspective',
+          #   'SegmentSequence',
+          #   'SegmentVideoFilename',
+          #   'URL'
+          # ]
+          DocumentID=int(target_video_to_segment_mapping_pcoll_row_tpl[0][0]),
+          ASLConsultantID=int(target_video_to_segment_mapping_pcoll_row_tpl[0][1]),
+          CameraPerspective=int(target_video_to_segment_mapping_pcoll_row_tpl[0][2]),                  
+          TargetVideoFilename=str(target_video_to_segment_mapping_pcoll_row_tpl[1][0]),
+          SegmentSequence=int(target_video_to_segment_mapping_pcoll_row_tpl[0][3]),
+          SegmentVideoFilename=str(target_video_to_segment_mapping_pcoll_row_tpl[1][1]),
+          URL=str(target_video_to_segment_mapping_pcoll_row_tpl[1][2])
+        )
+      )
+    # debug
+    # | "Beam PL: print target_video_to_segment_mapping" >> beam.ParDo(PipelinePcollPrinter("target_video_to_segment_mapping entry"))
+  )
+
+  return document_asl_consultant_video_index_schemad_pcoll, target_video_segment_index_pcoll
 
 
 def pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll):
@@ -2261,6 +2488,49 @@ def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_
     globals.UTTERANCE_VIDEO_DS_FNAME, 
     globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
   ) # document_asl_consultant_utterance_video_index_csv_path
+
+
+def pl__7__write_document_target_video_segment_index_csv(target_video_segment_index_pcoll):
+  distinct_target_video_segment_index_pcoll = (
+    target_video_segment_index_pcoll
+    | "Beam PL: extract (DocumentID, ASLConsultantID, CameraPerspective, TargetVideoFilename, SegmentSequence, SegmentVideoFilename, URL) from target_video_segment_index_pcoll" >> beam.Map(
+        lambda target_video_segment_index_pcoll_row: (
+          target_video_segment_index_pcoll_row.DocumentID,
+          target_video_segment_index_pcoll_row.ASLConsultantID,
+          target_video_segment_index_pcoll_row.CameraPerspective,
+          target_video_segment_index_pcoll_row.TargetVideoFilename,
+          target_video_segment_index_pcoll_row.SegmentSequence,
+          target_video_segment_index_pcoll_row.SegmentVideoFilename,
+          target_video_segment_index_pcoll_row.URL,
+        )
+      )
+    | "Beam PL: select distinct (DocumentID, ASLConsultantID, CameraPerspective, TargetVideoFilename, SegmentSequence, SegmentVideoFilename, URL) extracted from target_video_segment_index_pcoll" >> beam.Distinct()
+  )
+  sorted_distinct_target_video_segment_index_pcoll = pl__X__sort_pcoll(
+    distinct_target_video_segment_index_pcoll, 
+    pcoll_label="target_video_segment_index"
+  )
+  sorted_target_video_segment_index_schemad_pcoll = (
+    sorted_distinct_target_video_segment_index_pcoll
+    | "Beam PL: re-apply schema to create final sorted_target_video_segment_index_schemad_pcoll" >> beam.Map(
+        lambda sorted_distinct_target_video_segment_index_tpl: beam.Row(
+          DocumentID=sorted_distinct_target_video_segment_index_tpl[0],
+          ASLConsultantID=sorted_distinct_target_video_segment_index_tpl[1],
+          CameraPerspective=sorted_distinct_target_video_segment_index_tpl[2],                  
+          TargetVideoFilename=sorted_distinct_target_video_segment_index_tpl[3],
+          SegmentSequence=sorted_distinct_target_video_segment_index_tpl[4],
+          SegmentVideoFilename=sorted_distinct_target_video_segment_index_tpl[5],
+          URL=sorted_distinct_target_video_segment_index_tpl[6]
+        )
+      )
+    | beam.Map(lambda sorted_target_video_segment_index_schemad_pcoll_row: beam_row_to_csv_string(sorted_target_video_segment_index_schemad_pcoll_row))
+  )
+  return pl__X__write_pcoll_to_csv(
+    sorted_target_video_segment_index_schemad_pcoll, 
+    "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-SEGMENT-INDEX", 
+    globals.VIDEO_SEGMENT_DS_FNAME, 
+    globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS
+  ) # target_video_segment_index_csv_path
 
 
 def pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
@@ -2474,13 +2744,14 @@ def run():
     )
     pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
 
-    document_asl_consultant_video_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(
+    document_asl_consultant_video_index_schemad_pcoll, target_video_segment_index_pcoll = pl__6__create_document_asl_consultant_target_video_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 
       document_asl_consultant_index_schemad_pcoll, 
       full_target_vid_index_schemad_pcoll
     )
     pl__7__write_document_asl_consultant_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
     pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_video_index_schemad_pcoll)
+    pl__7__write_document_target_video_segment_index_csv(target_video_segment_index_pcoll)
 
     vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
       ss_parsed_xmldb_pcoll, 

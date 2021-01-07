@@ -35,7 +35,7 @@ UTTERANCE_DS_FNAME = 'document-consultant-utterance-index.csv'
 UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-targetvideo-index.csv'
 UTTERANCE_TOKEN_DS_FNAME = 'document-consultant-utterance-token-index.csv'
 
-VIDEO_SEGMENT_DS_FNAME = 'video-segment-index.csv'
+VIDEO_SEGMENT_DS_FNAME = 'document-consultant-targetvideo-segment-index.csv'
 UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame-index.csv'
 
 VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
@@ -85,7 +85,7 @@ SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
   'ASLConsultantID',
   'CameraPerspective',
   'SegmentSequence',
-  'Filename',
+  'SegmentVideoFilename',
   'URL'
 ]
 SCHEMA_PK__VIDEO_SEGMENT_DS = [
