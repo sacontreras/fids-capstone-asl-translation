@@ -2330,6 +2330,549 @@ def pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(
   ) # target_video_frame_index_csv_path
 
 
+def validate_preprocess_document_asl_consultant__to__target_video_utterance_token_map_tpl(document_asl_consultant__to__target_video_utterance_token_map_tpl):
+  # document_asl_consultant__to__target_video_utterance_token_map_tpl:
+    # (
+    #   (<corpus doc id>, <asl consultant id>), # key
+    #   {
+    #     'target_video_map': [(<target video fname>, <camera perspective>)], # there may be up to three (corresponding to camera perspective)
+    #     'utterance_token_map': [(<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)] # there will be many (corresponding to each utterance)
+    #   }
+    # )
+
+  validated_results = []
+
+  key = document_asl_consultant__to__target_video_utterance_token_map_tpl[0]
+
+  corpus_doc_id = key[0]
+  if corpus_doc_id is None or not isinstance(corpus_doc_id, int) or corpus_doc_id<0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} corpus doc id is invalid: {corpus_doc_id}")
+    return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+  asl_consultant_id = key[1]
+  if asl_consultant_id is None or not isinstance(asl_consultant_id, int) or asl_consultant_id<0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} asl consultant id is invalid: {asl_consultant_id}")
+    return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+  target_video_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['target_video_map']
+  if len(target_video_map)==0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} target_video_map is empty!")
+    return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+  utterance_token_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['utterance_token_map']
+  if len(utterance_token_map)==0:
+    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} utterance_token_map is empty!")
+    return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+  for i, utterance_token_map_instance in enumerate(utterance_token_map):
+    # (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)
+    _utterance_seq_id = utterance_token_map_instance[0]
+    if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] utterance_seq_id is invalid: {_utterance_seq_id}")
+      return document_asl_consultant__to__target_video_utterance_token_map_tpl
+    _token_seq_id = utterance_token_map_instance[1]
+    if _token_seq_id is None or not isinstance(_token_seq_id, int) or _token_seq_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_seq_id is invalid: {_token_seq_id}")
+      return document_asl_consultant__to__target_video_utterance_token_map_tpl
+    _token_id = utterance_token_map_instance[2]
+    if _token_id is None or not isinstance(_token_id, int) or _token_id<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_id is invalid: {_token_id}")
+      return document_asl_consultant__to__target_video_utterance_token_map_tpl
+    _token_start_time = utterance_token_map_instance[3]
+    if _token_start_time is None or not isinstance(_token_start_time, int) or _token_start_time<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_start_time is invalid: {_token_start_time}")
+      return document_asl_consultant__to__target_video_utterance_token_map_tpl
+    _token_end_time = utterance_token_map_instance[4]
+    if _token_end_time is None or not isinstance(_token_end_time, int) or _token_end_time<0:
+      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_end_time is invalid: {_token_end_time}")
+      return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+    for j, target_video_map_instance in enumerate(target_video_map):
+      # (<target video fname>, <camera perspective>)
+      _target_video_fname = target_video_map_instance[0]
+      if _target_video_fname is None or len(_target_video_fname)==0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
+        return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+      target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      _n_existing_frame_images = -1 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
+      # if _n_existing_frame_images == -1:
+      #   print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
+      _token_end_frame = _token_start_frame = -1
+      frame_seq_paths = []
+      if _n_existing_frame_images > 0:
+        _token_start_frame = int(round(_token_start_time/1000.0*globals.FPS))
+        _token_end_frame = int(round(_token_end_time/1000.0*globals.FPS))+1
+        n_frames = _token_end_frame-_token_start_frame
+        last_frame_idx = (_n_existing_frame_images-1)
+
+        if _token_start_frame > last_frame_idx:
+          # comment out for now
+          # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_start_frame ({_token_start_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling bounds of {n_frames} frames (from last frame index {last_frame_idx}) to {(last_frame_idx-(n_frames-1), last_frame_idx)}")
+          # return document_asl_consultant__to__target_video_utterance_token_map_tpl
+          # readjust bounds from last_frame_idx going backwards
+          _token_start_frame = last_frame_idx-(n_frames-1)
+          _token_end_frame = last_frame_idx
+        else:
+          if _token_end_frame > last_frame_idx:
+            # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+            # return document_asl_consultant__to__target_video_utterance_token_map_tpl
+            # take all that is available to the end
+            _token_end_frame = last_frame_idx
+
+        if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
+          for frame_idx in range(_token_start_frame, _token_end_frame+1):
+            frame_path = os.path.join(target_video_frames_dir, f"{frame_idx}.jpg")
+            if tf.io.gfile.exists(frame_path):
+              frame_seq_paths.append(frame_path)
+            else:
+              print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
+              # return document_asl_consultant__to__target_video_utterance_token_map_tpl
+        else:
+          print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+
+      _camera_perspective = target_video_map_instance[1]
+      if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
+        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] camera_perspective is invalid: {_camera_perspective}")
+        return document_asl_consultant__to__target_video_utterance_token_map_tpl
+
+      validated_results.append(
+        (
+          corpus_doc_id,
+          asl_consultant_id,
+          _target_video_fname,
+          _camera_perspective,
+          _utterance_seq_id,
+          _token_seq_id,
+          _token_id,
+          _token_start_time,
+          _token_end_time,
+          _token_start_frame,
+          _token_end_frame,
+          frame_seq_paths,
+          _n_existing_frame_images
+        )
+      )
+
+  return validated_results
+
+def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+  document_asl_consultant_utterance_token_index_schemad_pcoll,
+  document_asl_consultant_target_video_index_schemad_pcoll,
+  document_asl_consultant_target_video_frame_index_schemad_pcoll
+):
+  """
+  document_asl_consultant_utterance_token_index_schemad_pcoll:
+    beam.Row(
+      DocumentID=document_asl_consultant_utterance_token_tpl[0],
+      DocumentFilename=document_asl_consultant_utterance_token_tpl[1],
+      ASLConsultantID=document_asl_consultant_utterance_token_tpl[2],
+      ParticipantName=document_asl_consultant_utterance_token_tpl[3],
+      UtteranceSequence=document_asl_consultant_utterance_token_tpl[4],
+      TokenSequence=document_asl_consultant_utterance_token_tpl[7],
+      StartTime=document_asl_consultant_utterance_token_tpl[8],
+      EndTime=document_asl_consultant_utterance_token_tpl[9],
+      TokenID=document_asl_consultant_utterance_token_tpl[5],
+      Field='', # blank for now
+      FieldValue='' # blank for now
+    )
+
+  document_asl_consultant_target_video_index_schemad_pcoll:
+    beam.Row(
+      # SCHEMA_COL_NAMES__VIDEO_DS = [
+      #   'DocumentID',
+      #   'ASLConsultantID',
+      #   'CameraPerspective',
+      #   'TargetVideoFilename'
+      # ]
+      DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
+      DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
+      ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
+      ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
+      UtteranceSequence=int(document_asl_consultant_video_index_pcoll_row_tpl[1][2]),
+      CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][4]),                  
+      TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][3])
+    )
+
+  document_asl_consultant_target_video_frame_index_schemad_pcoll
+    beam.Row(
+      DocumentID=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][0]),
+      ASLConsultantID=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][1]),
+      CameraPerspective=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][2]),
+      TargetVideoFilename=str(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][0]),
+      FrameSequence=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][1]),
+      FramePath=str(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][2]),
+      JPEGBytes=sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][3]
+    )
+
+  return schemad pcoll using:
+    SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS = [
+      'DocumentID',
+      'ASLConsultantID',
+      'CameraPerspective',
+      'TargetVideoFilename',
+      'UtteranceSequence',
+      'TokenSequence',
+      'FrameSequence',
+      'TokenID'
+    ]
+  """
+  doc_consultant_utterance__to__target_video_map = (
+    document_asl_consultant_target_video_index_schemad_pcoll
+    | "Beam PL: extract ((<doc id>, <asl consultant id>, <utterance seq id>), (<target vid fname>, <camera perspective>))" >> beam.Map(
+        lambda document_asl_consultant_target_video_index_schemad_pcoll_row: (
+          (
+            document_asl_consultant_target_video_index_schemad_pcoll_row.DocumentID,
+            document_asl_consultant_target_video_index_schemad_pcoll_row.ASLConsultantID,
+            document_asl_consultant_target_video_index_schemad_pcoll_row.UtteranceSequence
+          ),
+          (
+            document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename,
+            document_asl_consultant_target_video_index_schemad_pcoll_row.CameraPerspective
+          )
+        )
+      )
+    | "Beam PL: select distinct ((<doc id>, <asl consultant id>, <utterance seq id>), (<target vid fname>, <camera perspective>))" >> beam.Distinct()
+  )
+
+  doc_consultant_utterance__to__token_map = (
+    document_asl_consultant_utterance_token_index_schemad_pcoll
+    | "Beam PL: extract ((<doc id>, <asl consultant id>, <utterance seq id>), (<tok vocab id>, <tok seq id>, <tok start time>, <tok end time>, listof(<frame seq id>))) from document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.Map(
+        lambda document_asl_consultant_utterance_token_index_schemad_pcoll_row: (
+          (
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.DocumentID,
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.ASLConsultantID,
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.UtteranceSequence
+          ),
+          (
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenID,
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenSequence,
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime,
+            document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime,
+            [frame_seq_id for frame_seq_id in range(
+                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime/1000.0*globals.FPS)), # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime)/1000.0)*globals.FPS
+                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime/1000.0*globals.FPS))    # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime)/1000.0)*globals.FPS
+              )
+            ]
+          )
+        )
+      )
+    # debug
+    # | "Beam PL: print doc_consultant__to__utterance_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant__to__utterance_token_map entry"))
+  )
+
+  doc_consultant_utterance__to__target_video_token_map = (
+    ({
+      'target_video_map': doc_consultant_utterance__to__target_video_map,
+      'token_map': doc_consultant_utterance__to__token_map
+    })
+    | "Beam PL: merge target_video_map and token_map" >> beam.CoGroupByKey()
+    # the above produces tuples of the form:
+      # (
+      #   (<doc id>, <asl consultant id>, <utterance seq id>), # key
+      #   {
+      #     'target_video_map': [(<target vid fname>, <camera perspective>)], # up to three, corresponding to camera perspective
+      #     'token_map': [(<tok vocab id>, <tok seq id>, <tok start time>, <tok end time>, listof(<frame seq id>))] # there will be many, corresponding to token sequence id for this utterance
+      #   }
+      # )
+    | "Beam PL: sort doc_consultant_utterance__to__target_video_token_map token_map based on <tok seq id>" >> beam.Map(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: (
+          (
+            doc_consultant_utterance__to__target_video_token_map_tpl[0][0], # <doc id>
+            doc_consultant_utterance__to__target_video_token_map_tpl[0][1], # <asl consultant id>
+            doc_consultant_utterance__to__target_video_token_map_tpl[0][2]  # <utterance seq id>
+          ),
+          {
+            'target_video_map': sorted(
+              doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'],
+              key=lambda target_vid_info_tpl: target_vid_info_tpl[1] # <camera perspective>
+            ),
+            'token_map': sorted(
+              doc_consultant_utterance__to__target_video_token_map_tpl[1]['token_map'], 
+              key=lambda tok_info_tpl: tok_info_tpl[1] # <tok seq id>
+            )
+          }
+        )
+      )
+    # debug
+    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map entry"))
+  )
+
+  doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_MAX_CAMERA_PERSPECTIVES = (
+    doc_consultant_utterance__to__target_video_token_map
+    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)<={globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])<=globals.MAX_CAMERA_PERSPECTIVES
+      )
+    # debug
+    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3 entry"))
+  )
+
+  # debug
+  #   we have a problem if doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES is non-empty!
+  doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES = (
+    doc_consultant_utterance__to__target_video_token_map
+    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])>globals.MAX_CAMERA_PERSPECTIVES
+      )
+    # debug
+    | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES" >> beam.ParDo(PipelinePcollPrinter(msg=f"{globals.VALIDATION_WARNING_TEXT} len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES} entry"))
+  )
+
+  # now transform doc_consultant_utterance__to__target_video_token_map tuples
+    # from:
+      # (
+      #   (<doc id>, <asl consultant id>, <utterance seq id>), # key
+      #   {
+      #     'target_video_map': [(<target vid fname>, <camera perspective>)], # up to three, corresponding to camera perspective
+      #     'token_map': [(<tok vocab id>, <tok seq id>, <tok start time>, <tok end time>, listof(<frame seq id>))] # there will be many, corresponding to token sequence id for this utterance
+      #   }
+      # )
+    # to:
+      # (
+      #   (<doc id>, <asl consultant id>, <utterance seq id>, <tok seq id>), # key
+      #   (
+      #     <tok vocab id>,
+      #     <tok start time>,
+      #     <tok end time>,
+      #     listof(<frame seq id>),
+      #     listof((<target vid fname>, <camera perspective>))
+      #   )
+      # )
+  document_asl_consultant_utterance_token_frame_index_tpl_pcoll = (
+    doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_MAX_CAMERA_PERSPECTIVES
+    | "Beam PL: transform doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_MAX_CAMERA_PERSPECTIVES" >> beam.Map(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: [
+          (
+            (
+              doc_consultant_utterance__to__target_video_token_map_tpl[0][0],                   # <doc id>
+              doc_consultant_utterance__to__target_video_token_map_tpl[0][1],                   # <asl consultant id>
+              doc_consultant_utterance__to__target_video_token_map_tpl[0][2],                   # <utterance seq id>
+              token_info_tpl[1]                                                                 # <tok seq id>
+            ),
+            (
+              token_info_tpl[0],                                                                # <tok vocab id>
+              token_info_tpl[2],                                                                # <tok start time>
+              token_info_tpl[3],                                                                # <tok end time>
+              token_info_tpl[4],                                                                # listof(<frame seq id>)
+              doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'],  # listof((<target vid fname>, <camera perspective>))
+            )
+          ) for token_info_tpl in doc_consultant_utterance__to__target_video_token_map_tpl[1]['token_map']
+        ]
+      )
+    | "Beam PL: 'explode' list of doc_consultant_utterance__to__target_video_token_map_tpl" >> beam.FlatMap(
+        lambda list_doc_consultant_utterance__to__target_video_token_map_tpl: list_doc_consultant_utterance__to__target_video_token_map_tpl
+      )
+    # debug
+    # | "Beam PL: print document_asl_consultant_utterance_token_frame_index_tpl_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_utterance_token_frame_index_tpl_pcoll entry"))
+  )
+  document_asl_consultant_utterance_token_frame_index_tpl_pcoll = pl__X__sort_pcoll(
+    document_asl_consultant_utterance_token_frame_index_tpl_pcoll, 
+    pcoll_label="document_asl_consultant_utterance_token_frame_index_tpl_pcoll"
+  )
+
+  doc_consultant_target_video_frame__to__utterance_token_map = (
+    document_asl_consultant_utterance_token_frame_index_tpl_pcoll
+      # document_asl_consultant_utterance_token_frame_index_tpl:
+        # (
+        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][0],                   # <doc id>
+        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][1],                   # <asl consultant id>
+        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][2],                   # <utterance seq id>
+        #   token_info_tpl[1]                                                                 # <tok seq id>
+        # ),
+        # (
+        #   token_info_tpl[0],                                                                # <tok vocab id>
+        #   token_info_tpl[2],                                                                # <tok start time>
+        #   token_info_tpl[3],                                                                # <tok end time>
+        #   token_info_tpl[4],                                                                # listof(<frame seq id>)
+        #   doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'],  # listof((<target vid fname>, <camera perspective>))
+        # )
+    | "Beam PL: extract doc_consultant_target_video_frame__to__utterance_token_map rows from document_asl_consultant_utterance_token_frame_index_tpl_pcoll" >> beam.Map(
+        lambda document_asl_consultant_utterance_token_frame_index_tpl: [
+          (
+            # document_asl_consultant_utterance_token_frame_index_tpl[0][0],  # <doc id>
+            # document_asl_consultant_utterance_token_frame_index_tpl[0][1],  # <asl consultant id>
+            # target_vid_frame_seq_tpl[0][1],                                 # <camera perspective>
+            # target_vid_frame_seq_tpl[0][0],                                 # <target vid fname>
+            # document_asl_consultant_utterance_token_frame_index_tpl[0][2],  # <utterance seq id>
+            # document_asl_consultant_utterance_token_frame_index_tpl[0][3],  # <tok seq id>
+            # target_vid_frame_seq_tpl[1],                                    # <frame seq id>
+            # document_asl_consultant_utterance_token_frame_index_tpl[1][0],  # <tok vocab id>
+
+            (
+              document_asl_consultant_utterance_token_frame_index_tpl[0][0],  # <doc id>
+              document_asl_consultant_utterance_token_frame_index_tpl[0][1],  # <asl consultant id>
+              target_vid_frame_seq_tpl[0][1],                                 # <camera perspective>
+              target_vid_frame_seq_tpl[0][0],                                 # <target vid fname>
+              target_vid_frame_seq_tpl[1]                                     # <frame seq id>
+            ),
+            (
+              document_asl_consultant_utterance_token_frame_index_tpl[0][2],  # <utterance seq id>
+              document_asl_consultant_utterance_token_frame_index_tpl[0][3],  # <tok seq id>
+              document_asl_consultant_utterance_token_frame_index_tpl[1][0]   # <tok vocab id>
+            )
+          ) for target_vid_frame_seq_tpl in zip(document_asl_consultant_utterance_token_frame_index_tpl[1][4], document_asl_consultant_utterance_token_frame_index_tpl[1][3])
+        ] 
+      )
+    | "Beam PL: 'explode' list of doc_consultant_target_video_frame__to__utterance_token_map tuples" >> beam.FlatMap(
+        lambda list_doc_consultant_target_video_frame__to__utterance_token_map_tpl: list_doc_consultant_target_video_frame__to__utterance_token_map_tpl
+      )
+    # debug
+    # | "Beam PL: print doc_consultant_target_video_frame__to__utterance_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__utterance_token_map entry"))
+  )
+
+  # document_asl_consultant_target_video_frame_index_schemad_pcoll
+  #   beam.Row(
+  #     DocumentID=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][0]),
+  #     ASLConsultantID=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][1]),
+  #     CameraPerspective=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[0][2]),
+  #     TargetVideoFilename=str(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][0]),
+  #     FrameSequence=int(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][1]),
+  #     FramePath=str(sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][2]),
+  #     JPEGBytes=sorted_document_asl_consultant_target_video_frame_index_pcoll_row_tpl[1][3]
+  #   )
+  existing_target_video_frames_pcoll = (
+    document_asl_consultant_target_video_frame_index_schemad_pcoll
+    | "Beam PL: extract ((<doc id>, <asl consultant id>, <camera perspective>, <target vid fname>, <frame seq id>), '<TARGET VIDEO FRAME EXISTS>') from document_asl_consultant_target_video_frame_index_schemad_pcoll" >> beam.Map(
+        lambda document_asl_consultant_target_video_frame_index_schemad_pcoll_row: (
+          (
+            document_asl_consultant_target_video_frame_index_schemad_pcoll_row.DocumentID,
+            document_asl_consultant_target_video_frame_index_schemad_pcoll_row.ASLConsultantID,
+            document_asl_consultant_target_video_frame_index_schemad_pcoll_row.CameraPerspective,
+            document_asl_consultant_target_video_frame_index_schemad_pcoll_row.TargetVideoFilename,
+            document_asl_consultant_target_video_frame_index_schemad_pcoll_row.FrameSequence
+          ),
+          '<TARGET VIDEO FRAME EXISTS>'
+        )
+      )
+    # debug
+    # | "Beam PL: print existing_target_video_frames_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="existing_target_video_frames_pcoll entry"))
+  )
+
+  doc_consultant_target_video_frame__to__target_video_token_map = (
+    ({
+      'target_video_frame_exists': existing_target_video_frames_pcoll,
+      'existing_utterance_token_map': doc_consultant_target_video_frame__to__utterance_token_map
+    })
+    | "Beam PL: merge existing_target_video_frames_map and utterance_token_map" >> beam.CoGroupByKey()
+    # the above produces tuples of the form:
+      # (
+      #   (<doc id>, <asl consultant id>, <camera perspective>, <target vid fname>, <frame seq id>), # key
+      #   {
+      #     'target_video_frame_exists': ['<TARGET VIDEO FRAME EXISTS>'] | [], # if empty, then the frame does not exist in document_asl_consultant_target_video_frame_index_schemad_pcoll
+      #     'utterance_token_map': [(<utterance seq id>, <tok seq id>, <tok vocab id>)]
+      #   }
+      # )
+    # debug
+    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map entry"))
+  )
+
+  doc_consultant_target_video_frame__to__target_video_token_map__non_existing_frame = (
+    doc_consultant_target_video_frame__to__target_video_token_map
+    | "Beam PL: filter non-existing frames (in document_asl_consultant_target_video_frame_index_schemad_pcoll)" >> beam.Filter(
+        lambda doc_consultant_target_video_frame__to__target_video_token_map_tpl: len(doc_consultant_target_video_frame__to__target_video_token_map_tpl[1]['target_video_frame_exists'])==0
+      )
+  )
+  doc_consultant_target_video_frame__to__target_video_token_map__existing_frame = (
+    doc_consultant_target_video_frame__to__target_video_token_map
+    | "Beam PL: filter existing frames (in document_asl_consultant_target_video_frame_index_schemad_pcoll)" >> beam.Filter(
+        lambda doc_consultant_target_video_frame__to__target_video_token_map_tpl: len(doc_consultant_target_video_frame__to__target_video_token_map_tpl[1]['target_video_frame_exists'])>0
+      )
+    # debug
+    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map__existing_frame" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map__existing_frame entry"))
+  )
+
+  doc_consultant_target_video_frame__to__target_video_token_map__existing_frame__non_existing_utterance_token = (
+    doc_consultant_target_video_frame__to__target_video_token_map__existing_frame
+    | "Beam PL: filter non-existing record keys (in doc_consultant_target_video_frame__to__utterance_token_map)" >> beam.Filter(
+        lambda doc_consultant_target_video_frame__to__target_video_token_map__existing_frame_tpl: len(doc_consultant_target_video_frame__to__target_video_token_map__existing_frame_tpl[1]['existing_utterance_token_map'])==0
+      )
+  )
+  document_asl_consultant_target_video_utterance_token_frame_index_pcoll = (
+    doc_consultant_target_video_frame__to__target_video_token_map__existing_frame
+    | "Beam PL: filter existing record keys (in doc_consultant_target_video_frame__to__utterance_token_map)" >> beam.Filter(
+        lambda doc_consultant_target_video_frame__to__target_video_token_map__existing_frame_tpl: len(doc_consultant_target_video_frame__to__target_video_token_map__existing_frame_tpl[1]['existing_utterance_token_map'])>0
+      )
+    | "Beam PL: extract ((<doc id>, <asl consultant id>, <camera perspective>, <target vid fname>, <utterance seq id>, <token seq id>), (<token vocab id>, <frame seq id>)) from doc_consultant_target_video_frame__to__target_video_token_map" >> beam.Map(
+        # (
+        #   (<doc id>, <asl consultant id>, <camera perspective>, <target vid fname>, <frame seq id>), # key
+        #   {
+        #     'target_video_frame_exists': ['<TARGET VIDEO FRAME EXISTS>'] | [], # if empty, then the frame does not exist in document_asl_consultant_target_video_frame_index_schemad_pcoll
+        #     'utterance_token_map': [(<utterance seq id>, <tok seq id>, <tok vocab id>)]
+        #   }
+        # )
+        lambda doc_consultant_target_video_frame__to__target_video_token_map_tpl: [
+          (
+            (
+              doc_consultant_target_video_frame__to__target_video_token_map_tpl[0][0],  # <doc id>
+              doc_consultant_target_video_frame__to__target_video_token_map_tpl[0][1],  # <asl consultant id>
+              doc_consultant_target_video_frame__to__target_video_token_map_tpl[0][2],  # <camera perspective>
+              doc_consultant_target_video_frame__to__target_video_token_map_tpl[0][3],  # <target vid fname>
+              utterance_token_tpl[0],                                                   # <utterance seq id>
+              utterance_token_tpl[1]                                                    # <token seq id>
+            ), # key
+            (
+              doc_consultant_target_video_frame__to__target_video_token_map_tpl[0][4],  # <frame seq id>
+              utterance_token_tpl[2]                                                    # <tok vocab id>
+              
+            )
+          ) for utterance_token_tpl in doc_consultant_target_video_frame__to__target_video_token_map_tpl[1]['existing_utterance_token_map']
+        ]
+      )
+    | "Beam PL: 'explode' list of document_asl_consultant_target_video_utterance_token_frame_index tuples" >> beam.FlatMap(
+        lambda list_document_asl_consultant_target_video_utterance_token_frame_index_tpl: list_document_asl_consultant_target_video_utterance_token_frame_index_tpl
+      )
+    # debug
+    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_pcoll entry"))
+  )
+
+  sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll = pl__X__sort_pcoll(
+    document_asl_consultant_target_video_utterance_token_frame_index_pcoll, 
+    pcoll_label="document_asl_consultant_target_video_utterance_token_frame_index_pcoll"
+  )
+  document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = (
+    sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll
+    | "Beam PL: apply schema to create final document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll" >> beam.Map(
+        lambda sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll: beam.Row(
+          # SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'CameraPerspective',
+          #   'TargetVideoFilename',
+          #   'UtteranceSequence',
+          #   'TokenSequence',
+          #   'FrameSequence',
+          #   'TokenID'
+          # ]
+          DocumentID=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][0]),
+          ASLConsultantID=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][1]),
+          CameraPerspective=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][2]),
+          TargetVideoFilename=str(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][3]),
+          UtteranceSequence=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][4]),
+          TokenSequence=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[0][5]),
+          FrameSequence=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[1][1]),
+          TokenID=int(sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll[1][0])
+        )
+      )
+    # debug
+    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll entry"))
+  )
+
+  return document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
+
+
+def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):
+  document_asl_consultant_target_video_utterance_token_frame_index_csv_rows = (
+    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
+    | beam.Map(lambda document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row: beam_row_to_csv_string(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row))
+  )
+  return pl__X__write_pcoll_to_csv(
+    document_asl_consultant_target_video_utterance_token_frame_index_csv_rows, 
+    "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-UTTERANCE-TOKEN-FRAME-INDEX", 
+    globals.UTTERANCE_TOKEN_FRAME_DS_FNAME, 
+    globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS
+  ) # document_asl_consultant_target_video_utterance_token_frame_index_csv_path
+
+
 def validate_ds_video_preprocessing(tpl_combined_results_row):
   d_combined_results = tpl_combined_results_row[1]
   media_fname = tpl_combined_results_row[0]
@@ -3279,18 +3822,25 @@ def run():
     pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
     pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
-    # document_asl_consultant_utterance_token_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-    #   # document_asl_consultant_utterance_index_schemad_pcoll,
-    #   # document_asl_consultant_target_video_index_schemad_pcoll,
-    #   # vocabulary_index_pcoll,
-    #   document_asl_consultant_utterance_token_index_schemad_pcoll,
-    #   document_target_video_segment_index_schemad_pcoll
-    # )
-
     document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
       document_asl_consultant_target_video_index_schemad_pcoll
     )
     pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
+
+    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+      document_asl_consultant_utterance_token_index_schemad_pcoll,
+      document_asl_consultant_target_video_index_schemad_pcoll,
+      document_asl_consultant_target_video_frame_index_schemad_pcoll
+    )
+    pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+
+
+  # steps for cleanup
+  with beam.Pipeline(options=pipeline_options) as pl:
+    _ = (
+      pl
+      | "" >> None
+    )
   
 
   print(f"Beam PL: ALL DONE!")

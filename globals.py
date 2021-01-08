@@ -7,6 +7,7 @@ _1MB = _1KB**2
 FPS = 30
 # FRAME_IMG_INPUT_SHAPE = (300,300)
 FRAME_IMG_INPUT_SHAPE = (150,150)
+MAX_CAMERA_PERSPECTIVES = 4
 
 VALIDATION_WARNING_TEXT = "***VALIDATION WARNING!!!***:"
 VALIDATION_FATAL_ERROR_TEXT = "***FATAL ERROR!!!***:"
@@ -39,7 +40,7 @@ UTTERANCE_TOKEN_DS_FNAME = 'document-consultant-utterance-token-index.csv'
 
 VIDEO_SEGMENT_DS_FNAME = 'document-consultant-targetvideo-segment-index.csv'
 VIDEO_FRAME_DS_FNAME = 'document-consultant-targetvideo-frame-index.csv'
-UTTERANCE_TOKEN_FRAME_DS_FNAME = 'document-consultant-utterance-token-targetvideo-frame-index.csv'
+UTTERANCE_TOKEN_FRAME_DS_FNAME = 'document-consultant-targetvideo-utterance-token-frame-index.csv'
 
 VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
 
@@ -171,26 +172,15 @@ SCHEMA_PK__UTTERANCE_TOKEN_DS = [
 ]
 
 SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS = [
-  # ***** identify utterance target video: BEGIN *****
   'DocumentID',
   'ASLConsultantID',
-  'UtteranceSequence',
   'CameraPerspective',
-  # ***** identify utterance target video: END *****
-
-  # ***** identify token in vocabulary: BEGIN *****
-  'TokenID',
-  # ***** identify token in vocabulary: END *****
-
-  # ***** identify sequence/order of token in target video: BEGIN *****
+  'TargetVideoFilename',
+  'UtteranceSequence',
   'TokenSequence',
-  # ***** identify sequence/order of token in target video: END *****
-
-  # ***** identify frame sequence/order (this also corresponds to the filename of the image in the target video frames dir) of token in target video: BEGIN *****
   'FrameSequence',
-  # ***** identify frame sequence/order (this also corresponds to the filename of the image in the target video frames dir) of token in target video: END *****
-  
-  'ImageTensor' # this holds the tensor of pixels constituting the corresponding frame (image)
+
+  'TokenID'
 ]
 SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS = [
   SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[0],
