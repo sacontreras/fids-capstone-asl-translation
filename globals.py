@@ -5,6 +5,8 @@ import os
 _1KB = 1024
 _1MB = _1KB**2
 FPS = 30
+# FRAME_IMG_INPUT_SHAPE = (300,300)
+FRAME_IMG_INPUT_SHAPE = (150,150)
 
 VALIDATION_WARNING_TEXT = "***VALIDATION WARNING!!!***:"
 VALIDATION_FATAL_ERROR_TEXT = "***FATAL ERROR!!!***:"
@@ -36,7 +38,8 @@ UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-targetvideo-index.csv'
 UTTERANCE_TOKEN_DS_FNAME = 'document-consultant-utterance-token-index.csv'
 
 VIDEO_SEGMENT_DS_FNAME = 'document-consultant-targetvideo-segment-index.csv'
-UTTERANCE_TOKEN_FRAME_DS_FNAME = 'utterance-token-frame-index.csv'
+VIDEO_FRAME_DS_FNAME = 'document-consultant-targetvideo-frame-index.csv'
+UTTERANCE_TOKEN_FRAME_DS_FNAME = 'document-consultant-utterance-token-targetvideo-frame-index.csv'
 
 VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
 
@@ -95,6 +98,22 @@ SCHEMA_PK__VIDEO_SEGMENT_DS = [
   SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[3]
 ]
 
+SCHEMA_COL_NAMES__VIDEO_FRAME_DS = [
+  'DocumentID',
+  'ASLConsultantID',
+  'CameraPerspective',
+  'TargetVideoFilename',
+  'FrameSequence',
+  'JPEGBytes'
+]
+SCHEMA_PK__VIDEO_FRAME_DS = [
+  SCHEMA_COL_NAMES__VIDEO_FRAME_DS[0],
+  SCHEMA_COL_NAMES__VIDEO_FRAME_DS[1],
+  SCHEMA_COL_NAMES__VIDEO_FRAME_DS[2],
+  SCHEMA_COL_NAMES__VIDEO_FRAME_DS[4]
+]
+
+
 SCHEMA_COL_NAMES__UTTERANCE_DS = [
   'DocumentID',
   'ASLConsultantID',
@@ -124,13 +143,23 @@ SCHEMA_PK__UTTERANCE_VIDEO_DS = [
 ]
 
 SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
+  # ***** identify utterance: BEGIN *****
   'DocumentID',
   'ASLConsultantID',
   'UtteranceSequence',
+  # ***** identify utterance: END *****
+
+  # ***** identify sequence/order of token in utterance: BEGIN *****
   'TokenSequence',
+  # ***** identify sequence/order of token in utterance: END *****
+
   'StartTime',
   'EndTime',
+
+  # ***** identify token in vocabulary: BEGIN *****
   'TokenID',
+  # ***** identify token in vocabulary: END *****
+
   'Field',
   'FieldValue'
 ]
@@ -142,17 +171,35 @@ SCHEMA_PK__UTTERANCE_TOKEN_DS = [
 ]
 
 SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS = [
-  'UtteranceID',
+  # ***** identify utterance target video: BEGIN *****
+  'DocumentID',
+  'ASLConsultantID',
+  'UtteranceSequence',
+  'CameraPerspective',
+  # ***** identify utterance target video: END *****
+
+  # ***** identify token in vocabulary: BEGIN *****
   'TokenID',
+  # ***** identify token in vocabulary: END *****
+
+  # ***** identify sequence/order of token in target video: BEGIN *****
   'TokenSequence',
+  # ***** identify sequence/order of token in target video: END *****
+
+  # ***** identify frame sequence/order (this also corresponds to the filename of the image in the target video frames dir) of token in target video: BEGIN *****
   'FrameSequence',
-  'ImageTensor'
+  # ***** identify frame sequence/order (this also corresponds to the filename of the image in the target video frames dir) of token in target video: END *****
+  
+  'ImageTensor' # this holds the tensor of pixels constituting the corresponding frame (image)
 ]
 SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS = [
   SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[0],
   SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[1],
   SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[2],
-  SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[3]
+  SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[3],
+  SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[4],
+  SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[5],
+  SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[6]
 ]
 
 SCHEMA_COL_NAMES__VOCABULARY_DS = [
