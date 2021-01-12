@@ -35,14 +35,45 @@ def prepare_output_str(str, label=""):
   return f"{label+': ' if len(label)>0 else ''}{str}"
 
 
+def dataset_csv_files_exist(dataset_csv_paths=None):
+  if dataset_csv_paths is None or len(dataset_csv_paths)==0:
+    dataset_csv_paths = [
+      globals.ASL_CONSULTANT_DS_PATH,
+      globals.VIDEO_DS_PATH,
+      globals.UTTERANCE_DS_PATH,
+      globals.UTTERANCE_VIDEO_DS_PATH,
+      globals.UTTERANCE_TOKEN_DS_PATH,
+      globals.CORPUS_DS_PATH,
+      globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+      globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
+      globals.VOCABULARY_DS_PATH
+    ]
+  for dataset_csv_path in dataset_csv_paths:
+    if not tf.io.gfile.exists(dataset_csv_path):
+      # print(f"Dataset {dataset_csv_path} not found")
+      return False
+    else:
+      print(f"Found dataset {dataset_csv_path}")
+  return True
+
+
 def boostrap_signstream_corpus(d_corpus_info, label=""):
   """
   d_corpus_info MUST be a dict as follows:
     {
-      'tmp_dir': TMP_DIR,
-      'data_dir': DATA_ROOT_DIR,
-      'corpus_archive': CORPUS_ARCHIVE, 
-      'corpus_ds_path': CORPUS_DS_PATH,
+      'tmp_dir': globals.TMP_DIR,
+      'data_dir': globals.DATA_ROOT_DIR,
+      'corpus_archive': globals.CORPUS_ARCHIVE, 
+      
+      'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
+      'video_ds_path': globals.VIDEO_DS_PATH,
+      'utterance_ds_path': globals.UTTERANCE_DS_PATH,
+      'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
+      'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
+      'corpus_ds_path': globals.CORPUS_DS_PATH,
+      'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+      'utterance_token_frame_ds_path': globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
+      'vocabulary_ds_path': globals.VOCABULARY_DS_PATH,
     }
 
   this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
@@ -50,59 +81,40 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     (assuming that has not already been done - i.e. if not os.path.isdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
       or len(os.listdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
     )
+
+  if the datasets exist in the storage path then this function does nothing
+    (other than printing out the paths to the datasets)
   """
+
+  print(prepare_output_str(f"CORPUS-INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
 
   corpus_parent_dir = d_corpus_info['tmp_dir']
   corpus_dir = os.path.join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
 
-  if not tf.io.gfile.exists(d_corpus_info['corpus_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['document_asl_consultant_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['asl_consultant_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['video_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['utterance_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['utterance_video_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['utterance_token_ds_path']) \
-    or not tf.io.gfile.exists(d_corpus_info['vocabulary_ds_path']):
+  # download archive
+  """
+  requires:
+    d_corpus_info['corpus_archive']
+    d_corpus_info['tmp_dir']
+  """
+  remote_archive_path = os.path.join('http://secrets.rutgers.edu/dai/xml', d_corpus_info['corpus_archive'])
+  local_archive_parent_dir = d_corpus_info['tmp_dir']
+  local_archive_path = os.path.join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
+  utils.download(
+      remote_archive_path, 
+      local_archive_path, 
+      block_sz=globals._1MB
+  )
+  zip_ref = zipfile.ZipFile(local_archive_path, 'r')
+  print(f"unzipping {local_archive_path} to {corpus_dir}...")
+  zip_ref.extractall(corpus_parent_dir)
+  zip_ref.close()
+  print(f"\tDONE")
+  print(f"deleting {local_archive_path}...")
+  os.remove(local_archive_path)
+  print(f"\tDONE")
 
-    print(prepare_output_str(f"CORPUS-INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
-
-    # download archive
-    """
-    requires:
-      d_corpus_info['corpus_archive']
-      d_corpus_info['tmp_dir']
-    """
-    remote_archive_path = os.path.join('http://secrets.rutgers.edu/dai/xml', d_corpus_info['corpus_archive'])
-    local_archive_parent_dir = d_corpus_info['tmp_dir']
-    local_archive_path = os.path.join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
-    utils.download(
-        remote_archive_path, 
-        local_archive_path, 
-        block_sz=globals._1MB
-    )
-    zip_ref = zipfile.ZipFile(local_archive_path, 'r')
-    print(f"unzipping {local_archive_path} to {corpus_dir}...")
-    zip_ref.extractall(corpus_parent_dir)
-    zip_ref.close()
-    print(f"\tDONE")
-    print(f"deleting {local_archive_path}...")
-    os.remove(local_archive_path)
-    print(f"\tDONE")
-
-    return [os.path.join(corpus_dir,"*")]
-
-  else:
-
-    print(prepare_output_str(f"Found dataset {d_corpus_info['corpus_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['document_asl_consultant_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['asl_consultant_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['video_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_video_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['utterance_token_ds_path']}", label=label))
-    print(prepare_output_str(f"Found dataset {d_corpus_info['vocabulary_ds_path']}", label=label))
-
-    return []
+  return [os.path.join(corpus_dir,"*")]
 
 
 def beam_row_to_csv_string(row):
@@ -161,7 +173,10 @@ def load_vid_index_csv(sel_csv_path):
   so we fix the definition of dict_field_names to:
     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
   """
-  return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+  if sel_csv_path is not None and len(sel_csv_path)>0:
+    return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+  else:
+    return []
 
 
 class PipelinePcollElementProcessor(beam.DoFn):
@@ -456,13 +471,13 @@ def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
 
 def pl__X__sort_pcoll(pcoll, pcoll_label):
   return (
-    pcoll
-    | f"Beam PL: key {pcoll_label} for sort" >> beam.Map(
-        lambda pcoll_row: (1, pcoll_row)
-      )
-    | f"Beam PL: 'implode' keyed {pcoll_label} for sort" >> beam.GroupByKey()
-    | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
-  )
+      pcoll
+      | f"Beam PL: key {pcoll_label} for sort" >> beam.Map(
+          lambda pcoll_row: (1, pcoll_row)
+        )
+      | f"Beam PL: 'implode' keyed {pcoll_label} for sort" >> beam.GroupByKey()
+      | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
+    )
 
 
 def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
@@ -496,18 +511,14 @@ def pl__1__bootstrap_target_video_index(pl):
             'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
             'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
             'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
-            'tmp_dir': globals.TMP_DIR
+            'tmp_dir': globals.TMP_DIR,
+            'video_ds_path': globals.VIDEO_DS_PATH
           }
         ]
       )
     | "Beam PL: bootstrap target video index" >> beam.Map(preprocessor__common.boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
-
-    # | f"Beam PL: select top {globals.MAX_DATA_FILES} tuples extracted from full_target_vid_index_schemad_pcoll" >> beam.combiners.Top.Of(
-    #       globals.MAX_DATA_FILES # number of elements
-    #     )
-    # | f"Beam PL: 'explode list of top {globals.MAX_DATA_FILES} tuples extracted from full_target_vid_index_schemad_pcoll" >> beam.FlatMap(lambda list_filtered_target_vid_index_tpl: list_filtered_target_vid_index_tpl)
 
     # now we want to apply the schema so that we can ultimately use beam's beam.transforms.sql.SqlTransform (very similar to pandas sqldf) when necessary
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
@@ -574,38 +585,6 @@ def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
     full_target_vid_index_schemad_pcoll
     | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
   )
-  # if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0:
-  #   return (
-  #     full_target_vid_index_schemad_pcoll
-  #     | "Beam PL: extract (<target video filename>, <target video seq id>, <camera perspective>, <compressed mov url>, <uncompressed avi url>, <uncompressed avi mirror 1 url>, <uncompressed avi mirror 1 url>) from full_target_vid_index_schemad_pcoll" >> beam.Map(
-  #         lambda full_target_vid_index_schemad_pcoll_row: (
-  #           full_target_vid_index_schemad_pcoll_row.target_video_filename,
-  #           full_target_vid_index_schemad_pcoll_row.video_seq_id,
-  #           full_target_vid_index_schemad_pcoll_row.perspective_cam_id,
-  #           full_target_vid_index_schemad_pcoll_row.compressed_mov_url,
-  #           full_target_vid_index_schemad_pcoll_row.uncompressed_avi_url,
-  #           full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url,
-  #           full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url
-  #         )
-  #       )
-  #     | f"Beam PL: select top {globals.MAX_DATA_FILES} tuples extracted from full_target_vid_index_schemad_pcoll" >> beam.combiners.Top.Of(
-  #         globals.MAX_DATA_FILES # number of elements
-  #       )
-  #     | f"Beam PL: 'explode list of top {globals.MAX_DATA_FILES} tuples extracted from full_target_vid_index_schemad_pcoll" >> beam.FlatMap(lambda list_filtered_target_vid_index_tpl: list_filtered_target_vid_index_tpl)
-  #     | "Beam PL: re-apply schema to for filtered schemad vid index pcoll" >> beam.Map(
-  #         lambda filtered_vid_index_pcoll_row_tpl: beam.Row(
-  #           target_video_filename=filtered_vid_index_pcoll_row_tpl[0],
-  #           video_seq_id=filtered_vid_index_pcoll_row_tpl[1],                            
-  #           perspective_cam_id=filtered_vid_index_pcoll_row_tpl[2],                  
-  #           compressed_mov_url=filtered_vid_index_pcoll_row_tpl[3],
-  #           uncompressed_avi_url=filtered_vid_index_pcoll_row_tpl[4],                     
-  #           uncompressed_avi_mirror_1_url=filtered_vid_index_pcoll_row_tpl[5],   
-  #           uncompressed_avi_mirror_2_url=filtered_vid_index_pcoll_row_tpl[6]
-  #         )
-  #       )
-  #   )
-  # else:
-  #   return full_target_vid_index_schemad_pcoll
   # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
 
 
@@ -619,14 +598,16 @@ def pl__1__bootstrap_corpus_index(pl):
             'tmp_dir': globals.TMP_DIR,
             'data_dir': globals.DATA_ROOT_DIR,
             'corpus_archive': globals.CORPUS_ARCHIVE, 
-            'corpus_ds_path': globals.CORPUS_DS_PATH,
-            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+            
             'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
             'video_ds_path': globals.VIDEO_DS_PATH,
             'utterance_ds_path': globals.UTTERANCE_DS_PATH,
             'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
             'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+            'corpus_ds_path': globals.CORPUS_DS_PATH,
+            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+            'utterance_token_frame_ds_path': globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
+            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH,
           }
         ]
       )
@@ -635,8 +616,6 @@ def pl__1__bootstrap_corpus_index(pl):
           corpus_docs_dir=str(x)
         )
       )
-    # | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION")
-    # | "Beam PL: print path to corpus dir" >> beam.ParDo(PipelinePcollPrinter())
   )
   return corpus_documents_dir_path_schemad_pcoll
   # ******************** bootstrap SignStream corpus: END ********************
@@ -726,23 +705,10 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
     # | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
   )
 
-  # _ = (
-  #   corpus_index_schemad_pcoll
-  #   | "Beam PL: delete file corresponding to fileio.ReadableFile in corpus_index_schemad_pcoll" >> beam.Map(
-  #       lambda corpus_readable_file: tf.io.gfile.remove(corpus_readable_file.metadata.path) # xml_db_path
-  #     )
-  # )
-
   return combined_corpus_index_csv_path_and_max_xml_b64_len_indexed
 
 
 def pl__1__read_corpus_index_csv(pl):
-  # return (
-  #   tpl_combined_results__corpus_index_csv_path__max_len
-  #   # debug
-  #   # | "Beam PL: read tpl_combined_results__corpus_index_csv_path__max_len" >> beam.ParDo(PipelinePcollPrinter(msg="READ tpl_combined_results__corpus_index_csv_path__max_len"))
-  #   | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
-  # )
   return (
     pl
     | "Beam PL: create initial pcoll containing info to load the corpus index csv" >> beam.Create(
@@ -2349,192 +2315,6 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
   return validated_results
 
 
-# def pl__7__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-#   # document_asl_consultant_utterance_index_schemad_pcoll,
-#   # document_asl_consultant_target_video_index_schemad_pcoll,
-#   # vocabulary_index_pcoll,
-#   document_asl_consultant_utterance_token_index_schemad_pcoll,
-#   document_target_video_segment_index_schemad_pcoll
-# ):
-#   """
-#     SCHEMA_COL_NAMES__VIDEO_FRAME_DS = [
-#       'DocumentID',
-#       'ASLConsultantID',
-#       'ASLConsultantID',
-#       'CameraPerspective',
-#       'TargetVideoFilename',
-#       'FrameSequence',
-#       'FramePath',
-#       # 'JPEGBytes'
-#     ]
-#   """
-
-#   # document_target_video_segment_index_schemad_pcoll
-#     # beam.Row(
-#     #   # SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
-#     #   #   'DocumentID',
-#     #   #   'ASLConsultantID',
-#     #   #   'CameraPerspective',
-#     #   #   'SegmentSequence',
-#     #   #   'SegmentVideoFilename',
-#     #   #   'URL'
-#     #   # ]
-#     #   DocumentID=int(target_video_to_segment_mapping_pcoll_row_tpl[0][0]),
-#     #   ASLConsultantID=int(target_video_to_segment_mapping_pcoll_row_tpl[0][1]),
-#     #   CameraPerspective=int(target_video_to_segment_mapping_pcoll_row_tpl[0][2]),                  
-#     #   TargetVideoFilename=str(target_video_to_segment_mapping_pcoll_row_tpl[1][0]),
-#     #   SegmentSequence=int(target_video_to_segment_mapping_pcoll_row_tpl[0][3]),
-#     #   SegmentVideoFilename=str(target_video_to_segment_mapping_pcoll_row_tpl[1][1]),
-#     #   URL=str(target_video_to_segment_mapping_pcoll_row_tpl[1][2])
-#     # )
-#   distinct_document_asl_consultant__to__target_video_pcoll = (
-#     document_target_video_segment_index_schemad_pcoll
-#     | "Beam PL: extract ((<corpus doc id>, <asl consultant id>), (<camera_perspective>, <target video fname>)) from document_target_video_segment_index_schemad_pcoll" >> beam.Map(
-#         lambda document_target_video_segment_index_schemad_pcoll_row: (
-#           (
-#             document_target_video_segment_index_schemad_pcoll_row.DocumentID,
-#             document_target_video_segment_index_schemad_pcoll_row.ASLConsultantID
-#           ),
-#           (
-#             document_target_video_segment_index_schemad_pcoll_row.TargetVideoFilename,
-#             document_target_video_segment_index_schemad_pcoll_row.CameraPerspective
-#           )
-#         )
-#       )
-#     | "Beam PL: select distinct ((<corpus doc id>, <asl consultant id>), (<camera_perspective>, <target video fname>)) from document_asl_consultant_utterance_index_schemad_pcoll" >> beam.Distinct()
-#     # debug
-#     # | "Beam PL: print distinct_document_asl_consultant__to__target_video_pcoll" >> beam.ParDo(PipelinePcollPrinter("distinct_document_asl_consultant__to__target_video_pcoll entry"))
-#   )
-
-#   # extract distinct ((<corpus doc id>, <asl consultant id>), (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>) from document_asl_consultant_utterance_token_index_schemad_pcoll
-#     # document_asl_consultant_utterance_token_index_schemad_pcoll:
-#       # beam.Row(
-#       #   # SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
-#       #   #   'DocumentID',
-#       #   #   'ASLConsultantID',
-#       #   #   'UtteranceSequence',
-#       #   #   'TokenSequence',
-#       #   #   'StartTime',
-#       #   #   'EndTime',
-#       #   #   'TokenID',
-#       #   #   'Field',
-#       #   #   'FieldValue'
-#       #   # ]
-#       #   DocumentID=document_asl_consultant_utterance_token_tpl[0],
-#       #   DocumentFilename=document_asl_consultant_utterance_token_tpl[1],
-#       #   ASLConsultantID=document_asl_consultant_utterance_token_tpl[2],
-#       #   ParticipantName=document_asl_consultant_utterance_token_tpl[3],
-#       #   UtteranceSequence=document_asl_consultant_utterance_token_tpl[4],
-#       #   TokenSequence=document_asl_consultant_utterance_token_tpl[7],
-#       #   StartTime=document_asl_consultant_utterance_token_tpl[8],
-#       #   EndTime=document_asl_consultant_utterance_token_tpl[9],
-#       #   TokenID=document_asl_consultant_utterance_token_tpl[5],
-#       #   Field='', # blank for now
-#       #   FieldValue='' # blank for now
-#       # )
-#   distinct_document_asl_consultant__to__utterance_token_pcoll = (
-#     document_asl_consultant_utterance_token_index_schemad_pcoll
-#     | "Beam PL: extract ((<corpus doc id>, <asl consultant id>), (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)) from document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.Map(
-#         lambda document_asl_consultant_utterance_token_index_schemad_pcoll_row: (
-#           (
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.DocumentID,
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.ASLConsultantID
-#           ),
-#           (
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.UtteranceSequence,
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenSequence,
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.TokenID,
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime,
-#             document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime
-#           )
-#         )
-#       )
-#     | "Beam PL: select distinct ((<corpus doc id>, <asl consultant id>), (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)) from document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.Distinct()
-#     # debug
-#     # | "Beam PL: print distinct_document_asl_consultant__to__utterance_token_pcoll" >> beam.ParDo(PipelinePcollPrinter("distinct_document_asl_consultant__to__utterance_token_pcoll entry"))
-#   )
-
-#   document_asl_consultant__to__target_video_utterance_token_map = (
-#     ({
-#       'target_video_map': distinct_document_asl_consultant__to__target_video_pcoll,
-#       'utterance_token_map': distinct_document_asl_consultant__to__utterance_token_pcoll
-#     })
-#     | "Beam PL: merge target_video_map and utterance_token_map" >> beam.CoGroupByKey()
-#     # the above produces tuples of the form:
-#       # (
-#       #   (<corpus doc id>, <asl consultant id>), # key
-#       #   {
-#       #     'target_video_map': [(<target video fname>, <camera perspective>)], # there may be up to three (corresponding to camera perspective)
-#       #     'utterance_token_map': [(<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)] # there will be many (corresponding to each utterance)
-#       #   }
-#       # )
-#     | "Beam PL: validate/preprocess document_asl_consultant__to__target_video_utterance_token_map" >> beam.FlatMap(validate_preprocess_document_asl_consultant__to__target_video_utterance_token_map_tpl)
-#     # the above produces tuples of the form:
-#       # (
-#       #   corpus_doc_id,
-#       #   asl_consultant_id,
-#       #   _target_video_fname,
-#       #   _camera_perspective,
-#       #   _utterance_seq_id,
-#       #   _token_seq_id,
-#       #   _token_id,
-#       #   _token_start_time,
-#       #   _token_end_time,
-#       #   _token_start_frame,
-#       #   _token_end_frame,
-#       #   frame_seq_paths,
-#       #   _n_existing_frame_images
-#       # )
-    
-#     # debug
-#     # | "Beam PL: print validated document_asl_consultant__to__target_video_utterance_token_map" >> beam.ParDo(PipelinePcollPrinter("validated document_asl_consultant__to__target_video_utterance_token_map entry"))
-#   )
-
-#   document_asl_consultant__to__target_video_utterance_token_map__no_frames_dir = ( # this is most likely due to limiting dataset previously
-#     document_asl_consultant__to__target_video_utterance_token_map
-#     | "Beam PL: select tuples with no frames dir" >> beam.Filter(
-#         lambda validated_document_asl_consultant__to__target_video_utterance_token_map_tpl: 
-#           validated_document_asl_consultant__to__target_video_utterance_token_map_tpl[len(validated_document_asl_consultant__to__target_video_utterance_token_map_tpl)-1]==-1
-#       )
-#     # debug
-#     # | "Beam PL: print document_asl_consultant__to__target_video_utterance_token_map__no_frames_dir" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant__to__target_video_utterance_token_map__no_frames entry"))
-#   )
-
-#   document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir = (
-#     document_asl_consultant__to__target_video_utterance_token_map
-#     | "Beam PL: filter tuples with no frame images" >> beam.Filter(
-#         lambda document_asl_consultant__to__target_video_utterance_token_map_tpl: 
-#           document_asl_consultant__to__target_video_utterance_token_map_tpl[len(document_asl_consultant__to__target_video_utterance_token_map_tpl)-1]!=-1
-#       )
-#     # debug
-#     # | "Beam PL: print document_asl_consultant__to__target_video_utterance_token_map__no_frames" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant__to__target_video_utterance_token_map__no_frames entry"))
-#   )
-
-#   document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir__invalid_frame_bounds = (
-#     document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir
-#     | "Beam PL: filter tuples with invalid frame bounds" >> beam.Filter(
-#         lambda document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir: 
-#           len(document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir[len(document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir)-2])==0
-#       )
-#     # debug
-#     | "Beam PL: print document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir__invalid_frame_bounds" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir__invalid_frame_bounds entry"))
-#   ) 
-
-#   document_asl_consultant__to__target_video_utterance_token_map = ( # all good
-#     document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir
-#     | "Beam PL: filter tuples with valid frame bounds" >> beam.Filter(
-#         lambda document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir: 
-#           len(document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir[len(document_asl_consultant__to__target_video_utterance_token_map__have_frames_dir)-2])>0
-#       )
-#     # debug
-#     # | "Beam PL: print document_asl_consultant__to__target_video_utterance_token_map" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant__to__target_video_utterance_token_map entry"))
-#   )
-
-#   return (
-
-#   ) # document_asl_consultant_utterance_token_frame_index_schemad_pcoll
-
-
 def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
   document_asl_consultant_utterance_token_index_schemad_pcoll,
   document_asl_consultant_target_video_index_schemad_pcoll,
@@ -2750,62 +2530,11 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
     pcoll_label="document_asl_consultant_utterance_token_frame_index_tpl_pcoll"
   )
 
-  # [
-  #   (
-  #     (
-  #       doc_participant_utterance_token_tpl[0], # <corpus doc filename>
-  #       doc_participant_utterance_token_tpl[1], # <participant name>
-  #       doc_participant_utterance_token_tpl[2], # <utterance seq id>
-  #       doc_participant_utterance_token_tpl[4], # <token linguistic text> (ascii representation of the byte-string)
-  #     ), # key
-
-  #     (
-  #       doc_participant_utterance_token_tpl[3], # <token (new) seq id>
-  #       doc_participant_utterance_token_tpl[5], # <token start time>
-  #       doc_participant_utterance_token_tpl[6], # <token end time>
-  #     ) # token data
-  #   ) for doc_participant_utterance_token_tpl in [
-  #       (
-  #         ss_parsed_xmldb_pcoll_row_dict['CORPUS_DOCUMENT_FILENAME'],
-  #         d_participant['PARTICIPANT_NAME'],
-  #         utterance_seq_id,
-  #         token_new_seq_id, 
-  #         d_token['TOKEN_LINGUSTIC_TEXT'], # we get an ascii representation of the byte-string
-  #         d_token['TOKEN_START_TIME'], 
-  #         d_token['TOKEN_END_TIME']
-  #       ) for d_participant in ss_parsed_xmldb_pcoll_row_dict['PARTICIPANT_SEQUENCE']
-  #           for utterance_seq_id, d_utterance in enumerate(d_participant['UTTERANCE_SEQUENCE']) 
-  #             for token_new_seq_id, d_token in enumerate(d_utterance['TOKEN_SEQUENCE'])
-  #     ] 
-  # ]
   doc_consultant_target_video_frame__to__utterance_token_map = (
     document_asl_consultant_utterance_token_frame_index_tpl_pcoll
-      # document_asl_consultant_utterance_token_frame_index_tpl:
-        # (
-        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][0],                   # <doc id>
-        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][1],                   # <asl consultant id>
-        #   doc_consultant_utterance__to__target_video_token_map_tpl[0][2],                   # <utterance seq id>
-        #   token_info_tpl[1]                                                                 # <tok seq id>
-        # ),
-        # (
-        #   token_info_tpl[0],                                                                # <tok vocab id>
-        #   token_info_tpl[2],                                                                # <tok start time>
-        #   token_info_tpl[3],                                                                # <tok end time>
-        #   token_info_tpl[4],                                                                # listof(<frame seq id>)
-        #   doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'],  # listof((<target vid fname>, <camera perspective>))
-        # )
     | "Beam PL: 'explode' to list of ((<doc id>,<asl consultant id>,<camera perspective>,<target vid fname>,<utterance seq id>,<tok seq id>)),(listof(<frame seq id>),<tok vocab id>)) from document_asl_consultant_utterance_token_frame_index_tpl_pcoll" >> beam.Map(
         lambda document_asl_consultant_utterance_token_frame_index_tpl: [
           (
-            # document_asl_consultant_utterance_token_frame_index_tpl[0][0],  # <doc id>
-            # document_asl_consultant_utterance_token_frame_index_tpl[0][1],  # <asl consultant id>
-            # target_vid_frame_seq_tpl[0][1],                                 # <camera perspective>
-            # target_vid_frame_seq_tpl[0][0],                                 # <target vid fname>
-            # document_asl_consultant_utterance_token_frame_index_tpl[0][2],  # <utterance seq id>
-            # document_asl_consultant_utterance_token_frame_index_tpl[0][3],  # <tok seq id>
-            # target_vid_frame_seq_tpl[1],                                    # <frame seq id>
-            # document_asl_consultant_utterance_token_frame_index_tpl[1][0],  # <tok vocab id>
-
             (
               document_asl_consultant_utterance_token_frame_index_tpl[0][0],  # <doc id>
               document_asl_consultant_utterance_token_frame_index_tpl[0][1],  # <asl consultant id>
@@ -3886,105 +3615,102 @@ def run():
 
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
-    pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
+
+  if not dataset_csv_files_exist():
+
+    with beam.Pipeline(options=pipeline_options) as pl:
+      full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
+      pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
-    filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
-    merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
-    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
+      filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
+      merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
+      merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    pl__1__bootstrap_corpus_index(pl)
-  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
-  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
-  #   for reading yet
-  with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-    pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+    with beam.Pipeline(options=pipeline_options) as pl:
+      pl__1__bootstrap_corpus_index(pl)
+    # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
+    #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+    #   for reading yet
+    with beam.Pipeline(options=pipeline_options) as pl:
+      corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+      pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
   
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
-    corpus_index_schemad_pcoll = pl__1__read_corpus_index_csv(pl)
-    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
-    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
+      corpus_index_schemad_pcoll = pl__1__read_corpus_index_csv(pl)
+      corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
+      ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
 
-    # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+      # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
 
-    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
-    pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+      asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
+      pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
 
-    document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      corpus_index_schemad_pcoll, 
-      asl_consultant_index_schemad_pcoll
-    )
-    pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
+      document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
+        ss_parsed_xmldb_pcoll, 
+        corpus_index_schemad_pcoll, 
+        asl_consultant_index_schemad_pcoll
+      )
+      pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
 
-    document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll
-    )
-    pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
+      document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
+        ss_parsed_xmldb_pcoll, 
+        document_asl_consultant_index_schemad_pcoll
+      )
+      pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll, 
-      full_target_vid_index_schemad_pcoll
-    )
-    pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-    pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-    pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
+      document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
+        ss_parsed_xmldb_pcoll, 
+        document_asl_consultant_index_schemad_pcoll, 
+        full_target_vid_index_schemad_pcoll
+      )
+      pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+      pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+      pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
 
-    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll
-    )
-    pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
-    pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
+      vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+        ss_parsed_xmldb_pcoll, 
+        document_asl_consultant_index_schemad_pcoll
+      )
+      pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
+      pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
-      document_asl_consultant_target_video_index_schemad_pcoll
-    )
-    pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
+      document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
+        document_asl_consultant_target_video_index_schemad_pcoll
+      )
+      pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-      document_asl_consultant_utterance_token_index_schemad_pcoll,
-      document_asl_consultant_target_video_index_schemad_pcoll,
-      document_asl_consultant_target_video_frame_index_schemad_pcoll
-    )
-    pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+      document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+        document_asl_consultant_utterance_token_index_schemad_pcoll,
+        document_asl_consultant_target_video_index_schemad_pcoll,
+        document_asl_consultant_target_video_frame_index_schemad_pcoll
+      )
+      pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    vid_indexes_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_INDEXES_DIR])
-    )
-    pl__X__rmdir(vid_indexes_dir_path_pcoll, globals.VIDEO_INDEXES_DIR)
-  with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_docs_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([globals.CORPUS_DIR])
-    )
-    pl__X__rmdir(corpus_docs_dir_path_pcoll, globals.CORPUS_DIR)
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   stitched_video_frames_dir_path_pcoll = (
-  #     pl
-  #     | f"Beam PL: create {globals.STICHED_VIDEO_FRAMES_DIR} pcoll for cleanup" >> beam.Create([globals.STICHED_VIDEO_FRAMES_DIR])
-  #   )
-  #   pl__X__rmdir(stitched_video_frames_dir_path_pcoll, globals.STICHED_VIDEO_FRAMES_DIR)
-  with beam.Pipeline(options=pipeline_options) as pl:
-    vid_download_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_DIR])
-    )
-    pl__X__rmdir(vid_download_dir_path_pcoll, globals.VIDEO_DIR)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      vid_indexes_dir_path_pcoll = (
+        pl
+        | f"Beam PL: create {globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_INDEXES_DIR])
+      )
+      pl__X__rmdir(vid_indexes_dir_path_pcoll, globals.VIDEO_INDEXES_DIR)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      corpus_docs_dir_path_pcoll = (
+        pl
+        | f"Beam PL: create {globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([globals.CORPUS_DIR])
+      )
+      pl__X__rmdir(corpus_docs_dir_path_pcoll, globals.CORPUS_DIR)
+    with beam.Pipeline(options=pipeline_options) as pl:
+      vid_download_dir_path_pcoll = (
+        pl
+        | f"Beam PL: create {globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_DIR])
+      )
+      pl__X__rmdir(vid_download_dir_path_pcoll, globals.VIDEO_DIR)
   
 
   print(f"Beam PL: ALL DONE!")

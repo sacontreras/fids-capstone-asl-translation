@@ -114,6 +114,8 @@ def run(max_data_files, data_dir, use_beam=False):
 
   globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_DS_FNAME)
 
+  globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
+
   globals.VOCABULARY_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VOCABULARY_DS_FNAME)
   # ******************** global variables set at runtime: END ********************
 
