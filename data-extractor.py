@@ -108,6 +108,10 @@ def run(max_data_files, data_dir, use_beam=False):
 
   globals.VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_DS_FNAME)
 
+  globals.VIDEO_SEGMENT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_SEGMENT_DS_FNAME)
+
+  globals.VIDEO_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_FRAME_DS_FNAME)
+
   globals.UTTERANCE_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_DS_FNAME)
 
   globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_VIDEO_DS_FNAME)

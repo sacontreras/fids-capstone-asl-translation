@@ -64,11 +64,11 @@ echo ''
 #   --work-dir $WORK_DIR
 # echo ''
 
-# # Train and evaluate the model
-# echo '>> Training'
-# run python trainer/task.py \
-#   --work-dir $WORK_DIR
-# echo ''
+# Train and evaluate the model
+echo '>> Training'
+run python train.py \
+  --work-dir $WORK_DIR
+echo ''
 
 # # Get the model path
 # EXPORT_DIR=$WORK_DIR/model/export/final

@@ -1,60 +1,40 @@
-import csv
 import io
 import os
-from pickle import NONE
 import random
 import sys
-import typing
 import urllib
 import zipfile
+from importlib import import_module
 
 import apache_beam as beam
+# from apache_beam.transforms.sql import SqlTransform
+import apache_beam.transforms.sql
 # import apache_beam.runners.interactive.interactive_beam as ib
 import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
-# from apache_beam.transforms.sql import SqlTransform
-import apache_beam.transforms.sql
 
 import globals
-import utils
 import preprocessor__common
+import utils
 
-from importlib import import_module
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
-import cv2
-import time
 import base64
-import re
 import math
-from tensorflow.keras.preprocessing.image import img_to_array, load_img
+import re
+import time
+
+import cv2
+
+import beam__common
+
+# from tensorflow.keras.preprocessing.image import img_to_array, load_img
+
 
 
 def prepare_output_str(str, label=""):
   return f"{label+': ' if len(label)>0 else ''}{str}"
-
-
-def dataset_csv_files_exist(dataset_csv_paths=None):
-  if dataset_csv_paths is None or len(dataset_csv_paths)==0:
-    dataset_csv_paths = [
-      globals.ASL_CONSULTANT_DS_PATH,
-      globals.VIDEO_DS_PATH,
-      globals.UTTERANCE_DS_PATH,
-      globals.UTTERANCE_VIDEO_DS_PATH,
-      globals.UTTERANCE_TOKEN_DS_PATH,
-      globals.CORPUS_DS_PATH,
-      globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-      globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
-      globals.VOCABULARY_DS_PATH
-    ]
-  for dataset_csv_path in dataset_csv_paths:
-    if not tf.io.gfile.exists(dataset_csv_path):
-      # print(f"Dataset {dataset_csv_path} not found")
-      return False
-    else:
-      print(f"Found dataset {dataset_csv_path}")
-  return True
 
 
 def boostrap_signstream_corpus(d_corpus_info, label=""):
@@ -62,18 +42,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   d_corpus_info MUST be a dict as follows:
     {
       'tmp_dir': globals.TMP_DIR,
-      'data_dir': globals.DATA_ROOT_DIR,
-      'corpus_archive': globals.CORPUS_ARCHIVE, 
-      
-      'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-      'video_ds_path': globals.VIDEO_DS_PATH,
-      'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-      'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-      'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-      'corpus_ds_path': globals.CORPUS_DS_PATH,
-      'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-      'utterance_token_frame_ds_path': globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
-      'vocabulary_ds_path': globals.VOCABULARY_DS_PATH,
+      'corpus_archive': globals.CORPUS_ARCHIVE
     }
 
   this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
@@ -88,22 +57,21 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
 
   print(prepare_output_str(f"CORPUS-INDEX BOOTSTRAP INFO: {d_corpus_info}", label=label))
 
-  corpus_parent_dir = d_corpus_info['tmp_dir']
-  corpus_dir = os.path.join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
-
   # download archive
   """
   requires:
     d_corpus_info['corpus_archive']
     d_corpus_info['tmp_dir']
   """
+  corpus_parent_dir = d_corpus_info['tmp_dir']
+  corpus_dir = os.path.join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
   remote_archive_path = os.path.join('http://secrets.rutgers.edu/dai/xml', d_corpus_info['corpus_archive'])
   local_archive_parent_dir = d_corpus_info['tmp_dir']
   local_archive_path = os.path.join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
   utils.download(
-      remote_archive_path, 
-      local_archive_path, 
-      block_sz=globals._1MB
+    remote_archive_path, 
+    local_archive_path, 
+    block_sz=globals._1MB
   )
   zip_ref = zipfile.ZipFile(local_archive_path, 'r')
   print(f"unzipping {local_archive_path} to {corpus_dir}...")
@@ -121,91 +89,6 @@ def beam_row_to_csv_string(row):
   d_row = row.as_dict()
   return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
 
-
-def sort_keyed_tuple_data(keyed_tuple):
-  """
-  keyed_tuple:
-    (<key>, <data to be sorted (must be a list)>)
-  """
-  (key, data_list) = keyed_tuple
-  data_list.sort() # in-place
-  return data_list # now sorted
-
-
-def _load_csv(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None, max_len=None):
-  """
-  this function opens the "readable file" (as a CSV),
-    reads its contents and returns a list of its rows
-  
-  by default, each row is a list of elements (separated initially by comma (',') of course)
-
-  if rows_to_dicts is True, each row is converted to a dict keyed by field names
-    if dict_field_names is None
-      csv.DictReader uses the first row in the csv file as field names
-    otherwise
-      dict_field_names provides field names (keys of each dict)
-  """
-  if max_len is not None and max_len>0:
-    csv.field_size_limit(max_len)
-  if sys.version_info >= (3,0):
-    sel_csv_readable_file = io.TextIOWrapper(sel_csv_readable_file)
-  if rows_to_dicts:
-    csv_reader = csv.DictReader(sel_csv_readable_file,fieldnames=dict_field_names,skipinitialspace=True) if dict_field_names is not None else csv.DictReader(sel_csv_readable_file,skipinitialspace=True)
-  else:
-    csv_reader = csv.reader(sel_csv_readable_file,skipinitialspace=True)
-  if dict_field_names is not None:
-      next(csv_reader) # skip past first row (contains column names that we do not want to use)
-  return csv_reader
-
-
-def load_csv(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_len=None):
-  return _load_csv(
-    beam.io.filesystems.FileSystems.open(sel_csv_path), 
-    rows_to_dicts, 
-    dict_field_names,
-    max_len
-  )
-
-
-def load_vid_index_csv(sel_csv_path):
-  """
-  this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
-  so we fix the definition of dict_field_names to:
-    dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
-  """
-  if sel_csv_path is not None and len(sel_csv_path)>0:
-    return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
-  else:
-    return []
-
-
-class PipelinePcollElementProcessor(beam.DoFn):
-  def __init__(self, fn_pcoll_element_processor, kargs=None, return_result=False):
-    self.fn_pcoll_element_processor = fn_pcoll_element_processor
-    self.kargs = kargs
-    self.return_result = return_result
-
-  def process(self, pcoll_element):
-    result = self.fn_pcoll_element_processor(pcoll_element, **self.kargs) if self.kargs is not None else self.fn_pcoll_element_processor(pcoll_element)
-    return result if self.return_result else [pcoll_element]
-
-
-def print_element(pcoll_element, label="", msg=""):
-    print(f"{label+': ' if len(label)>0 else ''}{msg+': ' if len(msg)>0 else ''}{pcoll_element}")
-    return [pcoll_element] # passthrough
-class PipelinePcollPrinter(PipelinePcollElementProcessor):
-  """
-  prints each element of the pcoll
-  should generally only be used for debugging
-  """
-  def __init__(self, label="", msg=""):
-    super(PipelinePcollPrinter, self).__init__(
-      fn_pcoll_element_processor=print_element,
-      kargs={'label':label,'msg':msg},
-      return_result=True
-    )
-    self.label = label
-    self.msg = msg
 
 
 def get_video_segment_download_info(vid_index_schemad_pcoll_row):
@@ -405,22 +288,22 @@ class CorpusDocumentFileProcessor(beam.DoFn):
     return [row]
 
 
-def load_corpus_index_csv(d_corpus_info):
-  """
-  this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
-  so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
+# def load_corpus_index_csv(d_corpus_info):
+#   """
+#   this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
+#   so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
 
-  d_corpus_info: {
-    'corpus_index_csv_path': globals.CORPUS_DS_PATH,
-    'max_len': globals.MAX_RAW_XML_B64_LEN
-  }
-  """
-  return load_csv(
-    d_corpus_info['corpus_index_csv_path'], 
-    rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
-    max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes since due to base-64 encoding
-  )
+#   d_corpus_info: {
+#     'corpus_index_csv_path': globals.CORPUS_DS_PATH,
+#     'max_len': globals.MAX_RAW_XML_B64_LEN
+#   }
+#   """
+#   return load_csv(
+#     d_corpus_info['corpus_index_csv_path'], 
+#     rows_to_dicts=True, 
+#     dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
+#     max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes since due to base-64 encoding
+#   )
   
 
 class RowIndexer(beam.DoFn):
@@ -433,11 +316,23 @@ class RowIndexer(beam.DoFn):
     return [tpl]
 
 
-def decode_XML(d_corpus_index_schemad_pcoll_row):
+def decode_XML(corpus_index_schemad_pcoll_row):
   """
-  d_corpus_index_schemad_pcoll_row: {'DocumentID': <corpus doc id (as string!)>, 'Filename': <corpus doc filename>, 'XML_B64': <raw xml (base64-encoded)>, 'LEN': <length of raw xml (base64-encoded)>}
+  corpus_index_schemad_pcoll_row:
+    beam.Row(
+      # SCHEMA_COL_NAMES__CORPUS_DS = [
+      #   'DocumentID',
+      #   'Filename',
+      #   'XML_B64',
+      #   'LEN'
+      # ]
+      DocumentID=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
+      Filename=str(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
+      XML_B64=d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
+      LEN=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
+    )
   """
-  raw_XML_b64_as_str = d_corpus_index_schemad_pcoll_row['XML_B64']
+  raw_XML_b64_as_str = corpus_index_schemad_pcoll_row.XML_B64
   raw_XML_b64_as_str = str(raw_XML_b64_as_str[2:-1]) # strip
   raw_XML_b64_to_ascii = raw_XML_b64_as_str.encode('ascii')
   raw_XML_b64 = base64.b64decode(raw_XML_b64_to_ascii)
@@ -445,21 +340,12 @@ def decode_XML(d_corpus_index_schemad_pcoll_row):
   # print(raw_xml)
   return [
     {
-      'DocumentID': d_corpus_index_schemad_pcoll_row['DocumentID'], 
-      'Filename': d_corpus_index_schemad_pcoll_row['Filename'],
+      'DocumentID': corpus_index_schemad_pcoll_row.DocumentID, 
+      'Filename': corpus_index_schemad_pcoll_row.Filename,
       'XML': raw_xml,
       'LEN': len(raw_xml)
     }
   ]
-
-
-class GlobalVarValueAssigner(PipelinePcollElementProcessor):
-  def __init__(self, fn_assign_to_global, kargs=None):
-    super(GlobalVarValueAssigner, self).__init__(
-      fn_pcoll_element_processor=fn_assign_to_global,
-      kargs=kargs,
-      return_result=True
-    )
 
 
 def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
@@ -467,17 +353,6 @@ def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
     # debug
     # print(f"ASSIGNED globals.MAX_RAW_XML_B64_LEN={globals.MAX_RAW_XML_B64_LEN}")
     return [max_xml_b64_len]
-
-
-def pl__X__sort_pcoll(pcoll, pcoll_label):
-  return (
-      pcoll
-      | f"Beam PL: key {pcoll_label} for sort" >> beam.Map(
-          lambda pcoll_row: (1, pcoll_row)
-        )
-      | f"Beam PL: 'implode' keyed {pcoll_label} for sort" >> beam.GroupByKey()
-      | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
-    )
 
 
 def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
@@ -490,7 +365,7 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
         shard_name_template="",
         header=",".join(schema_col_names)
       )
-    | f"Beam PL: print path to {pcoll_label} csv" >> beam.ParDo(PipelinePcollPrinter(msg=f"{pcoll_label} CSV WRITTEN TO STORAGE"))
+    | f"Beam PL: print path to {pcoll_label} csv" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg=f"{pcoll_label} CSV WRITTEN TO STORAGE"))
   )
 
 
@@ -517,7 +392,7 @@ def pl__1__bootstrap_target_video_index(pl):
         ]
       )
     | "Beam PL: bootstrap target video index" >> beam.Map(preprocessor__common.boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
-    | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
+    | "Beam PL: read video index into pcoll" >> beam.FlatMap(beam__common.load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
     # now we want to apply the schema so that we can ultimately use beam's beam.transforms.sql.SqlTransform (very similar to pandas sqldf) when necessary
@@ -532,13 +407,13 @@ def pl__1__bootstrap_target_video_index(pl):
         )
       )
     # debug
-    # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(PipelinePcollPrinter())  # passthrough but comment out for production
+    # | "Beam PL: print schemad video index pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter())  # passthrough but comment out for production
   ) # full_target_vid_index_schemad_pcoll
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: END ********************
 
 
 def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll):
-  sorted_full_target_vid_index_schemad_pcoll = pl__X__sort_pcoll(full_target_vid_index_schemad_pcoll, pcoll_label="full_target_vid_index")
+  sorted_full_target_vid_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(full_target_vid_index_schemad_pcoll, pcoll_label="full_target_vid_index")
   sorted_corpus_index_csv_rows_pcoll = (
     sorted_full_target_vid_index_schemad_pcoll
     | "Beam PL: re-apply schema to sorted_full_target_vid_index" >> beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam.Row(
@@ -561,24 +436,6 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll):
   )
 
 
-def pl__1__read_target_vid_index_csv(pl):
-  return (
-    pl
-    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
-    | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
-    | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-          target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
-          video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-          perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-          compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
-          uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-          uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-          uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
-        )
-      )
-  ) # full_target_vid_index_schemad_pcoll
-
-
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
   # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
   return (
@@ -596,18 +453,7 @@ def pl__1__bootstrap_corpus_index(pl):
         [
           {
             'tmp_dir': globals.TMP_DIR,
-            'data_dir': globals.DATA_ROOT_DIR,
-            'corpus_archive': globals.CORPUS_ARCHIVE, 
-            
-            'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-            'video_ds_path': globals.VIDEO_DS_PATH,
-            'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-            'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-            'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-            'corpus_ds_path': globals.CORPUS_DS_PATH,
-            'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-            'utterance_token_frame_ds_path': globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
-            'vocabulary_ds_path': globals.VOCABULARY_DS_PATH,
+            'corpus_archive': globals.CORPUS_ARCHIVE
           }
         ]
       )
@@ -655,7 +501,7 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
         )
       )
   )
-  sorted_corpus_index_pcoll = pl__X__sort_pcoll(corpus_index_pcoll, pcoll_label="corpus_index")
+  sorted_corpus_index_pcoll = beam__common.pl__X__sort_pcoll(corpus_index_pcoll, pcoll_label="corpus_index")
   sorted_corpus_index_csv_rows_pcoll = (
     sorted_corpus_index_pcoll
     | "Beam PL: re-apply schema to sorted_corpus_index" >> beam.Map(
@@ -680,20 +526,20 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
     | "Beam PL: select LEN" >> beam.Map(lambda corpus_index_schemad_pcoll_row: corpus_index_schemad_pcoll_row.LEN)
     | beam.CombineGlobally(lambda corpus_index_b64_doc_length_rows: max(corpus_index_b64_doc_length_rows or [None]))
     # debug
-    # | "Beam PL: print max (b64-encoded) length corpus doc" >> beam.ParDo(PipelinePcollPrinter(msg="MAX (b64-encoded) DOC LENGTH"))
+    # | "Beam PL: print max (b64-encoded) length corpus doc" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="MAX (b64-encoded) DOC LENGTH"))
   )
   corpus_index_csv_path_indexed = (
     corpus_index_csv_path
     | "Beam PL: apply RowIndex to corpus index csv path" >> beam.ParDo(RowIndexer(var_name_prefix="corpus_index_csv_path_id"))
     # debug
-    # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
+    # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
   )
   max_xml_b64_len_indexed = (
     max_xml_b64_len
     | "Beam PL: assign to global var (globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
     | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer(var_name_prefix="max_xml_b64_len_id"))
     # debug
-    # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
+    # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
   )
   combined_corpus_index_csv_path_and_max_xml_b64_len_indexed = (
     ({
@@ -702,27 +548,29 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
     })
     | "Beam PL: merge corpus_index_csv_path and max_len" >> beam.CoGroupByKey()
     # debug
-    # | "Beam PL: print combined results" >> beam.ParDo(PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
+    # | "Beam PL: print combined results" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="READ CORPUS INDEX CSV TO PCOLL"))
   )
 
   return combined_corpus_index_csv_path_and_max_xml_b64_len_indexed
 
 
-def pl__1__read_corpus_index_csv(pl):
-  return (
-    pl
-    | "Beam PL: create initial pcoll containing info to load the corpus index csv" >> beam.Create(
-        [{
-          'corpus_index_csv_path': globals.CORPUS_DS_PATH,
-          'max_len': globals.MAX_RAW_XML_B64_LEN
-        }]
-      )
-    | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
-  )
-
-
 def pl__2__decode_XML(corpus_index_schemad_pcoll):
   # each row is of the form {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
+  """
+  corpus_index_schemad_pcoll:
+    beam.Row(
+      # SCHEMA_COL_NAMES__CORPUS_DS = [
+      #   'DocumentID',
+      #   'Filename',
+      #   'XML_B64',
+      #   'LEN'
+      # ]
+      DocumentID=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
+      Filename=str(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
+      XML_B64=d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
+      LEN=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
+    )
+  """
   return (
     corpus_index_schemad_pcoll
     | "Beam PL: extract/decode base-64 encoded XML from corpus index document" >> beam.Map(decode_XML)
@@ -850,7 +698,7 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
         ]
       )
     # debug
-    | "Beam PL: print saved vid index path" >> beam.ParDo(PipelinePcollPrinter(msg="READ SAVED VID INDEX PATH"))
+    | "Beam PL: print saved vid index path" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="READ SAVED VID INDEX PATH"))
   )
 
 
@@ -942,7 +790,7 @@ def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
     )
     | "Beam PL: 'explode' participant list into pcoll of individual participant records, keyed by name" >> beam.FlatMap(lambda participant_tpl: participant_tpl)
     # debug
-    # | "Beam PL: print participant record for document" >> beam.ParDo(PipelinePcollPrinter(msg="participant record"))
+    # | "Beam PL: print participant record for document" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="participant record"))
     | "Beam PL: group participants keyed by named" >> beam.GroupByKey()
     # the above produces tuples of the form:
     #   (<participant name>, [(<participant age (as string)>, participant_gender)])
@@ -964,12 +812,12 @@ def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
       )
     )
     # debug
-    # | "Beam PL: print asl_consultant_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="asl_consultant_index_schemad_pcoll entry"))
+    # | "Beam PL: print asl_consultant_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="asl_consultant_index_schemad_pcoll entry"))
   )
 
 
 def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
-  sorted_asl_consultant_index_schemad_pcoll = pl__X__sort_pcoll(asl_consultant_index_schemad_pcoll, pcoll_label="asl_consultant_index")
+  sorted_asl_consultant_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(asl_consultant_index_schemad_pcoll, pcoll_label="asl_consultant_index")
   sorted_asl_consultant_index_csv_rows_pcoll = (
     sorted_asl_consultant_index_schemad_pcoll
     | "Beam PL: re-apply schema to sorted_asl_consultant_index" >> beam.Map(lambda sorted_asl_consultant_index_schemad_pcoll_row: beam.Row(
@@ -1002,7 +850,7 @@ def pl__5__create_document_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pc
     )
     | "Beam PL: 'explode' document-participant list into pcoll of individual document-participant records, keyed by name" >> beam.FlatMap(lambda document_participant_tpl: document_participant_tpl)
     # debug
-    # | "Beam PL: print document-participant record" >> beam.ParDo(PipelinePcollPrinter(msg="document-participant record"))
+    # | "Beam PL: print document-participant record" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document-participant record"))
     | "Beam PL: group document-participants keyed by document filename" >> beam.GroupByKey()
     # the above produces tuples of the form:
     #   (<document filename>, [<participant name>])
@@ -1017,18 +865,18 @@ def pl__5__create_document_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pc
     | "Beam PL: 'explode' row as list of (<document filename>, <participant name>) into a pcoll where each row is an individual (<document filename>, <participant name>)" >> beam.FlatMap(lambda list_document_participant: list_document_participant)
     # now we have a pcoll with rows as (<document filename>, <participant name>)
     # debug
-    # | "Beam PL: print document-participant records" >> beam.ParDo(PipelinePcollPrinter(msg="document-participant entry"))
+    # | "Beam PL: print document-participant records" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document-participant entry"))
   )
 
   document_id_pcoll = (
     corpus_index_schemad_pcoll
     | "Beam PL: extract (<document filename>, <document id>) from corpus_index_schemad_pcoll" >> beam.Map(
-        lambda corpus_index_dict: (
-          corpus_index_dict['Filename'],
-          corpus_index_dict['DocumentID']
+        lambda corpus_index_schemad_pcoll_row: (
+          corpus_index_schemad_pcoll_row.Filename,
+          corpus_index_schemad_pcoll_row.DocumentID
         )
       )
-    # | "Beam PL: print document-id-to-filename records" >> beam.ParDo(PipelinePcollPrinter(msg="document-id-to-filename entry"))
+    # | "Beam PL: print document-id-to-filename records" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document-id-to-filename entry"))
   )
 
   participant_name_doc_id = (
@@ -1052,7 +900,7 @@ def pl__5__create_document_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pc
       )
     | "Beam PL: 'explode' doc-id-to-participant-name lists" >> beam.FlatMap(lambda list_doc_id_to_participant_name_tpl: list_doc_id_to_participant_name_tpl)
     # debug
-    # | "Beam PL: print merged document_id_pcoll and document_participant_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="merged document_id_pcoll and document_participant_pcoll entry"))
+    # | "Beam PL: print merged document_id_pcoll and document_participant_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="merged document_id_pcoll and document_participant_pcoll entry"))
   )
 
   participant_name_asl_constultant_id = (
@@ -1064,7 +912,7 @@ def pl__5__create_document_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pc
         )
       )
       # debug
-    # | "Beam PL: print extracted (<participant name>, <asl consultant id>) from asl_consultant_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="extracted (<participant name>, <asl consultant id>) from asl_consultant_index_schemad_pcoll"))
+    # | "Beam PL: print extracted (<participant name>, <asl consultant id>) from asl_consultant_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="extracted (<participant name>, <asl consultant id>) from asl_consultant_index_schemad_pcoll"))
   )
 
   document_asl_consultant_index_schemad_pcoll = (
@@ -1094,7 +942,7 @@ def pl__5__create_document_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pc
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_mapping" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_mapping entry"))
+    # | "Beam PL: print document_asl_consultant_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("document_asl_consultant_mapping entry"))
   )
 
   return document_asl_consultant_index_schemad_pcoll
@@ -1111,7 +959,7 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
       )
     | "Beam PL: select distinct document_asl_consultant_index rows" >> beam.Distinct()
   )
-  sorted_distinct_document_asl_consultant_index_schemad_pcoll= pl__X__sort_pcoll(distinct_document_asl_consultant_index_schemad_pcoll, pcoll_label="distinct_document_asl_consultant_index")
+  sorted_distinct_document_asl_consultant_index_schemad_pcoll= beam__common.pl__X__sort_pcoll(distinct_document_asl_consultant_index_schemad_pcoll, pcoll_label="distinct_document_asl_consultant_index")
   sorted_distinct_document_asl_consultant_index_csv_rows_pcoll = (
     sorted_distinct_document_asl_consultant_index_schemad_pcoll
     | "Beam PL: apply minimal schema to create final document_asl_consultant_index_schemad_pcoll of distinct rows" >> beam.Map(
@@ -1180,7 +1028,7 @@ def pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(ss_parse
         )
       )
     # debug
-    # | "Beam PL: print corpus_document_participant_utterance_mapping" >> beam.ParDo(PipelinePcollPrinter("corpus_document_participant_utterance_mapping entry"))
+    # | "Beam PL: print corpus_document_participant_utterance_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("corpus_document_participant_utterance_mapping entry"))
   )
 
   corpus_document_participant_doc_id_asl_consultant_id_mapping = (
@@ -1192,7 +1040,7 @@ def pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(ss_parse
         )
       )
     # debug
-    # | "Beam PL: print corpus_document_participant_doc_id_asl_consultant_id_mapping" >> beam.ParDo(PipelinePcollPrinter("corpus_document_participant_doc_id_asl_consultant_id_mapping entry"))
+    # | "Beam PL: print corpus_document_participant_doc_id_asl_consultant_id_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("corpus_document_participant_doc_id_asl_consultant_id_mapping entry"))
   )
 
   document_asl_consultant_utterance_index_schemad_pcoll = (
@@ -1240,7 +1088,7 @@ def pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(ss_parse
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_utterance_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_index_schemad_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_utterance_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter("document_asl_consultant_utterance_index_schemad_pcoll entry"))
   )
 
   return document_asl_consultant_utterance_index_schemad_pcoll
@@ -1271,7 +1119,7 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
       )
     | "Beam PL: select distinct document_asl_consultant_utterance_index rows" >> beam.Distinct()
   )
-  sorted_distinct_document_asl_consultant_utterance_index_schemad_pcoll= pl__X__sort_pcoll(distinct_document_asl_consultant_utterance_index_schemad_pcoll, pcoll_label="distinct_document_asl_consultant_utterance_index")
+  sorted_distinct_document_asl_consultant_utterance_index_schemad_pcoll= beam__common.pl__X__sort_pcoll(distinct_document_asl_consultant_utterance_index_schemad_pcoll, pcoll_label="distinct_document_asl_consultant_utterance_index")
   sorted_distinct_document_asl_consultant_utterance_index_csv_rows_pcoll = (
     sorted_distinct_document_asl_consultant_utterance_index_schemad_pcoll
     | "Beam PL: apply minimal schema to create final document_asl_consultant_utterance_index_schemad_pcoll of distinct rows" >> beam.Map(
@@ -1554,7 +1402,7 @@ def pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
     #   ((<corpus doc filename>, <participant name>, <utterance seq id>, <token linguistic text>), (<token (new) seq id>, <token start time>, <token end time>))
     | "Beam PL: select distinct doc_participant_utterance_token_mapping tuples" >> beam.Distinct()
     # debug
-    # | "Beam PL: print doc_participant_utterance_token_mapping" >> beam.ParDo(PipelinePcollPrinter("doc_participant_utterance_token_mapping entry"))
+    # | "Beam PL: print doc_participant_utterance_token_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("doc_participant_utterance_token_mapping entry"))
   )
 
   # now extract distinct token linguistic text from doc_participant_utterance_token_mapping to build the final vocabulary index
@@ -1577,7 +1425,7 @@ def pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
         )
       )
     # debug
-    # | "Beam PL: print vocabulary" >> beam.ParDo(PipelinePcollPrinter("vocabulary token"))
+    # | "Beam PL: print vocabulary" >> beam.ParDo(beam__common.PipelinePcollPrinter("vocabulary token"))
   )
 
   document_asl_consultant_mapping = (
@@ -1638,7 +1486,7 @@ def pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
     # the above produces tuples in the form:
     #   ((<corpus doc id>, <asl consultant id>, <utterance seq id>, <token (new) seq id>), (<document fname>, <participant name>, <token linguistic text>, <token start time>, <token end time>))
     # debug
-    # | "Beam PL: print validated merged_doc_participant_utterance_token" >> beam.ParDo(PipelinePcollPrinter("merged_doc_participant_utterance_token (validated) entry"))
+    # | "Beam PL: print validated merged_doc_participant_utterance_token" >> beam.ParDo(beam__common.PipelinePcollPrinter("merged_doc_participant_utterance_token (validated) entry"))
   )
 
   # transform merged_doc_participant_utterance_token tuples:
@@ -1751,7 +1599,7 @@ def pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(ss
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_token_index_schemad_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_utterance_token_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter("document_asl_consultant_utterance_token_index_schemad_pcoll entry"))
   )
 
   return vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll
@@ -1769,7 +1617,7 @@ def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
       Token=vocabulary_index_pcoll_row_tpl[1]
     )
   """
-  sorted_vocabulary_index_pcoll = pl__X__sort_pcoll(vocabulary_index_pcoll, pcoll_label="vocabulary_index")
+  sorted_vocabulary_index_pcoll = beam__common.pl__X__sort_pcoll(vocabulary_index_pcoll, pcoll_label="vocabulary_index")
   sorted_vocabulary_index_csv_rows_pcoll = (
     sorted_vocabulary_index_pcoll
     | "Beam PL: re-apply schema to sorted_vocabulary_index_pcoll rows" >> beam.Map(
@@ -1837,7 +1685,7 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
       )
     | "Beam PL: select distinct document_asl_consultant_utterance_token_index rows" >> beam.Distinct()
   )
-  sorted_document_asl_consultant_utterance_token_index_schemad_pcoll = pl__X__sort_pcoll(
+  sorted_document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(
     distinct_document_asl_consultant_utterance_token_index_pcoll, 
     pcoll_label="document_asl_consultant_utterance_token_index"
   )
@@ -2127,9 +1975,9 @@ def pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll
       )
     | "Beam PL: select distict ((<corpus doc id>, <asl consultant id>, <camera perspective>), (<target video filename>, <target video frame seq id>, <target video frame path>))" >> beam.Distinct()
     # debug
-    # | "Beam PL: print document_asl_consultant_target_video_frame_index_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_frame_index_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_target_video_frame_index_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document_asl_consultant_target_video_frame_index_pcoll entry"))
   )
-  sorted_document_asl_consultant_target_video_frame_index_pcoll = pl__X__sort_pcoll(
+  sorted_document_asl_consultant_target_video_frame_index_pcoll = beam__common.pl__X__sort_pcoll(
     document_asl_consultant_target_video_frame_index_pcoll, 
     pcoll_label="document_asl_consultant_target_video_frame_index_pcoll"
   )
@@ -2158,7 +2006,7 @@ def pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_target_video_frame_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_frame_index_schemad_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_target_video_frame_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document_asl_consultant_target_video_frame_index_schemad_pcoll entry"))
   )
 
   return document_asl_consultant_target_video_frame_index_schemad_pcoll
@@ -2417,7 +2265,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         )
       )
     # debug
-    # | "Beam PL: print doc_consultant__to__utterance_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant__to__utterance_token_map entry"))
+    # | "Beam PL: print doc_consultant__to__utterance_token_map" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant__to__utterance_token_map entry"))
   )
 
   doc_consultant_utterance__to__target_video_token_map = (
@@ -2454,7 +2302,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         )
       )
     # debug
-    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map entry"))
+    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map entry"))
   )
 
   doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_MAX_CAMERA_PERSPECTIVES = (
@@ -2463,7 +2311,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])<=globals.MAX_CAMERA_PERSPECTIVES
       )
     # debug
-    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3 entry"))
+    # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3 entry"))
   )
 
   # debug
@@ -2474,7 +2322,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])>globals.MAX_CAMERA_PERSPECTIVES
       )
     # debug
-    | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES" >> beam.ParDo(PipelinePcollPrinter(msg=f"{globals.VALIDATION_WARNING_TEXT} len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES} entry"))
+    | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg=f"{globals.VALIDATION_WARNING_TEXT} len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES} entry"))
   )
 
   # now transform doc_consultant_utterance__to__target_video_token_map tuples
@@ -2523,9 +2371,9 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         lambda list_doc_consultant_utterance__to__target_video_token_map_tpl: list_doc_consultant_utterance__to__target_video_token_map_tpl
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_utterance_token_frame_index_tpl_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_utterance_token_frame_index_tpl_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_utterance_token_frame_index_tpl_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document_asl_consultant_utterance_token_frame_index_tpl_pcoll entry"))
   )
-  document_asl_consultant_utterance_token_frame_index_tpl_pcoll = pl__X__sort_pcoll(
+  document_asl_consultant_utterance_token_frame_index_tpl_pcoll = beam__common.pl__X__sort_pcoll(
     document_asl_consultant_utterance_token_frame_index_tpl_pcoll, 
     pcoll_label="document_asl_consultant_utterance_token_frame_index_tpl_pcoll"
   )
@@ -2574,7 +2422,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
       )
     | "Beam PL: 'explode' list of tuples" >> beam.FlatMap(lambda list_tpl: list_tpl)
     # debug
-    # | "Beam PL: print doc_consultant_target_video_frame__to__utterance_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__utterance_token_map entry"))
+    # | "Beam PL: print doc_consultant_target_video_frame__to__utterance_token_map" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__utterance_token_map entry"))
   )
 
   document_asl_consultant_target_video_frame_index_schemad_pcoll
@@ -2602,7 +2450,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         )
       )
     # debug
-    # | "Beam PL: print existing_target_video_frames_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="existing_target_video_frames_pcoll entry"))
+    # | "Beam PL: print existing_target_video_frames_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="existing_target_video_frames_pcoll entry"))
   )
 
   doc_consultant_target_video_frame__to__target_video_token_map = (
@@ -2620,7 +2468,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
       #   }
       # )
     # debug
-    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map entry"))
+    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map entry"))
   )
 
   doc_consultant_target_video_frame__to__target_video_token_map__non_existing_frame = (
@@ -2635,7 +2483,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         lambda doc_consultant_target_video_frame__to__target_video_token_map_tpl: len(doc_consultant_target_video_frame__to__target_video_token_map_tpl[1]['target_video_frame_exists'])>0
       )
     # debug
-    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map__existing_frame" >> beam.ParDo(PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map__existing_frame entry"))
+    # | "Beam PL: print doc_consultant_target_video_frame__to__target_video_token_map__existing_frame" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_target_video_frame__to__target_video_token_map__existing_frame entry"))
   )
 
   doc_consultant_target_video_frame__to__target_video_token_map__existing_frame__non_existing_utterance_token = (
@@ -2676,10 +2524,10 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         lambda list_document_asl_consultant_target_video_utterance_token_frame_index_tpl: list_document_asl_consultant_target_video_utterance_token_frame_index_tpl
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_pcoll entry"))
   )
 
-  sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll = pl__X__sort_pcoll(
+  sorted_document_asl_consultant_target_video_utterance_token_frame_index_pcoll = beam__common.pl__X__sort_pcoll(
     document_asl_consultant_target_video_utterance_token_frame_index_pcoll, 
     pcoll_label="document_asl_consultant_target_video_utterance_token_frame_index_pcoll"
   )
@@ -2708,7 +2556,7 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll entry"))
   )
 
   return document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
@@ -2727,46 +2575,46 @@ def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_inde
   ) # document_asl_consultant_target_video_utterance_token_frame_index_csv_path
 
 
-def validate_ds_video_preprocessing(tpl_combined_results_row):
-  d_combined_results = tpl_combined_results_row[1]
-  media_fname = tpl_combined_results_row[0]
-  media_corpus_doc_mapping = d_combined_results['media_corpus_doc_mapping']
-  media_camera_perspective_mapping = d_combined_results['media_camera_perspective']
-  if len(media_corpus_doc_mapping) > 0:
-    doc_id = None
-    doc_fname = None
-    not_unique = False
-    for d_media_corpus_doc_mapping_instance in media_corpus_doc_mapping:
-      _doc_id = d_media_corpus_doc_mapping_instance['DocumentID']
-      _doc_fname = d_media_corpus_doc_mapping_instance['Filename']
-      if doc_id is None:
-        doc_id = _doc_id
-        doc_fname = _doc_fname
-      else:
-        if _doc_id != doc_id:
-          not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
-          break
-  if len(media_camera_perspective_mapping) > 0:
-    camera_perspective = None
-    not_unique = False
-    for d_media_camera_perspectivec_mapping_instance in media_camera_perspective_mapping:
-      _camera_perspective = d_media_camera_perspectivec_mapping_instance['CameraPerspective']
-      if camera_perspective is None:
-        camera_perspective = _camera_perspective
-      else:
-        if _camera_perspective != camera_perspective:
-          not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
-          break
-  return [tpl_combined_results_row] # passthrough
-class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
-  def __init__(self):
-    super(DSVideoPreprocessingValidator, self).__init__(
-      fn_pcoll_element_processor=validate_ds_video_preprocessing,
-      kargs=None,
-      return_result=True
-    )
+# def validate_ds_video_preprocessing(tpl_combined_results_row):
+#   d_combined_results = tpl_combined_results_row[1]
+#   media_fname = tpl_combined_results_row[0]
+#   media_corpus_doc_mapping = d_combined_results['media_corpus_doc_mapping']
+#   media_camera_perspective_mapping = d_combined_results['media_camera_perspective']
+#   if len(media_corpus_doc_mapping) > 0:
+#     doc_id = None
+#     doc_fname = None
+#     not_unique = False
+#     for d_media_corpus_doc_mapping_instance in media_corpus_doc_mapping:
+#       _doc_id = d_media_corpus_doc_mapping_instance['DocumentID']
+#       _doc_fname = d_media_corpus_doc_mapping_instance['Filename']
+#       if doc_id is None:
+#         doc_id = _doc_id
+#         doc_fname = _doc_fname
+#       else:
+#         if _doc_id != doc_id:
+#           not_unique = True
+#           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
+#           break
+#   if len(media_camera_perspective_mapping) > 0:
+#     camera_perspective = None
+#     not_unique = False
+#     for d_media_camera_perspectivec_mapping_instance in media_camera_perspective_mapping:
+#       _camera_perspective = d_media_camera_perspectivec_mapping_instance['CameraPerspective']
+#       if camera_perspective is None:
+#         camera_perspective = _camera_perspective
+#       else:
+#         if _camera_perspective != camera_perspective:
+#           not_unique = True
+#           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+#           break
+#   return [tpl_combined_results_row] # passthrough
+# class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
+#   def __init__(self):
+#     super(DSVideoPreprocessingValidator, self).__init__(
+#       fn_pcoll_element_processor=validate_ds_video_preprocessing,
+#       kargs=None,
+#       return_result=True
+#     )
 
 
 def validate_preprocess_doc_participant_to_utterance_video_cameraperspective_mapping(tvftmdputftvimt):
@@ -3096,7 +2944,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
     | "Beam PL: 'explode' list of target_video_doc_participant_utterance_mapping tuples" >> beam.FlatMap(lambda list_target_video_doc_participant_utterance_mapping_mapping_tpl: list_target_video_doc_participant_utterance_mapping_mapping_tpl)
     | "Beam PL: select distinct list_target_video_doc_participant_utterance_mapping_tpl tuples" >> beam.Distinct()
     # debug
-    # | "Beam PL: print pl__6__create_document_asl_consultant_target_video_index_pcolls result" >> beam.ParDo(PipelinePcollPrinter("pl__6__create_document_asl_consultant_target_video_index_pcolls result"))
+    # | "Beam PL: print pl__6__create_document_asl_consultant_target_video_index_pcolls result" >> beam.ParDo(beam__common.PipelinePcollPrinter("pl__6__create_document_asl_consultant_target_video_index_pcolls result"))
   )
   # now extract distinct target video fnames from media_doc_participant_mapping
   target_video_list_pcoll = (
@@ -3104,7 +2952,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
     | "Beam PL: extract media fname" >> beam.Map(lambda target_video_doc_participant_utterance_mapping_row_tpl: target_video_doc_participant_utterance_mapping_row_tpl[0])
     | "Beam PL: select distinct target video filenames" >> beam.Distinct()
     # debug
-    # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmedia"))
+    # | "Beam PL: print media associated with this ss_parsed_xmldb" >> beam.ParDo(beam__common.PipelinePcollPrinter("\tmedia"))
   )
   # now we need to filter from full_target_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
     # recall, vid_index_entry is "schemad":
@@ -3127,7 +2975,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
         lambda matching_target_vid_index_entry: (matching_target_vid_index_entry.target_video_filename, matching_target_vid_index_entry)
       )
     # debug
-    # | "Beam PL: print vid index entries matching media associated with this ss_parsed_xmldb" >> beam.ParDo(PipelinePcollPrinter("\tmatching vid index media"))
+    # | "Beam PL: print vid index entries matching media associated with this ss_parsed_xmldb" >> beam.ParDo(beam__common.PipelinePcollPrinter("\tmatching vid index media"))
   )
   # merge doc, participant, and camera perspective keyed by media filename
   #   this pcoll will be used to produce final pcolls:
@@ -3164,7 +3012,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
       #   }
       # )
     # debug
-    # | "Beam PL: print target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping" >> beam.ParDo(PipelinePcollPrinter("target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping entry"))
+    # | "Beam PL: print target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("target_video_fname_to_merged_doc_participant_utterance_target_full_target_vid_index_mapping entry"))
   )
 
   doc_participant_to_utterance_video_cameraperspective_mapping = (
@@ -3196,7 +3044,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
       #     'doc_participant_to_utterance_video_cameraperspective_mapping': [(<utterance seq id>, <video fname>, <camera perspective>)]
       #   }
       # )
-    # | "Beam PL: print merged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping" >> beam.ParDo(PipelinePcollPrinter("\tmerged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping entry"))
+    # | "Beam PL: print merged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("\tmerged document_participant_with_ids_mapping and doc_participant_to_utterance_video_cameraperspective_mapping entry"))
     | "Beam PL: validate/preprocess video_doc_participant_utterance_camera_perspective_with_ids_pcoll" >> beam.FlatMap(validate_preprocess_video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl)
     # the above produces tuples in the form:
     #   ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
@@ -3218,7 +3066,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
         )
       )
     # debug
-    # | "Beam PL: print document_asl_consultant_target_video_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_target_video_index_schemad_pcoll entry"))
+    # | "Beam PL: print document_asl_consultant_target_video_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter("document_asl_consultant_target_video_index_schemad_pcoll entry"))
   )
   
   target_video_fname_to_doc_consultant_camera_perspective_mapping = (
@@ -3285,7 +3133,7 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
         )
       )
     # debug
-    # | "Beam PL: print target_video_to_segment_mapping" >> beam.ParDo(PipelinePcollPrinter("target_video_to_segment_mapping entry"))
+    # | "Beam PL: print target_video_to_segment_mapping" >> beam.ParDo(beam__common.PipelinePcollPrinter("target_video_to_segment_mapping entry"))
   )
 
   return document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll
@@ -3321,7 +3169,7 @@ def pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_con
       )
     | "Beam PL: select distinct document_asl_consultant_video_index rows" >> beam.Distinct()
   )
-  sorted_distinct_document_asl_consultant_video_index_pcoll = pl__X__sort_pcoll(
+  sorted_distinct_document_asl_consultant_video_index_pcoll = beam__common.pl__X__sort_pcoll(
     distinct_document_asl_consultant_video_index_pcoll, 
     pcoll_label="distinct_document_asl_consultant_video_index"
   )
@@ -3348,17 +3196,33 @@ def pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_con
 def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll):
   distinct_document_asl_consultant_utterance_video_index_pcoll = (
     document_asl_consultant_target_video_index_schemad_pcoll
+    # beam.Row(
+    #   # SCHEMA_COL_NAMES__VIDEO_DS = [
+    #   #   'DocumentID',
+    #   #   'ASLConsultantID',
+    #   #   'CameraPerspective',
+    #   #   'TargetVideoFilename'
+    #   # ]
+    #   DocumentID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][0]),
+    #   DocumentFileName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][0]),
+    #   ASLConsultantID=int(document_asl_consultant_video_index_pcoll_row_tpl[0][1]),
+    #   ParticipantName=str(document_asl_consultant_video_index_pcoll_row_tpl[1][1]),
+    #   UtteranceSequence=int(document_asl_consultant_video_index_pcoll_row_tpl[1][2]),
+    #   CameraPerspective=int(document_asl_consultant_video_index_pcoll_row_tpl[1][4]),                  
+    #   TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][3])
+    # )
     | "Beam PL: extract (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) from document_asl_consultant_target_video_index_schemad_pcoll" >> beam.Map(
         lambda document_asl_consultant_target_video_index_schemad_pcoll_row: (
           document_asl_consultant_target_video_index_schemad_pcoll_row.DocumentID,
           document_asl_consultant_target_video_index_schemad_pcoll_row.ASLConsultantID,
+          document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename, # added
           document_asl_consultant_target_video_index_schemad_pcoll_row.UtteranceSequence,
           document_asl_consultant_target_video_index_schemad_pcoll_row.CameraPerspective
         )
       )
     | "Beam PL: select distinct (DocumentID, ASLConsultantID, UtteranceSequence, CameraPerspective) extracted from document_asl_consultant_target_video_index_schemad_pcoll" >> beam.Distinct()
   )
-  sorted_distinct_document_asl_consultant_utterance_video_index_pcoll = pl__X__sort_pcoll(
+  sorted_distinct_document_asl_consultant_utterance_video_index_pcoll = beam__common.pl__X__sort_pcoll(
     distinct_document_asl_consultant_utterance_video_index_pcoll, 
     pcoll_label="distinct_document_asl_consultant_utterance_video_index"
   )
@@ -3369,13 +3233,15 @@ def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_
         # SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS = [
         #   'DocumentID',
         #   'ASLConsultantID',
+        #   'TargetVideoFilename',
         #   'UtteranceSequence',
         #   'CameraPerspective'
         # ]
         DocumentID=int(distinct_document_asl_consultant_video_index_row[0]),
         ASLConsultantID=int(distinct_document_asl_consultant_video_index_row[1]),
-        UtteranceSequence=int(distinct_document_asl_consultant_video_index_row[2]),
-        CameraPerspective=int(distinct_document_asl_consultant_video_index_row[3])
+        TargetVideoFilename=str(distinct_document_asl_consultant_video_index_row[2]),
+        UtteranceSequence=int(distinct_document_asl_consultant_video_index_row[3]),
+        CameraPerspective=int(distinct_document_asl_consultant_video_index_row[4])
       )
     )
     | beam.Map(lambda distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row))
@@ -3404,7 +3270,7 @@ def pl__7__write_document_target_video_segment_index_csv(document_target_video_s
       )
     | "Beam PL: select distinct (DocumentID, ASLConsultantID, CameraPerspective, TargetVideoFilename, SegmentSequence, SegmentVideoFilename, URL) extracted from target_video_segment_index_pcoll" >> beam.Distinct()
   )
-  sorted_distinct_target_video_segment_index_pcoll = pl__X__sort_pcoll(
+  sorted_distinct_target_video_segment_index_pcoll = beam__common.pl__X__sort_pcoll(
     distinct_target_video_segment_index_pcoll, 
     pcoll_label="target_video_segment_index"
   )
@@ -3412,6 +3278,15 @@ def pl__7__write_document_target_video_segment_index_csv(document_target_video_s
     sorted_distinct_target_video_segment_index_pcoll
     | "Beam PL: re-apply schema to create final sorted_target_video_segment_index_schemad_pcoll" >> beam.Map(
         lambda sorted_distinct_target_video_segment_index_tpl: beam.Row(
+          # SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
+          #   'DocumentID',
+          #   'ASLConsultantID',
+          #   'CameraPerspective',
+          #   'TargetVideoFilename',
+          #   'SegmentSequence',
+          #   'SegmentVideoFilename',
+          #   'URL'
+          # ]
           DocumentID=sorted_distinct_target_video_segment_index_tpl[0],
           ASLConsultantID=sorted_distinct_target_video_segment_index_tpl[1],
           CameraPerspective=sorted_distinct_target_video_segment_index_tpl[2],                  
@@ -3451,7 +3326,7 @@ def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
   # (
   #   vid_index_schemad_pcoll
   #   | "Beam PL: gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer())
-  #   # | "Beam PL: print download info for video segments" >> beam.ParDo(PipelinePcollPrinter())  # comment out for production
+  #   # | "Beam PL: print download info for video segments" >> beam.ParDo(beam__common.PipelinePcollPrinter())  # comment out for production
   #   | "Beam PL: download video segments" >> beam.ParDo(VideoSegmentDownloader())
   # )
 
@@ -3488,7 +3363,7 @@ def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
     # (
     #   p_dl_results
     #   | f"Beam PL: {p_label} count videos downloaded" >> beam.combiners.Count.Globally() 
-    #   | f"Beam PL: {p_label} print videos downloaded count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="videos downloaded/found"))
+    #   | f"Beam PL: {p_label} print videos downloaded count" >> beam.ParDo(beam__common.PipelinePcollPrinter(label=p_label_indented, msg="videos downloaded/found"))
     # )
 
   # now merge all download results
@@ -3555,13 +3430,13 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
     (
       p_extraction_results
       | f"Beam PL: {p_label} count target videos processed" >> beam.combiners.Count.Globally() 
-      | f"Beam PL: {p_label} print target videos processed count" >> beam.ParDo(PipelinePcollPrinter(label=p_label_indented, msg="target videos processed"))
+      | f"Beam PL: {p_label} print target videos processed count" >> beam.ParDo(beam__common.PipelinePcollPrinter(label=p_label_indented, msg="target videos processed"))
     )
   
   merged_extraction_results = (
     (p_extraction_results for p_extraction_results in partition_extraction_results) 
     | f"Beam PL: merge extraction results" >> beam.Flatten() # outputs pcoll of rows as tpl_target_video_extraction_info: (target_video_fname, n_stitched_frames, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
-    # | f"Beam PL: print merged extraction results" >> beam.ParDo(PipelinePcollPrinter(label="\t"))
+    # | f"Beam PL: print merged extraction results" >> beam.ParDo(beam__common.PipelinePcollPrinter(label="\t"))
   )
   _ = (
     merged_extraction_results
@@ -3572,27 +3447,11 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
     # | "Beam PL: count total frames extracted" >> beam.transforms.sql.SqlTransform(f"SELECT SUM(n_stitched_frames) AS total_frames_extracted FROM PCOLLECTION") # this is VERY, VERY SLOW
     | "Beam PL: select n_stitched_frames" >> beam.Map(lambda extraction_results_row: extraction_results_row.n_stitched_frames) # on DirectRunner, this is literally about 100 times faster!
     | "Beam PL: count total frames extracted" >> beam.CombineGlobally(sum)
-    | f"Beam PL: print total frames extracted" >> beam.ParDo(PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
+    | f"Beam PL: print total frames extracted" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="TOTAL FRAMES EXTRACTED"))
   )
 
   return merged_extraction_results
   # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************
-
-
-def rmdir(path_coll_row):
-  path = path_coll_row
-  n_files = len(tf.io.gfile.listdir(path))
-  if n_files > 0 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-    print(f"{globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  tf.io.gfile.rmtree(path)
-  return path
-
-def pl__X__rmdir(path, path_label):
-  return (
-    path
-    | f"Beam PL: remove {path_label}" >> beam.Map(rmdir)
-    | f"Beam PL: print {path_label} deleted message" >> beam.ParDo(PipelinePcollPrinter(msg=f"DIRECTORY DELETED"))
-  )
 
 
 def run():
@@ -3616,7 +3475,7 @@ def run():
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
 
-  if not dataset_csv_files_exist():
+  if not beam__common.dataset_csv_files_exist():
 
     with beam.Pipeline(options=pipeline_options) as pl:
       full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
@@ -3624,7 +3483,7 @@ def run():
 
 
     with beam.Pipeline(options=pipeline_options) as pl:
-      full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
+      full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
       filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
       merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
       merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
@@ -3637,12 +3496,12 @@ def run():
     #   for reading yet
     with beam.Pipeline(options=pipeline_options) as pl:
       corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-      pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+      pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
   
 
     with beam.Pipeline(options=pipeline_options) as pl:
-      full_target_vid_index_schemad_pcoll = pl__1__read_target_vid_index_csv(pl)
-      corpus_index_schemad_pcoll = pl__1__read_corpus_index_csv(pl)
+      full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+      corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
       corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
       ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
 
@@ -3698,19 +3557,19 @@ def run():
         pl
         | f"Beam PL: create {globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_INDEXES_DIR])
       )
-      pl__X__rmdir(vid_indexes_dir_path_pcoll, globals.VIDEO_INDEXES_DIR)
+      beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, globals.VIDEO_INDEXES_DIR)
     with beam.Pipeline(options=pipeline_options) as pl:
       corpus_docs_dir_path_pcoll = (
         pl
         | f"Beam PL: create {globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([globals.CORPUS_DIR])
       )
-      pl__X__rmdir(corpus_docs_dir_path_pcoll, globals.CORPUS_DIR)
+      beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, globals.CORPUS_DIR)
     with beam.Pipeline(options=pipeline_options) as pl:
       vid_download_dir_path_pcoll = (
         pl
         | f"Beam PL: create {globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_DIR])
       )
-      pl__X__rmdir(vid_download_dir_path_pcoll, globals.VIDEO_DIR)
+      beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, globals.VIDEO_DIR)
   
 
   print(f"Beam PL: ALL DONE!")

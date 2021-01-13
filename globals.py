@@ -10,7 +10,7 @@ FRAME_IMG_INPUT_SHAPE = (150,150)
 MAX_CAMERA_PERSPECTIVES = 4
 
 VALIDATION_WARNING_TEXT = "***VALIDATION WARNING!!!***:"
-VALIDATION_FATAL_ERROR_TEXT = "***FATAL ERROR!!!***:"
+VALIDATION_FATAL_ERROR_TEXT = "***VALIDATION FATAL ERROR!!!***:"
 
 OUTPUT_INFO_LEVEL__DEBUG = 0
 OUTPUT_INFO_LEVEL__WARNING = 1
@@ -93,6 +93,7 @@ SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
   'DocumentID',
   'ASLConsultantID',
   'CameraPerspective',
+  'TargetVideoFilename',
   'SegmentSequence',
   'SegmentVideoFilename',
   'URL'
@@ -101,7 +102,8 @@ SCHEMA_PK__VIDEO_SEGMENT_DS = [
   SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[0],
   SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[1],
   SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[2],
-  SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[3]
+  SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[3],
+  SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[4]
 ]
 
 SCHEMA_COL_NAMES__VIDEO_FRAME_DS = [
@@ -140,6 +142,7 @@ SCHEMA_PK__UTTERANCE_DS = [
 SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS = [
   'DocumentID',
   'ASLConsultantID',
+  'TargetVideoFilename',
   'UtteranceSequence',
   'CameraPerspective'
 ]
@@ -147,27 +150,19 @@ SCHEMA_PK__UTTERANCE_VIDEO_DS = [
   SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[0],
   SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[1],
   SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[2],
-  SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3]
+  SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3],
+  SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[4]
 ]
 
 SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS = [
-  # ***** identify utterance: BEGIN *****
   'DocumentID',
   'ASLConsultantID',
   'UtteranceSequence',
-  # ***** identify utterance: END *****
-
-  # ***** identify sequence/order of token in utterance: BEGIN *****
   'TokenSequence',
-  # ***** identify sequence/order of token in utterance: END *****
 
   'StartTime',
   'EndTime',
-
-  # ***** identify token in vocabulary: BEGIN *****
   'TokenID',
-  # ***** identify token in vocabulary: END *****
-
   'Field',
   'FieldValue'
 ]
@@ -224,7 +219,7 @@ DATA_ROOT_DIR = None
 VIDEO_DIR = None
 STICHED_VIDEO_FRAMES_DIR = None
 CORPUS_DS_PATH = None
-MAX_RAW_XML_B64_LEN = None
+MAX_RAW_XML_B64_LEN = 1000000 # default
 ASL_CONSULTANT_DS_PATH = None
 VIDEO_DS_PATH = None
 UTTERANCE_DS_PATH = None
@@ -233,6 +228,7 @@ UTTERANCE_TOKEN_DS_PATH = None
 CORPUS_DS_PATH = None
 DOCUMENT_ASL_CONSULTANT_DS_PATH = None
 VIDEO_SEGMENT_DS_PATH = None
+VIDEO_FRAME_DS_PATH = None
 UTTERANCE_TOKEN_FRAME_DS_PATH = None
 VOCABULARY_DS_PATH = None
 MAX_DATA_FILES = None
