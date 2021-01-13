@@ -20,7 +20,7 @@ ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
 import preprocessor__common
 
-import globals
+import fidscs_globals
 
 
 def _function_wrapper(args_tuple):
@@ -31,7 +31,7 @@ def _function_wrapper(args_tuple):
 
 def parallel_map(function, iterable):
   """Calls a function for every element in an iterable using multiple cores."""
-  if globals.FORCE_DISABLE_MULTIPROCESSING:
+  if fidscs_globals.FORCE_DISABLE_MULTIPROCESSING:
     return [function(*args) for args in iterable]
 
   original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -51,30 +51,30 @@ def parallel_map(function, iterable):
   
 def load_video_index_dataset(debug=False):
   # df_video_index drives the (parallel) download of video segments but it is also used in bootstrapping the corpus as it corresponds to videos
-  df_video_index_csv_path = os.path.join(globals.DATA_ROOT_DIR, 'df_video_index.csv')
+  df_video_index_csv_path = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'df_video_index.csv')
   if not os.path.isfile(df_video_index_csv_path):
-    df_video_index = pd.read_csv(globals.SELECTED_VIDEO_INDEX_PATH)
+    df_video_index = pd.read_csv(fidscs_globals.SELECTED_VIDEO_INDEX_PATH)
     df_video_index.rename(
       columns={
-        'Video file name in XML file': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0],
-        'Video sequence id': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1],
-        'Perspective/Camera id': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2],
-        'Compressed MOV file': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3],
-        'Uncompressed AVI': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4],
-        'Uncompressed AVI mirror 1': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5],
-        'Uncompressed AVI mirror 2': globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]
+        'Video file name in XML file': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0],
+        'Video sequence id': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1],
+        'Perspective/Camera id': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2],
+        'Compressed MOV file': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3],
+        'Uncompressed AVI': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4],
+        'Uncompressed AVI mirror 1': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5],
+        'Uncompressed AVI mirror 2': fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]
       }, 
       inplace=True
     )
     # NOTE!
     #   This is a CRUCIAL step! We MUST URL encode filenames since some of them sloppily contain spaces!
-    df_video_index[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]] = df_video_index[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]].map(lambda filename: urllib.parse.quote(filename))
-    df_video_index.set_index(globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
+    df_video_index[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]] = df_video_index[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]].map(lambda filename: urllib.parse.quote(filename))
+    df_video_index.set_index(fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
     df_video_index.to_csv(path_or_buf=df_video_index_csv_path)
     print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
 
   df_video_index = pd.read_csv(df_video_index_csv_path)
-  df_video_index.set_index(globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
+  df_video_index.set_index(fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
   return df_video_index
 
 
@@ -92,11 +92,11 @@ def append_corpus__document(xml_db_path, df_corpus, debug=False):
   #   print(f"\tXML (RAW):\n\t\t{raw_xml}")
   doc_id = None
   try:
-    df_document_lookup = df_corpus.query(f"{globals.SCHEMA_COL_NAMES__CORPUS_DS[1]}=='{xml_db_fname}'")
+    df_document_lookup = df_corpus.query(f"{fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[1]}=='{xml_db_fname}'")
     if df_document_lookup.empty:
       data = {
-        globals.SCHEMA_COL_NAMES__CORPUS_DS[1]: xml_db_fname,
-        globals.SCHEMA_COL_NAMES__CORPUS_DS[2]: raw_xml,
+        fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[1]: xml_db_fname,
+        fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[2]: raw_xml,
       }
       _doc_id = len(df_corpus)
       df_corpus.loc[_doc_id] = data
@@ -112,27 +112,27 @@ def append_corpus__document(xml_db_path, df_corpus, debug=False):
 
 def append_corpus__video(media, doc_id, df_video_index, df_video, debug=False):
   fname = str(urllib.parse.quote(media.get_filename().split(':')[-1])) # there may be spaces in the fname
-  df_video_index_lookup = df_video_index.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]}=='{fname}'")
-  camera_perspective = None if df_video_index_lookup.empty else df_video_index_lookup[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]].values[0]
+  df_video_index_lookup = df_video_index.query(f"{fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]}=='{fname}'")
+  camera_perspective = None if df_video_index_lookup.empty else df_video_index_lookup[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]].values[0]
   video_id = None
   try:
     if camera_perspective is None:
       if debug:
         print(f"\t\t{fname}\t\t*** ValueError: video '{fname}' is not in the video index, has no valid camera perspective ***")
     else:
-      df_video_lookup = df_video.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'")
+      df_video_lookup = df_video.query(f"{fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'")
       if df_video_lookup.empty:
         df_video.reset_index(inplace=True)
         data = {
-          globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: doc_id,
-          globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: camera_perspective,
-          globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: fname
+          fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[0]: doc_id,
+          fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[2]: camera_perspective,
+          fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[3]: fname
         }
         video_id = len(df_video)
         df_video.loc[video_id] = data
-        df_video.columns = globals.SCHEMA_COL_NAMES__VIDEO_DS
-        df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
-        df_video.sort_index(ascending=[True for c in globals.SCHEMA_PK__VIDEO_DS], inplace=True)
+        df_video.columns = fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS
+        df_video.set_index(fidscs_globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+        df_video.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__VIDEO_DS], inplace=True)
       else:
         # if debug:
         #   print(f"KeyError: video '{fname}' has already been inserted")
@@ -147,16 +147,16 @@ def append_corpus__video(media, doc_id, df_video_index, df_video, debug=False):
 def append_corpus__participant(participant, df_asl_consultant, debug=False):
   reconciled_participant_id = None
   try:
-    df_asl_consultant_lookup = df_asl_consultant.query(f"{globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]}=='{participant.get_name()}'")
+    df_asl_consultant_lookup = df_asl_consultant.query(f"{fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]}=='{participant.get_name()}'")
     if not df_asl_consultant_lookup.empty:
       # if debug:
       #   print(f"KeyError: participant '{participant.get_name()}' has already been inserted")
       reconciled_participant_id = df_asl_consultant_lookup.index.values[0]
     else:
       data = {
-        globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]: participant.get_name(),
-        globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: participant.get_age(),
-        globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: participant.get_gender()
+        fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]: participant.get_name(),
+        fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]: participant.get_age(),
+        fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]: participant.get_gender()
         # , 'language': participant.get_language()
       }
       reconciled_participant_id = len(df_asl_consultant)
@@ -180,13 +180,13 @@ def append_corpus__document_participant_mapping(doc_id, reconciled_participant_i
   if insert_document_asl_consultant:
     df_document_asl_consultant.reset_index(inplace=True)
     data = {
-      globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]: doc_id,
-      globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[1]: reconciled_participant_id
+      fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0]: doc_id,
+      fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[1]: reconciled_participant_id
     }
     df_document_asl_consultant.loc[len(df_document_asl_consultant)] = data
-    df_document_asl_consultant.columns = globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS
-    df_document_asl_consultant.set_index(globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
-    df_document_asl_consultant.sort_index(ascending=[True for c in globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS], inplace=True)
+    df_document_asl_consultant.columns = fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS
+    df_document_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
+    df_document_asl_consultant.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS], inplace=True)
 
 
 def append_corpus__utterance(
@@ -201,30 +201,30 @@ def append_corpus__utterance(
   df_utterance.reset_index(inplace=True)
   try:
     data = {
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[0]: doc_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[1]: reconciled_participant_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[2]: ui,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[3]: utterance_time_codes[0],
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[4]: utterance_time_codes[1],
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[5]: utterance_main_gloss,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_DS[6]: utterance_translation
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[0]: doc_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[1]: reconciled_participant_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[2]: ui,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[3]: utterance_time_codes[0],
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[4]: utterance_time_codes[1],
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[5]: utterance_main_gloss,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[6]: utterance_translation
     }
     df_utterance.loc[len(df_utterance)] = data
   except Exception as e:
     print(e)
-  df_utterance.columns = globals.SCHEMA_COL_NAMES__UTTERANCE_DS
-  df_utterance.set_index(globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
-  df_utterance.sort_index(ascending=[True for c in globals.SCHEMA_PK__UTTERANCE_DS], inplace=True)
+  df_utterance.columns = fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS
+  df_utterance.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
+  df_utterance.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__UTTERANCE_DS], inplace=True)
 
 
 def append_corpus__vocabulary(token, df_vocabulary):
   tkn = token.get_text().encode('utf-8') # must be encoded as binary since token can have punctuation and possibly other non-alphabetic characters
   token_id = None
   try:
-    df_token_lookup = df_vocabulary.query(f"{globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]}=={tkn}")
+    df_token_lookup = df_vocabulary.query(f"{fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]}=={tkn}")
     if df_token_lookup.empty:
       data = {
-        globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]: tkn
+        fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]: tkn
       }
       _token_id = len(df_vocabulary)
       df_vocabulary.loc[_token_id] = data
@@ -255,52 +255,52 @@ def append_corpus__utterance_token(
     except:
       pass
     data = {
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[0]: doc_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[1]: reconciled_participant_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[2]: ui,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[3]: ti,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[4]: token_time_codes[0],
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[5]: token_time_codes[1],
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[6]: token_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[7]: field,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[8]: field_value
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[0]: doc_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[1]: reconciled_participant_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[2]: ui,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[3]: ti,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[4]: token_time_codes[0],
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[5]: token_time_codes[1],
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[6]: token_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[7]: field,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[8]: field_value
     }
     df_utterance_token.loc[len(df_utterance_token)] = data
   except Exception as e:
     print(e)
-  df_utterance_token.columns = globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
-  df_utterance_token.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
-  df_utterance_token.sort_index(ascending=[True for c in globals.SCHEMA_PK__UTTERANCE_DS], inplace=True)
+  df_utterance_token.columns = fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
+  df_utterance_token.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
+  df_utterance_token.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__UTTERANCE_DS], inplace=True)
 
 
 def append_corpus__utterance_video(doc_id, reconciled_participant_id, ui, df_video_lookup, df_utterance_video):
   df_utterance_video.reset_index(inplace=True)
   try:
     data = {
-      globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[0]: doc_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[1]: reconciled_participant_id,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[2]: ui,
-      globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3]: df_video_lookup[globals.SCHEMA_COL_NAMES__VIDEO_DS[2]].values[0]
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[0]: doc_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[1]: reconciled_participant_id,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[2]: ui,
+      fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3]: df_video_lookup[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[2]].values[0]
     }
     df_utterance_video.loc[len(df_utterance_video)] = data
   except Exception as e:
     print(e)
-  df_utterance_video.columns = globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
-  df_utterance_video.set_index(globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
-  df_utterance_video.sort_index(ascending=[True for c in globals.SCHEMA_PK__UTTERANCE_VIDEO_DS], inplace=True)
+  df_utterance_video.columns = fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
+  df_utterance_video.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
+  df_utterance_video.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__UTTERANCE_VIDEO_DS], inplace=True)
 
 
 def update_corpus__video____append_corpus__utterance_video(doc_id, fname, reconciled_participant_id, ui, df_video, df_utterance_video, debug=False):
   df_video.reset_index(inplace=True)
-  df_video_lookup = df_video.query(f"{globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'") # there must be exactly one
+  df_video_lookup = df_video.query(f"{fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[3]}=='{fname}'") # there must be exactly one
   try:
     if len(df_video_lookup) == 1:
-      existing_participant_id = df_video_lookup[globals.SCHEMA_COL_NAMES__VIDEO_DS[1]].values[0]
+      existing_participant_id = df_video_lookup[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[1]].values[0]
       if not pd.isna(existing_participant_id) and existing_participant_id != reconciled_participant_id:
         if debug:
           print(f"\t\t\t\t\tValueError: existing participant_id ({existing_participant_id}) for video entry corresponding to '{fname}' conflicts with this participant_id ({reconciled_participant_id})")
       else:
-        df_video.loc[df_video_lookup.index, globals.SCHEMA_COL_NAMES__VIDEO_DS[1]] = reconciled_participant_id
+        df_video.loc[df_video_lookup.index, fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[1]] = reconciled_participant_id
         if debug:
           print(f"\t\t\t\t\t{fname}")
     else:
@@ -310,9 +310,9 @@ def update_corpus__video____append_corpus__utterance_video(doc_id, fname, reconc
     print(e)
   append_corpus__utterance_video(doc_id, reconciled_participant_id, ui, df_video_lookup, df_utterance_video)
   # don't forget to re-apply original index
-  df_video.columns = globals.SCHEMA_COL_NAMES__VIDEO_DS
-  df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
-  df_video.sort_index(ascending=[True for c in globals.SCHEMA_PK__VIDEO_DS], inplace=True)
+  df_video.columns = fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS
+  df_video.set_index(fidscs_globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+  df_video.sort_index(ascending=[True for c in fidscs_globals.SCHEMA_PK__VIDEO_DS], inplace=True)
 
 
 def boostrap_signstream_corpus(d_corpus_info, df_video_index):
@@ -368,7 +368,7 @@ def boostrap_signstream_corpus(d_corpus_info, df_video_index):
     utils.download(
         remote_archive_path, 
         local_archive_path, 
-        block_sz=globals._1MB
+        block_sz=fidscs_globals._1MB
     )
     zip_ref = zipfile.ZipFile(local_archive_path, 'r')
     print(f"unzipping {local_archive_path} to {corpus_dir}...")
@@ -380,26 +380,26 @@ def boostrap_signstream_corpus(d_corpus_info, df_video_index):
     print(f"\tDONE")
 
     # create/save datasets from corpus docs using SignStream parser
-    df_corpus = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__CORPUS_DS)
-    df_corpus.set_index(globals.SCHEMA_PK__CORPUS_DS, inplace=True)
-    df_document_asl_consultant = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
-    df_document_asl_consultant.set_index(globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
-    df_asl_consultant = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
-    df_asl_consultant.set_index(globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
-    df_video = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VIDEO_DS)
-    df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
-    # df_video_segment = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS) # created in boostrap_video_index() ??
-    # df_video_segment.set_index(globals.SCHEMA_PK__VIDEO_SEGMENT_DS, inplace=True)
-    df_utterance = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_DS)
-    df_utterance.set_index(globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
-    df_utterance_video = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
-    df_utterance_video.set_index(globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
-    df_utterance_token = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
-    df_utterance_token.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
-    # df_utterance_token_frame = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS) # created in boostrap_video_index() ??
-    # df_utterance_token_frame.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS, inplace=True)
-    df_vocabulary = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
-    df_vocabulary.set_index(globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
+    df_corpus = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS)
+    df_corpus.set_index(fidscs_globals.SCHEMA_PK__CORPUS_DS, inplace=True)
+    df_document_asl_consultant = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
+    df_document_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
+    df_asl_consultant = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
+    df_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
+    df_video = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS)
+    df_video.set_index(fidscs_globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+    # df_video_segment = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS) # created in boostrap_video_index() ??
+    # df_video_segment.set_index(fidscs_globals.SCHEMA_PK__VIDEO_SEGMENT_DS, inplace=True)
+    df_utterance = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS)
+    df_utterance.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
+    df_utterance_video = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
+    df_utterance_video.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
+    df_utterance_token = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
+    df_utterance_token.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
+    # df_utterance_token_frame = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS) # created in boostrap_video_index() ??
+    # df_utterance_token_frame.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS, inplace=True)
+    df_vocabulary = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
+    df_vocabulary.set_index(fidscs_globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
 
     def format_headshake(head_movements):
       temp = []
@@ -422,35 +422,35 @@ def boostrap_signstream_corpus(d_corpus_info, df_video_index):
       debug=False
     ):
       if df_corpus is None:
-        df_corpus = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__CORPUS_DS)
-        df_corpus.set_index(globals.SCHEMA_PK__CORPUS_DS, inplace=True)
+        df_corpus = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS)
+        df_corpus.set_index(fidscs_globals.SCHEMA_PK__CORPUS_DS, inplace=True)
       if df_document_asl_consultant is None:
-        df_document_asl_consultant = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
-        df_document_asl_consultant.set_index(globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
+        df_document_asl_consultant = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS)
+        df_document_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
       if df_asl_consultant is None:
-        df_asl_consultant = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
-        df_asl_consultant.set_index(globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
+        df_asl_consultant = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS)
+        df_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
       if df_video is None:
-        df_video = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VIDEO_DS)
-        df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+        df_video = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS)
+        df_video.set_index(fidscs_globals.SCHEMA_PK__VIDEO_DS, inplace=True)
       # if df_video_segment is None:  # created in boostrap_video_index()
-      #   df_video_segment = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS)
-      #   df_video_segment.set_index(globals.SCHEMA_PK__VIDEO_SEGMENT_DS, inplace=True)
+      #   df_video_segment = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS)
+      #   df_video_segment.set_index(fidscs_globals.SCHEMA_PK__VIDEO_SEGMENT_DS, inplace=True)
       if df_utterance is None:
-        df_utterance = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_DS)
-        df_utterance.set_index(globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
+        df_utterance = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS)
+        df_utterance.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
       if df_utterance_video is None:
-        df_utterance_video = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
-        df_utterance_video.set_index(globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
+        df_utterance_video = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS)
+        df_utterance_video.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
       if df_utterance_token is None:
-        df_utterance_token = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
-        df_utterance_token.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
+        df_utterance_token = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS)
+        df_utterance_token.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
       # if df_utterance_token_frame is None: # created in boostrap_video_index()
-      #   df_utterance_token_frame = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS) 
-      #   df_utterance_token_frame.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS, inplace=True)
+      #   df_utterance_token_frame = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS) 
+      #   df_utterance_token_frame.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_FRAME_DS, inplace=True)
       if df_vocabulary is None:
-        df_vocabulary = pd.DataFrame(columns=globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
-        df_vocabulary.set_index(globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
+        df_vocabulary = pd.DataFrame(columns=fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS)
+        df_vocabulary.set_index(fidscs_globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
 
       
       if debug:
@@ -631,42 +631,42 @@ def load_corpus_datasets(d_corpus_dataset_info, debug=False):
     }
   """
   df_corpus = pd.read_csv(d_corpus_dataset_info['corpus_ds_path'])
-  df_corpus.set_index(globals.SCHEMA_PK__CORPUS_DS, inplace=True)
+  df_corpus.set_index(fidscs_globals.SCHEMA_PK__CORPUS_DS, inplace=True)
   if debug:
     print(f"CORPUS dataset:\n{df_corpus}\n\n")
 
   df_asl_consultant = pd.read_csv(d_corpus_dataset_info['asl_consultant_ds_path'])
-  df_asl_consultant.set_index(globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
+  df_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__ASL_CONSULTANT_DS, inplace=True)
   if debug:
     print(f"ASL CONSULTANT dataset:\n{df_asl_consultant}\n\n")
 
   df_document_asl_consultant = pd.read_csv(d_corpus_dataset_info['document_asl_consultant_ds_path'])
-  df_document_asl_consultant.set_index(globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
+  df_document_asl_consultant.set_index(fidscs_globals.SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS, inplace=True)
   if debug:
     print(f"DOCUMENT-CONSULTANT (mapping) dataset:\n{df_document_asl_consultant.reset_index()}\n\n") # reset index since it only has keys
 
   df_video = pd.read_csv(d_corpus_dataset_info['video_ds_path'])
-  df_video.set_index(globals.SCHEMA_PK__VIDEO_DS, inplace=True)
+  df_video.set_index(fidscs_globals.SCHEMA_PK__VIDEO_DS, inplace=True)
   if debug:
     print(f"VIDEO dataset:\n{df_video}\n\n")
 
   df_utterance = pd.read_csv(d_corpus_dataset_info['utterance_ds_path'])
-  df_utterance.set_index(globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
+  df_utterance.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_DS, inplace=True)
   if debug:
     print(f"UTTERANCE dataset:\n{df_utterance}\n\n")
 
   df_utterance_video = pd.read_csv(d_corpus_dataset_info['utterance_video_ds_path'])
-  df_utterance_video.set_index(globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
+  df_utterance_video.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_VIDEO_DS, inplace=True)
   if debug:
     print(f"UTTERANCE-VIDEO (mapping) dataset:\n{df_utterance_video.reset_index()}\n\n")  # reset index since it only has keys
 
   df_utterance_token = pd.read_csv(d_corpus_dataset_info['utterance_token_ds_path'])
-  df_utterance_token.set_index(globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
+  df_utterance_token.set_index(fidscs_globals.SCHEMA_PK__UTTERANCE_TOKEN_DS, inplace=True)
   if debug:
     print(f"UTTERANCE-TOKEN (mapping) dataset:\n{df_utterance_token}\n\n")
 
   df_vocabulary = pd.read_csv(d_corpus_dataset_info['vocabulary_ds_path'])
-  df_vocabulary.set_index(globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
+  df_vocabulary.set_index(fidscs_globals.SCHEMA_PK__VOCABULARY_DS, inplace=True)
   if debug:
     print(f"VOCBULARY (linguistic tokens) dataset:\n{df_vocabulary}\n\n")
 
@@ -688,8 +688,8 @@ def download_video_segment(segment_url, data_dir):
     tf.io.gfile.makedirs(data_dir)
   local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
   if not tf.io.gfile.exists(local_segment_path):
-    # memfile, _ = utils.download_to_memfile(segment_url, block_sz=globals._1MB, display=False)
-    memfile = utils.download_to_memfile(segment_url, block_sz=globals._1MB, display=False) # returns with memfile.seek(0)
+    # memfile, _ = utils.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False)
+    memfile = utils.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
     memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
       f.write(memfile.getvalue())
@@ -710,7 +710,7 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
 
   vid_caps = [cv2.VideoCapture(local_vid_segment_path) for local_vid_segment_path in local_vid_segment_paths]
   for seg_vid_cap in vid_caps:
-    seg_vid_cap.set(cv2.CAP_PROP_FPS, globals.FPS)
+    seg_vid_cap.set(cv2.CAP_PROP_FPS, fidscs_globals.FPS)
   frame_counts = list(map(lambda vc: int(vc.get(cv2.CAP_PROP_FRAME_COUNT)), vid_caps))
   n_frames_expected = sum(frame_counts)
 
@@ -767,25 +767,25 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
 
 def run():
   preprocessor__common.boostrap_target_video_index(d_vid_indexes_info={
-      'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
-      'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
-      'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
-      'tmp_dir': globals.TMP_DIR
+      'vid_indexes_dir': fidscs_globals.VIDEO_INDEXES_DIR, 
+      'sel_vid_index_path': fidscs_globals.SELECTED_VIDEO_INDEX_PATH, 
+      'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+      'tmp_dir': fidscs_globals.TMP_DIR
   })
   df_video_index = load_video_index_dataset(debug=True)
 
   d_corpus_info={
-      'tmp_dir': globals.TMP_DIR,
-      'data_dir': globals.DATA_ROOT_DIR,
-      'corpus_archive': globals.CORPUS_ARCHIVE, 
-      'corpus_ds_path': globals.CORPUS_DS_PATH,
-      'document_asl_consultant_ds_path': globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-      'asl_consultant_ds_path': globals.ASL_CONSULTANT_DS_PATH,
-      'video_ds_path': globals.VIDEO_DS_PATH,
-      'utterance_ds_path': globals.UTTERANCE_DS_PATH,
-      'utterance_video_ds_path': globals.UTTERANCE_VIDEO_DS_PATH,
-      'utterance_token_ds_path': globals.UTTERANCE_TOKEN_DS_PATH,
-      'vocabulary_ds_path': globals.VOCABULARY_DS_PATH
+      'tmp_dir': fidscs_globals.TMP_DIR,
+      'data_dir': fidscs_globals.DATA_ROOT_DIR,
+      'corpus_archive': fidscs_globals.CORPUS_ARCHIVE, 
+      'corpus_ds_path': fidscs_globals.CORPUS_DS_PATH,
+      'document_asl_consultant_ds_path': fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+      'asl_consultant_ds_path': fidscs_globals.ASL_CONSULTANT_DS_PATH,
+      'video_ds_path': fidscs_globals.VIDEO_DS_PATH,
+      'utterance_ds_path': fidscs_globals.UTTERANCE_DS_PATH,
+      'utterance_video_ds_path': fidscs_globals.UTTERANCE_VIDEO_DS_PATH,
+      'utterance_token_ds_path': fidscs_globals.UTTERANCE_TOKEN_DS_PATH,
+      'vocabulary_ds_path': fidscs_globals.VOCABULARY_DS_PATH
   }
   boostrap_signstream_corpus(d_corpus_info, df_video_index=df_video_index)
   (
@@ -803,7 +803,7 @@ def run():
   for idx, media_record in df_video_index.iterrows(): 
       # video_fname = media_record['filename'] # idx holds the filename now
       video_fname = idx
-      frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
+      frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, video_fname.split('.')[0])
       urls = media_record['compressed_mov_url'].split(';') # this can be a list, separated by ';'
       d = {
         'video_fname': video_fname,
@@ -812,11 +812,11 @@ def run():
       }
       target_videos.append(d)
 
-  if not globals.MAX_DATA_FILES:
-      globals.MAX_DATA_FILES = len(target_videos)
-  assert globals.MAX_DATA_FILES >= 1
-  print('Found {} target video records, using {}'.format(len(target_videos), globals.MAX_DATA_FILES))
-  target_videos = target_videos[:globals.MAX_DATA_FILES]
+  if not fidscs_globals.MAX_DATA_FILES:
+      fidscs_globals.MAX_DATA_FILES = len(target_videos)
+  assert fidscs_globals.MAX_DATA_FILES >= 1
+  print('Found {} target video records, using {}'.format(len(target_videos), fidscs_globals.MAX_DATA_FILES))
+  target_videos = target_videos[:fidscs_globals.MAX_DATA_FILES]
 
   # download data (video segment) files in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
   #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done
@@ -825,7 +825,7 @@ def run():
   print('Downloading segments for target videos...')
   parallel_map(
       download_video_segment,
-      ((seg_url, globals.VIDEO_DIR) for tvd in target_videos for seg_url in tvd['segment_urls'])
+      ((seg_url, fidscs_globals.VIDEO_DIR) for tvd in target_videos for seg_url in tvd['segment_urls'])
   )
       
   # extract frames from video segments in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
@@ -840,12 +840,12 @@ def run():
           tvd['segment_urls'],      # segment_urls
           tvd['video_fname'],       # video_fname
           tvd['frames_dir'],
-          globals.VIDEO_DIR,
+          fidscs_globals.VIDEO_DIR,
           df_decomposition
       ) for tvd in target_videos) 
   )
-  df_decomposition.to_csv(path_or_buf=os.path.join(globals.DATA_ROOT_DIR, 'df_decomposition.csv'))
-  df_decomposition_csv_path = os.path.join(globals.DATA_ROOT_DIR, 'df_decomposition.csv')
+  df_decomposition.to_csv(path_or_buf=os.path.join(fidscs_globals.DATA_ROOT_DIR, 'df_decomposition.csv'))
+  df_decomposition_csv_path = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'df_decomposition.csv')
   print(f"{'SUCCESSFULLY saved' if tf.io.gfile.exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
 
   return df_video_index, df_decomposition

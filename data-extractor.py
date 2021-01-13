@@ -22,7 +22,7 @@ from importlib import import_module
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
-import globals
+import fidscs_globals
 
 
 
@@ -84,43 +84,43 @@ def run(max_data_files, data_dir, use_beam=False):
   print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
   # ******************** global variables set at runtime: BEGIN ********************
-  globals.MAX_DATA_FILES = max_data_files
+  fidscs_globals.MAX_DATA_FILES = max_data_files
 
-  globals.DATA_ROOT_DIR = data_dir
-  if not tf.io.gfile.exists(globals.DATA_ROOT_DIR):
-    tf.io.gfile.makedirs(globals.DATA_ROOT_DIR)
-  if not tf.io.gfile.exists(globals.TMP_DIR):
-    tf.io.gfile.makedirs(globals.TMP_DIR)
+  fidscs_globals.DATA_ROOT_DIR = data_dir
+  if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR):
+    tf.io.gfile.makedirs(fidscs_globals.DATA_ROOT_DIR)
+  if not tf.io.gfile.exists(fidscs_globals.TMP_DIR):
+    tf.io.gfile.makedirs(fidscs_globals.TMP_DIR)
 
-  globals.VIDEO_DIR = os.path.join(globals.DATA_ROOT_DIR, 'videos')
-  if not tf.io.gfile.exists(globals.VIDEO_DIR):
-    tf.io.gfile.makedirs(globals.VIDEO_DIR)
+  fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
+  if not tf.io.gfile.exists(fidscs_globals.VIDEO_DIR):
+    tf.io.gfile.makedirs(fidscs_globals.VIDEO_DIR)
 
-  globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(globals.DATA_ROOT_DIR, 'stitched_video_frames')
-  if not tf.io.gfile.exists(globals.STICHED_VIDEO_FRAMES_DIR):
-    tf.io.gfile.makedirs(globals.STICHED_VIDEO_FRAMES_DIR)
+  fidscs_globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
+  if not tf.io.gfile.exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
+    tf.io.gfile.makedirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
 
-  globals.CORPUS_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME)
+  fidscs_globals.CORPUS_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
 
-  globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
+  fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
 
-  globals.ASL_CONSULTANT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.ASL_CONSULTANT_DS_FNAME)
+  fidscs_globals.ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
 
-  globals.VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_DS_FNAME)
+  fidscs_globals.VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
 
-  globals.VIDEO_SEGMENT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_SEGMENT_DS_FNAME)
+  fidscs_globals.VIDEO_SEGMENT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
 
-  globals.VIDEO_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_FRAME_DS_FNAME)
+  fidscs_globals.VIDEO_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
 
-  globals.UTTERANCE_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_DS_FNAME)
+  fidscs_globals.UTTERANCE_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
 
-  globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_VIDEO_DS_FNAME)
+  fidscs_globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
 
-  globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_DS_FNAME)
+  fidscs_globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
 
-  globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
+  fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
 
-  globals.VOCABULARY_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VOCABULARY_DS_FNAME)
+  fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
   # ******************** global variables set at runtime: END ********************
 
   if use_beam:

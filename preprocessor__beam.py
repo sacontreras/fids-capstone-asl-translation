@@ -14,7 +14,7 @@ import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
 
-import globals
+import fidscs_globals
 import preprocessor__common
 import utils
 
@@ -41,8 +41,8 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   """
   d_corpus_info MUST be a dict as follows:
     {
-      'tmp_dir': globals.TMP_DIR,
-      'corpus_archive': globals.CORPUS_ARCHIVE
+      'tmp_dir': fidscs_globals.TMP_DIR,
+      'corpus_archive': fidscs_globals.CORPUS_ARCHIVE
     }
 
   this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
@@ -71,7 +71,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   utils.download(
     remote_archive_path, 
     local_archive_path, 
-    block_sz=globals._1MB
+    block_sz=fidscs_globals._1MB
   )
   zip_ref = zipfile.ZipFile(local_archive_path, 'r')
   print(f"unzipping {local_archive_path} to {corpus_dir}...")
@@ -95,13 +95,13 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
   """
   vid_index_schemad_pcoll_row:
     beam.Row(
-      target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),
-      video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-      perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-      compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),
-      uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-      uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-      uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+      target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),
+      video_seq_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+      perspective_cam_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+      compressed_mov_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),
+      uncompressed_avi_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+      uncompressed_avi_mirror_1_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+      uncompressed_avi_mirror_2_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     )
 
   return:
@@ -115,7 +115,7 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
     )
   """
   target_video_fname = vid_index_schemad_pcoll_row.target_video_filename
-  target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
+  target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
   segment_urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
   return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
@@ -126,14 +126,14 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
   """
   segment_url = d_target_vid_seg_download_info['segment_url']
   segment_fname = d_target_vid_seg_download_info['segment_fname']
-  if not tf.io.gfile.exists(globals.VIDEO_DIR):
-    tf.io.gfile.makedirs(globals.VIDEO_DIR)
-  local_segment_path = os.path.join(globals.VIDEO_DIR, segment_fname)
+  if not tf.io.gfile.exists(fidscs_globals.VIDEO_DIR):
+    tf.io.gfile.makedirs(fidscs_globals.VIDEO_DIR)
+  local_segment_path = os.path.join(fidscs_globals.VIDEO_DIR, segment_fname)
   n_fail = 0
   if not tf.io.gfile.exists(local_segment_path):
     while n_fail < max_fail:
       try:
-        memfile = utils.download_to_memfile(segment_url, block_sz=globals._1MB, display=False) # returns with memfile.seek(0)
+        memfile = utils.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
         memfile.seek(0)
         with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
           f.write(memfile.getvalue())
@@ -173,13 +173,13 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
   if not tf.io.gfile.exists(target_video_frames_dir):
     tf.io.gfile.makedirs(target_video_frames_dir)
 
-  local_vid_segment_paths = [os.path.join(globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
+  local_vid_segment_paths = [os.path.join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
   for segment_dict in segment_dicts:
     segment_dict['n_frames_extracted'] = 0
 
   vid_caps = [cv2.VideoCapture(local_vid_segment_path) for local_vid_segment_path in local_vid_segment_paths]
   for seg_vid_cap in vid_caps:
-    seg_vid_cap.set(cv2.CAP_PROP_FPS, globals.FPS)
+    seg_vid_cap.set(cv2.CAP_PROP_FPS, fidscs_globals.FPS)
   frame_counts = list(map(lambda vc: int(vc.get(cv2.CAP_PROP_FRAME_COUNT)), vid_caps))
   n_frames_expected = sum(frame_counts)
 
@@ -215,7 +215,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
         seg_path = local_vid_segment_paths[i]
         seg_fname = seg_path.split(os.path.sep)[-1]
         if n_frames != _n_frames_expected:
-          print(f"{label+': ' if len(label)>0 else ''}{globals.VALIDATION_FATAL_ERROR_TEXT} Cannot stitch together target video {target_video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
+          print(f"{label+': ' if len(label)>0 else ''}{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} Cannot stitch together target video {target_video_fname} since {_n_frames_expected} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
           failed_target_videos.append(target_video_fname)
           fail = True
           break
@@ -230,14 +230,14 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
       segment_dict['n_frames_extracted'] = n_frames
 
   else:
-    if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-      print(f"\t{globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {target_video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
+    if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+      print(f"\t{fidscs_globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {target_video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
     failed_target_videos.append(target_video_fname)
     fail = True
 
   for local_vid_segment_path in local_vid_segment_paths:
     tf.io.gfile.remove(local_vid_segment_path)
-    if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__DEBUG:
+    if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
       print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
     pass
 
@@ -283,7 +283,7 @@ class CorpusDocumentFileProcessor(beam.DoFn):
     )
     self.next_doc_id += 1
     tf.io.gfile.remove(xml_db_path)
-    # if globals.OUTPUT_INFO_LEVEL <= globals.ERROR:
+    # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.ERROR:
     print(f"PROCESSED/DELETED corpus document {xml_db_path}") # always show this
     return [row]
 
@@ -291,17 +291,17 @@ class CorpusDocumentFileProcessor(beam.DoFn):
 # def load_corpus_index_csv(d_corpus_info):
 #   """
 #   this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
-#   so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
+#   so we fix the definition of dict_field_names to fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS
 
 #   d_corpus_info: {
-#     'corpus_index_csv_path': globals.CORPUS_DS_PATH,
-#     'max_len': globals.MAX_RAW_XML_B64_LEN
+#     'corpus_index_csv_path': fidscs_globals.CORPUS_DS_PATH,
+#     'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN
 #   }
 #   """
 #   return load_csv(
 #     d_corpus_info['corpus_index_csv_path'], 
 #     rows_to_dicts=True, 
-#     dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
+#     dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS,
 #     max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes since due to base-64 encoding
 #   )
   
@@ -311,8 +311,8 @@ class RowIndexer(beam.DoFn):
     self.var_name = var_name_prefix+"_next_id"
 
   def process(self, element):
-    tpl = (globals.D_IN_MEMORY_VARS.get(self.var_name, 0), element)
-    globals.D_IN_MEMORY_VARS[self.var_name] = globals.D_IN_MEMORY_VARS.get(self.var_name, 0)+1
+    tpl = (fidscs_globals.D_IN_MEMORY_VARS.get(self.var_name, 0), element)
+    fidscs_globals.D_IN_MEMORY_VARS[self.var_name] = fidscs_globals.D_IN_MEMORY_VARS.get(self.var_name, 0)+1
     return [tpl]
 
 
@@ -326,10 +326,10 @@ def decode_XML(corpus_index_schemad_pcoll_row):
       #   'XML_B64',
       #   'LEN'
       # ]
-      DocumentID=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
-      Filename=str(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
-      XML_B64=d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
-      LEN=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
+      DocumentID=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
+      Filename=str(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
+      XML_B64=d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
+      LEN=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
     )
   """
   raw_XML_b64_as_str = corpus_index_schemad_pcoll_row.XML_B64
@@ -349,9 +349,9 @@ def decode_XML(corpus_index_schemad_pcoll_row):
 
 
 def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
-    globals.MAX_RAW_XML_B64_LEN = max_xml_b64_len+4
+    fidscs_globals.MAX_RAW_XML_B64_LEN = max_xml_b64_len+4
     # debug
-    # print(f"ASSIGNED globals.MAX_RAW_XML_B64_LEN={globals.MAX_RAW_XML_B64_LEN}")
+    # print(f"ASSIGNED fidscs_globals.MAX_RAW_XML_B64_LEN={fidscs_globals.MAX_RAW_XML_B64_LEN}")
     return [max_xml_b64_len]
 
 
@@ -359,7 +359,7 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
   return (
     pcoll
     | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
-        os.path.join(globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
+        os.path.join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
         file_name_suffix=".csv", 
         append_trailing_newlines=True,
         shard_name_template="",
@@ -383,11 +383,11 @@ def pl__1__bootstrap_target_video_index(pl):
             # 4. final path to the selected videx index csv
             #   (note that the dict is not laid out in the above order)
           {
-            'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
-            'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
-            'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
-            'tmp_dir': globals.TMP_DIR,
-            'video_ds_path': globals.VIDEO_DS_PATH
+            'vid_indexes_dir': fidscs_globals.VIDEO_INDEXES_DIR, 
+            'sel_vid_index_path': fidscs_globals.SELECTED_VIDEO_INDEX_PATH, 
+            'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+            'tmp_dir': fidscs_globals.TMP_DIR,
+            'video_ds_path': fidscs_globals.VIDEO_DS_PATH
           }
         ]
       )
@@ -397,13 +397,13 @@ def pl__1__bootstrap_target_video_index(pl):
 
     # now we want to apply the schema so that we can ultimately use beam's beam.transforms.sql.SqlTransform (very similar to pandas sqldf) when necessary
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-          target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
-          video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-          perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-          compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
-          uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-          uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-          uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+          target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          video_seq_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+          perspective_cam_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+          compressed_mov_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+          uncompressed_avi_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+          uncompressed_avi_mirror_1_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+          uncompressed_avi_mirror_2_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
         )
       )
     # debug
@@ -431,18 +431,18 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll):
   return pl__X__write_pcoll_to_csv(
     sorted_corpus_index_csv_rows_pcoll, 
     "TARGET-VIDEO-INDEX", 
-    globals.VIDEO_INDEXES_ARCHIVE, 
-    globals.SCHEMA_COL_NAMES__VIDEO_INDEX
+    fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+    fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX
   )
 
 
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
-  # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: BEGIN ********************
+  # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_DATA_FILES: BEGIN ********************
   return (
     full_target_vid_index_schemad_pcoll
-    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(globals.MAX_DATA_FILES) if globals.MAX_DATA_FILES is not None and globals.MAX_DATA_FILES>0 else ''}")
+    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(fidscs_globals.MAX_DATA_FILES) if fidscs_globals.MAX_DATA_FILES is not None and fidscs_globals.MAX_DATA_FILES>0 else ''}")
   )
-  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to globals.MAX_DATA_FILES: END ********************
+  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_DATA_FILES: END ********************
 
 
 def pl__1__bootstrap_corpus_index(pl):
@@ -452,8 +452,8 @@ def pl__1__bootstrap_corpus_index(pl):
     | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
         [
           {
-            'tmp_dir': globals.TMP_DIR,
-            'corpus_archive': globals.CORPUS_ARCHIVE
+            'tmp_dir': fidscs_globals.TMP_DIR,
+            'corpus_archive': fidscs_globals.CORPUS_ARCHIVE
           }
         ]
       )
@@ -470,7 +470,7 @@ def pl__1__bootstrap_corpus_index(pl):
 def pl__1__corpus_document_file_structure_to_corpus_index(pl):
   return (
     pl
-    | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(globals.TMP_DIR, globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+    | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
     | "Beam PL: read corpus documents" >> fileio.ReadMatches() # this results in a pcoll of fileio.ReadableFile objects
     | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
   ) # corpus_index_schemad_pcoll
@@ -517,8 +517,8 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
   corpus_index_csv_path = pl__X__write_pcoll_to_csv(
     sorted_corpus_index_csv_rows_pcoll, 
     "CORPUS-INDEX", 
-    globals.CORPUS_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__CORPUS_DS
+    fidscs_globals.CORPUS_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS
   )
 
   max_xml_b64_len = (
@@ -536,7 +536,7 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
   )
   max_xml_b64_len_indexed = (
     max_xml_b64_len
-    | "Beam PL: assign to global var (globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
+    | "Beam PL: assign to global var (fidscs_globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
     | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer(var_name_prefix="max_xml_b64_len_id"))
     # debug
     # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
@@ -565,10 +565,10 @@ def pl__2__decode_XML(corpus_index_schemad_pcoll):
       #   'XML_B64',
       #   'LEN'
       # ]
-      DocumentID=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
-      Filename=str(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
-      XML_B64=d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
-      LEN=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
+      DocumentID=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
+      Filename=str(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
+      XML_B64=d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
+      LEN=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
     )
   """
   return (
@@ -693,7 +693,7 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
         [ # one row containing dict of:
             # 1. path to video index that was previously written to storage
           {
-            'vid_index_path': os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
+            'vid_index_path': os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
           }
         ]
       )
@@ -752,11 +752,11 @@ def validate_preprocess_participant_to_asl_consultant_id(tpl_participant_info_gr
       multiple_ages = set(multiple_ages)
       if len(multiple_ages) > 0:
         age = max(multiple_ages)
-        if len(multiple_ages) > 1 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-          print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} age is not unique: {multiple_ages}; assigning greatest value (most recent): {age}")
+        if len(multiple_ages) > 1 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+          print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} participant {participant_name} age is not unique: {multiple_ages}; assigning greatest value (most recent): {age}")
       else:
-        if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-          print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} age info does not exist; assigning default age (-1)")
+        if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+          print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} participant {participant_name} age info does not exist; assigning default age (-1)")
         age = -1
 
       multiple_genders = set(multiple_genders)
@@ -764,13 +764,13 @@ def validate_preprocess_participant_to_asl_consultant_id(tpl_participant_info_gr
         for _gender in multiple_genders:
           if len(_gender)>0:
             gender = _gender
-            if len(multiple_genders) > 1 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-              print(f"{globals.VALIDATION_WARNING_TEXT} participant {participant_name} gender is not unique: {multiple_genders}; current gender is {gender}; assigning first (non-empty) gender: {_gender}")              
+            if len(multiple_genders) > 1 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+              print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} participant {participant_name} gender is not unique: {multiple_genders}; current gender is {gender}; assigning first (non-empty) gender: {_gender}")              
             break
 
       return [(participant_name, age, gender)]
     else:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} does not have any associated info")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} participant {participant_name} does not have any associated info")
       return [tpl_participant_info_grouped_by_name] # passthrough
       
 
@@ -832,8 +832,8 @@ def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
   return pl__X__write_pcoll_to_csv(
     sorted_asl_consultant_index_csv_rows_pcoll, 
     "ASLCONSULTANT-INDEX", 
-    globals.ASL_CONSULTANT_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS
+    fidscs_globals.ASL_CONSULTANT_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS
   ) # asl_consultant_index_csv_path
 
 
@@ -973,8 +973,8 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
   return pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-INDEX", 
-    globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS
+    fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS
   ) # document_asl_consultant_index_csv_path
 
 
@@ -1138,8 +1138,8 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
   return pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_utterance_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-INDEX", 
-    globals.UTTERANCE_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__UTTERANCE_DS
+    fidscs_globals.UTTERANCE_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS
   ) # document_asl_consultant_utterance_index_csv_path
 
 
@@ -1172,11 +1172,11 @@ def validate_preprocess_merged_corpus_doc_asl_consultant_utterance_token(merged_
   """
   doc_fname = merged_doc_participant_utterance_token[0][0]
   if len(doc_fname)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid doc_fname {doc_fname}!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid doc_fname {doc_fname}!")
     return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
   participant_name = merged_doc_participant_utterance_token[0][1]
   if len(participant_name)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid participant_name {participant_name}!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid participant_name {participant_name}!")
     return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
 
   utterance_token_mapping = merged_doc_participant_utterance_token[1]['utterance_token_mapping']
@@ -1200,36 +1200,36 @@ def validate_preprocess_merged_corpus_doc_asl_consultant_utterance_token(merged_
         multiple_asl_consultants.append(_asl_consultant_id)
     if len(multiple_docs)>1 or len(multiple_asl_consultants)>1:
       multiple_associations = zip(multiple_docs, multiple_asl_consultants)
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} (<corpus doc id>, <asl consultant id>) association is not unique! It occurs has the following (<corpus doc id>, <asl consultant id>) associations: {multiple_associations}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} (<corpus doc id>, <asl consultant id>) association is not unique! It occurs has the following (<corpus doc id>, <asl consultant id>) associations: {multiple_associations}")
       return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
     else:
       doc_id = multiple_docs[0]
       asl_consultant_id = multiple_asl_consultants[0]
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} does not have a (<corpus doc id>, <asl consultant id>) association!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} does not have a (<corpus doc id>, <asl consultant id>) association!")
     return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
   
   if len(utterance_token_mapping) > 0:
     for utterance_token_mapping_instance in utterance_token_mapping:
       _utterance_seq_id = utterance_token_mapping_instance[0]
       if not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _utterance_seq_id {_utterance_seq_id} in utterance_token_mapping!")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _utterance_seq_id {_utterance_seq_id} in utterance_token_mapping!")
         return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
       _token_ling_text = utterance_token_mapping_instance[1]
       if len(_token_ling_text)==0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_ling_text {_token_ling_text} in utterance_token_mapping!")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_ling_text {_token_ling_text} in utterance_token_mapping!")
         return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
       _token_new_seq_id = utterance_token_mapping_instance[2]
       if not isinstance(_token_new_seq_id, int) or _token_new_seq_id<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_new_seq_id {_token_new_seq_id} in utterance_token_mapping!")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_new_seq_id {_token_new_seq_id} in utterance_token_mapping!")
         return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
       _token_start_time = utterance_token_mapping_instance[3]
       if not isinstance(_token_start_time, int) or _token_start_time<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_start_time {_token_start_time} in utterance_token_mapping!")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_start_time {_token_start_time} in utterance_token_mapping!")
         return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
       _token_end_time = utterance_token_mapping_instance[4]
       if not isinstance(_token_end_time, int) or _token_end_time<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_end_time {_token_end_time} in utterance_token_mapping!")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} contains invalid _token_end_time {_token_end_time} in utterance_token_mapping!")
         return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
       
       validated_results.append(
@@ -1239,7 +1239,7 @@ def validate_preprocess_merged_corpus_doc_asl_consultant_utterance_token(merged_
         )
       )
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} is not associated with an utterance_token_mapping!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} merged_doc_participant_utterance_token key {merged_doc_participant_utterance_token[0]} is not associated with an utterance_token_mapping!")
     return merged_doc_participant_utterance_token # this will throw an exception since other validation rows be differently shaped
 
   return validated_results 
@@ -1284,17 +1284,17 @@ def validate_preprocess_document_asl_consultant_utterance_token_tpl(document_asl
   """
   token_ling_text = document_asl_consultant_utterance_token_tpl[0]
   if len(token_ling_text)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl key is invalid: {token_ling_text}!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl key is invalid: {token_ling_text}!")
     return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
 
   vocabulary_token_id_map = document_asl_consultant_utterance_token_tpl[1]['vocabulary_token_id_map']
   if len(vocabulary_token_id_map) == 0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a <vocab token id> association!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a <vocab token id> association!")
     return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
 
   doc_participant_utterance_token_info_map = document_asl_consultant_utterance_token_tpl[1]['doc_participant_utterance_token_info_map']
   if len(doc_participant_utterance_token_info_map) == 0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a doc_participant_utterance_token_info_map!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) does not have a doc_participant_utterance_token_info_map!")
     return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
 
   validated_results = []
@@ -1307,7 +1307,7 @@ def validate_preprocess_document_asl_consultant_utterance_token_tpl(document_asl
     if isinstance(_vocab_token_id, int) and _vocab_token_id>-1 and _vocab_token_id not in multiple_token_ids:
       multiple_token_ids.append(_vocab_token_id)
   if len(multiple_token_ids) > 1:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) <vocab token id> association is not unique! It occurs has the following <vocab token id> associations: {multiple_token_ids}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) <vocab token id> association is not unique! It occurs has the following <vocab token id> associations: {multiple_token_ids}")
     return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
   else:
     vocab_token_id = multiple_token_ids[0]
@@ -1315,35 +1315,35 @@ def validate_preprocess_document_asl_consultant_utterance_token_tpl(document_asl
   for doc_participant_utterance_token_info_map_instance in doc_participant_utterance_token_info_map:
     _corpus_doc_id = doc_participant_utterance_token_info_map_instance[0]
     if not isinstance(_corpus_doc_id, int) or _corpus_doc_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _corpus_doc_id {_corpus_doc_id} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _corpus_doc_id {_corpus_doc_id} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _doc_fname = doc_participant_utterance_token_info_map_instance[1]
     if len(_doc_fname)==0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _doc_fname {_doc_fname} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _doc_fname {_doc_fname} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _asl_consultant_id = doc_participant_utterance_token_info_map_instance[2]
     if not isinstance(_asl_consultant_id, int) or _asl_consultant_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _asl_consultant_id {_asl_consultant_id} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _asl_consultant_id {_asl_consultant_id} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _participant_name = doc_participant_utterance_token_info_map_instance[3]
     if len(_participant_name)==0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _participant_name {_participant_name} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _participant_name {_participant_name} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _utterance_seq_id = doc_participant_utterance_token_info_map_instance[4]
     if not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _utterance_seq_id {_utterance_seq_id} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _utterance_seq_id {_utterance_seq_id} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _token_new_seq_id = doc_participant_utterance_token_info_map_instance[5]
     if not isinstance(_token_new_seq_id, int) or _token_new_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_new_seq_id {_token_new_seq_id} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_new_seq_id {_token_new_seq_id} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _token_start_time = doc_participant_utterance_token_info_map_instance[6]
     if not isinstance(_token_start_time, int) or _token_start_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_start_time {_token_start_time} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_start_time {_token_start_time} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
     _token_end_time = doc_participant_utterance_token_info_map_instance[7]
     if not isinstance(_token_end_time, int) or _token_end_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_end_time {_token_end_time} in doc_participant_utterance_token_info_map!")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant_utterance_token_tpl (key {token_ling_text}) contains invalid _token_end_time {_token_end_time} in doc_participant_utterance_token_info_map!")
       return document_asl_consultant_utterance_token_tpl # this will throw an exception since other validation rows be differently shaped
 
     validated_results.append(
@@ -1635,8 +1635,8 @@ def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
   return pl__X__write_pcoll_to_csv(
     sorted_vocabulary_index_csv_rows_pcoll, 
     "VOCABULARY-INDEX", 
-    globals.VOCABULARY_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__VOCABULARY_DS
+    fidscs_globals.VOCABULARY_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS
   ) # vocabulary_index_csv_path
 
 
@@ -1709,8 +1709,8 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
   return pl__X__write_pcoll_to_csv(
     sorted_document_asl_consultant_utterance_token_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-TOKEN-INDEX", 
-    globals.UTTERANCE_TOKEN_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
+    fidscs_globals.UTTERANCE_TOKEN_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
   ) # document_asl_consultant_utterance_token_index_csv_path
 
 
@@ -1730,76 +1730,76 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
   corpus_doc_id = key[0]
   if corpus_doc_id is None or not isinstance(corpus_doc_id, int) or corpus_doc_id<0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} corpus doc id is invalid: {corpus_doc_id}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} corpus doc id is invalid: {corpus_doc_id}")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   asl_consultant_id = key[1]
   if asl_consultant_id is None or not isinstance(asl_consultant_id, int) or asl_consultant_id<0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} asl consultant id is invalid: {asl_consultant_id}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} asl consultant id is invalid: {asl_consultant_id}")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   target_video_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['target_video_map']
   if len(target_video_map)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} target_video_map is empty!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} {key} target_video_map is empty!")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   utterance_token_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['utterance_token_map']
   if len(utterance_token_map)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} utterance_token_map is empty!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} {key} utterance_token_map is empty!")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   for i, utterance_token_map_instance in enumerate(utterance_token_map):
     # (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)
     _utterance_seq_id = utterance_token_map_instance[0]
     if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] utterance_seq_id is invalid: {_utterance_seq_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] utterance_seq_id is invalid: {_utterance_seq_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_seq_id = utterance_token_map_instance[1]
     if _token_seq_id is None or not isinstance(_token_seq_id, int) or _token_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_seq_id is invalid: {_token_seq_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_seq_id is invalid: {_token_seq_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_id = utterance_token_map_instance[2]
     if _token_id is None or not isinstance(_token_id, int) or _token_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_id is invalid: {_token_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_id is invalid: {_token_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_start_time = utterance_token_map_instance[3]
     if _token_start_time is None or not isinstance(_token_start_time, int) or _token_start_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_start_time is invalid: {_token_start_time}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_start_time is invalid: {_token_start_time}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_end_time = utterance_token_map_instance[4]
     if _token_end_time is None or not isinstance(_token_end_time, int) or _token_end_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_end_time is invalid: {_token_end_time}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_end_time is invalid: {_token_end_time}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
     for j, target_video_map_instance in enumerate(target_video_map):
       # (<target video fname>, <camera perspective>)
       _target_video_fname = target_video_map_instance[0]
       if _target_video_fname is None or len(_target_video_fname)==0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
       _n_existing_frame_images = -1 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
-      #   print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
+      #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
       frame_seq_paths = []
       if _n_existing_frame_images > 0:
-        _token_start_frame = int(round(_token_start_time/1000.0*globals.FPS))
-        _token_end_frame = int(round(_token_end_time/1000.0*globals.FPS))+1
+        _token_start_frame = int(round(_token_start_time/1000.0*fidscs_globals.FPS))
+        _token_end_frame = int(round(_token_end_time/1000.0*fidscs_globals.FPS))+1
         n_frames = _token_end_frame-_token_start_frame
         last_frame_idx = (_n_existing_frame_images-1)
 
         if _token_start_frame > last_frame_idx:
           # comment out for now
-          # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_start_frame ({_token_start_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling bounds of {n_frames} frames (from last frame index {last_frame_idx}) to {(last_frame_idx-(n_frames-1), last_frame_idx)}")
+          # print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_start_frame ({_token_start_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling bounds of {n_frames} frames (from last frame index {last_frame_idx}) to {(last_frame_idx-(n_frames-1), last_frame_idx)}")
           # return document_asl_consultant__to__target_video_utterance_token_map_tpl
           # readjust bounds from last_frame_idx going backwards
           _token_start_frame = last_frame_idx-(n_frames-1)
           _token_end_frame = last_frame_idx
         else:
           if _token_end_frame > last_frame_idx:
-            # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+            # print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
             # return document_asl_consultant__to__target_video_utterance_token_map_tpl
             # take all that is available to the end
             _token_end_frame = last_frame_idx
@@ -1810,15 +1810,15 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
             if tf.io.gfile.exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
-              print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
+              print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
               # return document_asl_consultant__to__target_video_utterance_token_map_tpl
         else:
-          if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-            print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+          if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+            print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
 
       _camera_perspective = target_video_map_instance[1]
       if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] camera_perspective is invalid: {_camera_perspective}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] camera_perspective is invalid: {_camera_perspective}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
       validated_results.append(
@@ -1854,7 +1854,7 @@ def get_target_video_frame_paths(document_asl_consultant_target_video_index_sche
       TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
     )
   """
-  target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
+  target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
   # _n_existing_frame_images = 0 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
   target_video_frame_paths = []
   # target_video_frames = []
@@ -1866,7 +1866,7 @@ def get_target_video_frame_paths(document_asl_consultant_target_video_index_sche
     
     # # target_video_frames = [(target_video_frame_path) for target_video_frame_path in target_video_frame_paths]
     # for target_video_frame_path in target_video_frame_paths:
-    #   img = load_img(target_video_frame_path, target_size=globals.FRAME_IMG_INPUT_SHAPE)  # this is a PIL image
+    #   img = load_img(target_video_frame_path, target_size=fidscs_globals.FRAME_IMG_INPUT_SHAPE)  # this is a PIL image
     #   # img = load_img(target_video_frame_path)  # this is a PIL image
     #   img_array = img_to_array(img)                         
     #   # x = img_array.reshape((1,) + img_array.shape)
@@ -1898,15 +1898,15 @@ def target_video_frame_image_to_bytes(document_asl_consultant_target_video_index
   frame_seq_id = document_asl_consultant_target_video_index_schemad_pcoll_row_tpl[1][1]
   frame_path = document_asl_consultant_target_video_index_schemad_pcoll_row_tpl[1][2]
 
-  # # frame_tensor = img_to_array(load_img(frame_path, target_size=globals.FRAME_IMG_INPUT_SHAPE))
-  # img = load_img(frame_path, target_size=globals.FRAME_IMG_INPUT_SHAPE)
+  # # frame_tensor = img_to_array(load_img(frame_path, target_size=fidscs_globals.FRAME_IMG_INPUT_SHAPE))
+  # img = load_img(frame_path, target_size=fidscs_globals.FRAME_IMG_INPUT_SHAPE)
   # bytesio = io.BytesIO()
   # img.save(bytesio, format='JPEG')
   # jpeg_bytes = bytesio.getvalue()
 
   # # now delete corresponding image file
   # tf.io.gfile.remove(frame_path)
-  # if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__DEBUG:
+  # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
   #   print(f"PROCESSED/DELETED target video frame: {frame_path}")
 
   return (
@@ -2030,8 +2030,8 @@ def pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(
   return pl__X__write_pcoll_to_csv(
     document_asl_consultant_target_video_frame_index_csv_rows, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-FRAME-INDEX", 
-    globals.VIDEO_FRAME_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS
+    fidscs_globals.VIDEO_FRAME_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS
   ) # target_video_frame_index_csv_path
 
 
@@ -2051,76 +2051,76 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
   corpus_doc_id = key[0]
   if corpus_doc_id is None or not isinstance(corpus_doc_id, int) or corpus_doc_id<0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} corpus doc id is invalid: {corpus_doc_id}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} corpus doc id is invalid: {corpus_doc_id}")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   asl_consultant_id = key[1]
   if asl_consultant_id is None or not isinstance(asl_consultant_id, int) or asl_consultant_id<0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} asl consultant id is invalid: {asl_consultant_id}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} asl consultant id is invalid: {asl_consultant_id}")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   target_video_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['target_video_map']
   if len(target_video_map)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} target_video_map is empty!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} {key} target_video_map is empty!")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   utterance_token_map = document_asl_consultant__to__target_video_utterance_token_map_tpl[1]['utterance_token_map']
   if len(utterance_token_map)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} {key} utterance_token_map is empty!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} {key} utterance_token_map is empty!")
     return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
   for i, utterance_token_map_instance in enumerate(utterance_token_map):
     # (<utterance seq id>, <token seq id>, <token id>, <token start time>, <token end time>)
     _utterance_seq_id = utterance_token_map_instance[0]
     if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] utterance_seq_id is invalid: {_utterance_seq_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] utterance_seq_id is invalid: {_utterance_seq_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_seq_id = utterance_token_map_instance[1]
     if _token_seq_id is None or not isinstance(_token_seq_id, int) or _token_seq_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_seq_id is invalid: {_token_seq_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_seq_id is invalid: {_token_seq_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_id = utterance_token_map_instance[2]
     if _token_id is None or not isinstance(_token_id, int) or _token_id<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_id is invalid: {_token_id}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_id is invalid: {_token_id}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_start_time = utterance_token_map_instance[3]
     if _token_start_time is None or not isinstance(_token_start_time, int) or _token_start_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_start_time is invalid: {_token_start_time}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_start_time is invalid: {_token_start_time}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
     _token_end_time = utterance_token_map_instance[4]
     if _token_end_time is None or not isinstance(_token_end_time, int) or _token_end_time<0:
-      print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_end_time is invalid: {_token_end_time}")
+      print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] token_end_time is invalid: {_token_end_time}")
       return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
     for j, target_video_map_instance in enumerate(target_video_map):
       # (<target video fname>, <camera perspective>)
       _target_video_fname = target_video_map_instance[0]
       if _target_video_fname is None or len(_target_video_fname)==0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = os.path.join(globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
       _n_existing_frame_images = -1 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
-      #   print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
+      #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
       frame_seq_paths = []
       if _n_existing_frame_images > 0:
-        _token_start_frame = int(round(_token_start_time/1000.0*globals.FPS))
-        _token_end_frame = int(round(_token_end_time/1000.0*globals.FPS))+1
+        _token_start_frame = int(round(_token_start_time/1000.0*fidscs_globals.FPS))
+        _token_end_frame = int(round(_token_end_time/1000.0*fidscs_globals.FPS))+1
         n_frames = _token_end_frame-_token_start_frame
         last_frame_idx = (_n_existing_frame_images-1)
 
         if _token_start_frame > last_frame_idx:
           # comment out for now
-          # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_start_frame ({_token_start_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling bounds of {n_frames} frames (from last frame index {last_frame_idx}) to {(last_frame_idx-(n_frames-1), last_frame_idx)}")
+          # print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_start_frame ({_token_start_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling bounds of {n_frames} frames (from last frame index {last_frame_idx}) to {(last_frame_idx-(n_frames-1), last_frame_idx)}")
           # return document_asl_consultant__to__target_video_utterance_token_map_tpl
           # readjust bounds from last_frame_idx going backwards
           _token_start_frame = last_frame_idx-(n_frames-1)
           _token_end_frame = last_frame_idx
         else:
           if _token_end_frame > last_frame_idx:
-            # print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+            # print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
             # return document_asl_consultant__to__target_video_utterance_token_map_tpl
             # take all that is available to the end
             _token_end_frame = last_frame_idx
@@ -2131,15 +2131,15 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
             if tf.io.gfile.exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
-              print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
+              print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
               # return document_asl_consultant__to__target_video_utterance_token_map_tpl
         else:
-          if globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-            print(f"{globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
+          if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+            print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} _token_end_frame ({_token_end_frame}) > _n_existing_frame_images ({_n_existing_frame_images}): reconciling _token_end_frame to {last_frame_idx}")
 
       _camera_perspective = target_video_map_instance[1]
       if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] camera_perspective is invalid: {_camera_perspective}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] camera_perspective is invalid: {_camera_perspective}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
       validated_results.append(
@@ -2257,8 +2257,8 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
             document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime,
             document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime,
             [frame_seq_id for frame_seq_id in range(
-                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime/1000.0*globals.FPS)), # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime)/1000.0)*globals.FPS
-                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime/1000.0*globals.FPS))    # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime)/1000.0)*globals.FPS
+                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime/1000.0*fidscs_globals.FPS)), # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.StartTime)/1000.0)*fidscs_globals.FPS
+                int(round(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime/1000.0*fidscs_globals.FPS))    # float(float(document_asl_consultant_utterance_token_index_schemad_pcoll_row.EndTime)/1000.0)*fidscs_globals.FPS
               )
             ]
           )
@@ -2307,8 +2307,8 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
 
   doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_MAX_CAMERA_PERSPECTIVES = (
     doc_consultant_utterance__to__target_video_token_map
-    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)<={globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
-        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])<=globals.MAX_CAMERA_PERSPECTIVES
+    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)<={fidscs_globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])<=fidscs_globals.MAX_CAMERA_PERSPECTIVES
       )
     # debug
     # | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="doc_consultant_utterance__to__target_video_token_map__target_video_map_lte_3 entry"))
@@ -2318,11 +2318,11 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
   #   we have a problem if doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES is non-empty!
   doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES = (
     doc_consultant_utterance__to__target_video_token_map
-    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
-        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])>globals.MAX_CAMERA_PERSPECTIVES
+    | f"filter doc_consultant_utterance__to__target_video_token_map_tpls with len(target_video_map)>{fidscs_globals.MAX_CAMERA_PERSPECTIVES}" >> beam.Filter(
+        lambda doc_consultant_utterance__to__target_video_token_map_tpl: len(doc_consultant_utterance__to__target_video_token_map_tpl[1]['target_video_map'])>fidscs_globals.MAX_CAMERA_PERSPECTIVES
       )
     # debug
-    | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg=f"{globals.VALIDATION_WARNING_TEXT} len(target_video_map)>{globals.MAX_CAMERA_PERSPECTIVES} entry"))
+    | "Beam PL: print doc_consultant_utterance__to__target_video_token_map__target_video_map_gt_MAX_CAMERA_PERSPECTIVES" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg=f"{fidscs_globals.VALIDATION_WARNING_TEXT} len(target_video_map)>{fidscs_globals.MAX_CAMERA_PERSPECTIVES} entry"))
   )
 
   # now transform doc_consultant_utterance__to__target_video_token_map tuples
@@ -2570,8 +2570,8 @@ def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_inde
   return pl__X__write_pcoll_to_csv(
     document_asl_consultant_target_video_utterance_token_frame_index_csv_rows, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-UTTERANCE-TOKEN-FRAME-INDEX", 
-    globals.UTTERANCE_TOKEN_FRAME_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS
+    fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS
   ) # document_asl_consultant_target_video_utterance_token_frame_index_csv_path
 
 
@@ -2593,7 +2593,7 @@ def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_inde
 #       else:
 #         if _doc_id != doc_id:
 #           not_unique = True
-#           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
+#           print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} document occurrence is not unique! It occurs in documents: {doc_fname} (doc id {doc_id}) and {_doc_fname} (doc id {_doc_id})")
 #           break
 #   if len(media_camera_perspective_mapping) > 0:
 #     camera_perspective = None
@@ -2605,7 +2605,7 @@ def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_inde
 #       else:
 #         if _camera_perspective != camera_perspective:
 #           not_unique = True
-#           print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+#           print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} media {media_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
 #           break
 #   return [tpl_combined_results_row] # passthrough
 # class DSVideoPreprocessingValidator(PipelinePcollElementProcessor):
@@ -2668,10 +2668,10 @@ def validate_preprocess_doc_participant_to_utterance_video_cameraperspective_map
       else:
         if _camera_perspective != camera_perspective:
           not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
+          print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective not unique! It has camera perspectives: {camera_perspective} and {_camera_perspective}")
           break
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} has no associated camera perspective!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} has no associated camera perspective!")
   
   doc_fname = None
   participant_name = None
@@ -2713,17 +2713,17 @@ def validate_preprocess_doc_participant_to_utterance_video_cameraperspective_map
         )
       )
     multiple_docs = set(multiple_docs)
-    if len(multiple_docs) > 1 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-      print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} document occurrence is not unique! It occurs in documents: {multiple_docs}")
+    if len(multiple_docs) > 1 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+      print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} document occurrence is not unique! It occurs in documents: {multiple_docs}")
 
     multiple_participants = set(multiple_participants)
-    if len(multiple_participants) > 1 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-      print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} participant occurrence is not unique! It has participants: {multiple_participants}")
+    if len(multiple_participants) > 1 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+      print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} participant occurrence is not unique! It has participants: {multiple_participants}")
     # if len(multiple_utterances) > 1: # this is actually expected
-    #   print(f"{globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} utterance seq id occurrence is not unique! It has utterance seq ids: {multiple_utterances}")
+    #   print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} target video {target_video_fname} utterance seq id occurrence is not unique! It has utterance seq ids: {multiple_utterances}")
 
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} is not associated with a corpus document!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} is not associated with a corpus document!")
     validated_results.append(
       (None, participant_name),
       (utterance_seq_id, target_video_fname, camera_perspective)
@@ -2754,12 +2754,12 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
   """
   doc_fname = vdpucpwiprt[0][0]
   if doc_fname is None or len(doc_fname)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated corpus document filename")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated corpus document filename")
     return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
   participant_name = vdpucpwiprt[0][1]
   if participant_name is None or len(participant_name)==0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated participant name")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} video_doc_participant_utterance_camera_perspective_with_ids_pcoll_row_tpl {vdpucpwiprt} has no associated participant name")
     return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
   document_participant_with_ids_mapping = vdpucpwiprt[1]['document_participant_with_ids_mapping']
@@ -2781,7 +2781,7 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
       else:
         if _doc_id != doc_id:
           not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} doc_id is not unique! It has doc ids: {doc_id} and {_doc_id}")
+          print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} doc_id is not unique! It has doc ids: {doc_id} and {_doc_id}")
           return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       if asl_consultant_id is None:
@@ -2789,10 +2789,10 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
       else:
         if _asl_consultant_id != asl_consultant_id:
           not_unique = True
-          print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} asl_consultant_id is not unique! It has doc ids: {asl_consultant_id} and {_asl_consultant_id}")
+          print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} asl_consultant_id is not unique! It has doc ids: {asl_consultant_id} and {_asl_consultant_id}")
           return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no document_participant_with_ids_mapping!")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no document_participant_with_ids_mapping!")
     return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
   
   if len(doc_participant_to_utterance_video_cameraperspective_mapping) > 0:
@@ -2801,17 +2801,17 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
       # (<utterance seq id>, <video fname>, <camera perspective>)
       _utterance_seq_id = doc_participant_to_utterance_video_cameraperspective_mapping_instance[0]
       if _utterance_seq_id is None or not isinstance(_utterance_seq_id, int) or _utterance_seq_id<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid utterance seq id: {_utterance_seq_id}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid utterance seq id: {_utterance_seq_id}")
         return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       _media_fname = doc_participant_to_utterance_video_cameraperspective_mapping_instance[1]
       if _media_fname is None or len(_media_fname)==0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an empty (or None) media filename")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an empty (or None) media filename")
         return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       _camera_perspective = doc_participant_to_utterance_video_cameraperspective_mapping_instance[2]
       if _camera_perspective is None or not isinstance(_camera_perspective, int) or _camera_perspective<0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid camera perspective: {_camera_perspective}")
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has an invalid camera perspective: {_camera_perspective}")
         return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
       # ((<doc id>, <asl consultant id>), (<doc filename>, <participant name>, <utterance seq id>, <media filename>, <camera perspective>))
@@ -2822,7 +2822,7 @@ def validate_preprocess_video_doc_participant_utterance_camera_perspective_with_
         )
       )
   else:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no doc_participant_to_utterance_video_cameraperspective_mapping entries")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document {doc_fname} has no doc_participant_to_utterance_video_cameraperspective_mapping entries")
     return vdpucpwiprt # note that this will cause an exception in beam since the shape will not match other validated rows
 
   return validated_results
@@ -2859,12 +2859,12 @@ def validate_preprocess_target_video_to_segment_mapping(target_video_to_segment_
 
   doc_consultant_camera_perspective_mapping = list(set(target_video_to_segment_mapping_tpl[1]['doc_consultant_camera_perspective_mapping']))
   if len(doc_consultant_camera_perspective_mapping) == 0:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} doc_consultant_camera_perspective_mapping is empty")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} doc_consultant_camera_perspective_mapping is empty")
     return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
   video_to_segment_url_list_as_str = list(set(target_video_to_segment_mapping_tpl[1]['video_to_segment_url_list_as_str']))
   if len(video_to_segment_url_list_as_str) != 1:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} segment list is either empty or not unique: {video_to_segment_url_list_as_str}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} segment list is either empty or not unique: {video_to_segment_url_list_as_str}")
     return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
   video_to_segment_url_list_as_str = video_to_segment_url_list_as_str[0]
 
@@ -2903,10 +2903,10 @@ def validate_preprocess_target_video_to_segment_mapping(target_video_to_segment_
       )
 
   if len(multiple_asl_consultants) != 1:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} asl consultant is either either empty or not unique: {multiple_asl_consultants}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} asl consultant is either either empty or not unique: {multiple_asl_consultants}")
     return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
   if len(multiple_camera_perspectives) != 1:
-    print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective is either either empty or not unique: {multiple_camera_perspectives}")
+    print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} target video {target_video_fname} camera perspective is either either empty or not unique: {multiple_camera_perspectives}")
     return target_video_to_segment_mapping_tpl # note that this will cause an exception in beam since the shape will not match other validated rows
 
   return validated_results
@@ -2957,13 +2957,13 @@ def pl__6__create_document_asl_consultant_target_video_index_pcolls(
   # now we need to filter from full_target_vid_index_schemad_pcoll for each media_fname in media_list_pcoll
     # recall, vid_index_entry is "schemad":
     #   beam.Row(
-    #     target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
-    #     video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-    #     perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-    #     compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
-    #     uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-    #     uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-    #     uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+    #     target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+    #     video_seq_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+    #     perspective_cam_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+    #     compressed_mov_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+    #     uncompressed_avi_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+    #     uncompressed_avi_mirror_1_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+    #     uncompressed_avi_mirror_2_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
     #   )
   target_full_target_vid_index_mapping = (
     full_target_vid_index_schemad_pcoll
@@ -3188,8 +3188,8 @@ def pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_con
   return pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_video_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-VIDEO-INDEX", 
-    globals.VIDEO_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__VIDEO_DS
+    fidscs_globals.VIDEO_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS
   ) # document_asl_consultant_video_index_csv_path
 
 
@@ -3249,8 +3249,8 @@ def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_
   return pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_utterance_video_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-TARGETVIDEO-INDEX", 
-    globals.UTTERANCE_VIDEO_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
+    fidscs_globals.UTTERANCE_VIDEO_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
   ) # document_asl_consultant_utterance_video_index_csv_path
 
 
@@ -3301,8 +3301,8 @@ def pl__7__write_document_target_video_segment_index_csv(document_target_video_s
   return pl__X__write_pcoll_to_csv(
     sorted_target_video_segment_index_schemad_pcoll, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-SEGMENT-INDEX", 
-    globals.VIDEO_SEGMENT_DS_FNAME, 
-    globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS
+    fidscs_globals.VIDEO_SEGMENT_DS_FNAME, 
+    fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS
   ) # target_video_segment_index_csv_path
 
 
@@ -3555,21 +3555,21 @@ def run():
     with beam.Pipeline(options=pipeline_options) as pl:
       vid_indexes_dir_path_pcoll = (
         pl
-        | f"Beam PL: create {globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_INDEXES_DIR])
+        | f"Beam PL: create {fidscs_globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_INDEXES_DIR])
       )
-      beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, globals.VIDEO_INDEXES_DIR)
+      beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, fidscs_globals.VIDEO_INDEXES_DIR)
     with beam.Pipeline(options=pipeline_options) as pl:
       corpus_docs_dir_path_pcoll = (
         pl
-        | f"Beam PL: create {globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([globals.CORPUS_DIR])
+        | f"Beam PL: create {fidscs_globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.CORPUS_DIR])
       )
-      beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, globals.CORPUS_DIR)
+      beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, fidscs_globals.CORPUS_DIR)
     with beam.Pipeline(options=pipeline_options) as pl:
       vid_download_dir_path_pcoll = (
         pl
-        | f"Beam PL: create {globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([globals.VIDEO_DIR])
+        | f"Beam PL: create {fidscs_globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_DIR])
       )
-      beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, globals.VIDEO_DIR)
+      beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, fidscs_globals.VIDEO_DIR)
   
 
   print(f"Beam PL: ALL DONE!")

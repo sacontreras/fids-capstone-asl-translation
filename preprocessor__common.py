@@ -2,18 +2,18 @@ import tensorflow as tf
 import os
 import utils
 import zipfile
-import globals
+import fidscs_globals
 
 
 def boostrap_target_video_index(d_vid_indexes_info):
   """
   d_vid_indexes_info MUST be a dict as follows:
     {
-      'vid_indexes_dir': globals.VIDEO_INDEXES_DIR, 
-      'sel_vid_index_path': globals.SELECTED_VIDEO_INDEX_PATH, 
-      'video_indexes_archive': globals.VIDEO_INDEXES_ARCHIVE, 
-      'tmp_dir': globals.TMP_DIR,
-      'video_ds_path': globals.VIDEO_DS_PATH
+      'vid_indexes_dir': fidscs_globals.VIDEO_INDEXES_DIR, 
+      'sel_vid_index_path': fidscs_globals.SELECTED_VIDEO_INDEX_PATH, 
+      'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+      'tmp_dir': fidscs_globals.TMP_DIR,
+      'video_ds_path': fidscs_globals.VIDEO_DS_PATH
     }
 
   this function downloads d_vid_indexes_info['video_indexes_archive'] from http://www.bu.edu/asllrp/ncslgr-for-download
@@ -32,7 +32,7 @@ def boostrap_target_video_index(d_vid_indexes_info):
   utils.download(
       remote_archive_path, 
       local_archive_path, 
-      block_sz=globals._1MB
+      block_sz=fidscs_globals._1MB
   )
   zip_ref = zipfile.ZipFile(local_archive_path, 'r')
   print(f"unzipping {local_archive_path} to {d_vid_indexes_info['vid_indexes_dir']}...")

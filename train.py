@@ -4,9 +4,10 @@ import os
 import apache_beam as beam
 import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
+import apache_beam.runners.interactive.interactive_beam as ib
 
 import beam__common
-import globals
+import fidscs_globals
 
 options = {
     'project': 'my-project', # change
@@ -19,23 +20,23 @@ pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in opti
 print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
 def run(data_dir):
-    globals.DATA_ROOT_DIR = data_dir
-    if not tf.io.gfile.exists(globals.DATA_ROOT_DIR) or len(tf.io.gfile.listdir(globals.DATA_ROOT_DIR))==0:
-        print(f"{globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
+    fidscs_globals.DATA_ROOT_DIR = data_dir
+    if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR) or len(tf.io.gfile.listdir(fidscs_globals.DATA_ROOT_DIR))==0:
+        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
         return
-    globals.VIDEO_DIR = os.path.join(globals.DATA_ROOT_DIR, 'videos')
-    globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(globals.DATA_ROOT_DIR, 'stitched_video_frames')
-    globals.CORPUS_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.CORPUS_DS_FNAME)
-    globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
-    globals.ASL_CONSULTANT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.ASL_CONSULTANT_DS_FNAME)
-    globals.VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_DS_FNAME)
-    globals.VIDEO_SEGMENT_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_SEGMENT_DS_FNAME)
-    globals.VIDEO_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_FRAME_DS_FNAME)
-    globals.UTTERANCE_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_DS_FNAME)
-    globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_VIDEO_DS_FNAME)
-    globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_DS_FNAME)
-    globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
-    globals.VOCABULARY_DS_PATH = os.path.join(globals.DATA_ROOT_DIR, globals.VOCABULARY_DS_FNAME)
+    fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
+    fidscs_globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
+    fidscs_globals.CORPUS_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
+    fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
+    fidscs_globals.ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
+    fidscs_globals.VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
+    fidscs_globals.VIDEO_SEGMENT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
+    fidscs_globals.VIDEO_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
+    fidscs_globals.UTTERANCE_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
+    fidscs_globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
+    fidscs_globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
+    fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
+    fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
 
 
     with beam.Pipeline(options=pipeline_options) as pl:
@@ -51,6 +52,13 @@ def run(data_dir):
         document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_token_index_csv(pl)
         document_asl_consultant_target_video_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl)
         document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl)
+
+        """
+        document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll is the main table we use for training.
+          This will ultimately provide which frame sequences correspond to individual tokens.
+
+        But our first measure is to build to train and validation sets (for tokens).
+        """
 
 
 

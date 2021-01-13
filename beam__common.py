@@ -7,7 +7,7 @@ import urllib
 import apache_beam as beam
 import tensorflow as tf
 
-import globals
+import fidscs_globals
 
 
 class PipelinePcollElementProcessor(beam.DoFn):
@@ -51,15 +51,15 @@ class GlobalVarValueAssigner(PipelinePcollElementProcessor):
 def dataset_csv_files_exist(dataset_csv_paths=None):
   if dataset_csv_paths is None or len(dataset_csv_paths)==0:
     dataset_csv_paths = [
-      globals.ASL_CONSULTANT_DS_PATH,
-      globals.VIDEO_DS_PATH,
-      globals.UTTERANCE_DS_PATH,
-      globals.UTTERANCE_VIDEO_DS_PATH,
-      globals.UTTERANCE_TOKEN_DS_PATH,
-      globals.CORPUS_DS_PATH,
-      globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-      globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
-      globals.VOCABULARY_DS_PATH
+      fidscs_globals.ASL_CONSULTANT_DS_PATH,
+      fidscs_globals.VIDEO_DS_PATH,
+      fidscs_globals.UTTERANCE_DS_PATH,
+      fidscs_globals.UTTERANCE_VIDEO_DS_PATH,
+      fidscs_globals.UTTERANCE_TOKEN_DS_PATH,
+      fidscs_globals.CORPUS_DS_PATH,
+      fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
+      fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
+      fidscs_globals.VOCABULARY_DS_PATH
     ]
   for dataset_csv_path in dataset_csv_paths:
     if not tf.io.gfile.exists(dataset_csv_path):
@@ -112,7 +112,7 @@ def load_vid_index_csv(sel_csv_path):
     dict_field_names=['filename', 'video_seq_id', 'perspective_cam_id', 'compressed_mov_url', 'uncompressed_avi_url', 'uncompressed_avi_mirror_1_url', 'uncompressed_avi_mirror_2_url']
   """
   if sel_csv_path is not None and len(sel_csv_path)>0:
-    return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
+    return load_csv(sel_csv_path, rows_to_dicts=True, dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX)
   else:
     return []
 
@@ -120,8 +120,8 @@ def load_vid_index_csv(sel_csv_path):
 def rmdir(path_coll_row):
   path = path_coll_row
   n_files = len(tf.io.gfile.listdir(path))
-  if n_files > 0 and globals.OUTPUT_INFO_LEVEL <= globals.OUTPUT_INFO_LEVEL__WARNING:
-    print(f"{globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
+  if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+    print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
   tf.io.gfile.rmtree(path)
   return path
 
@@ -156,16 +156,16 @@ def pl__X__sort_pcoll(pcoll, pcoll_label):
 def pl__1__read_target_vid_index_csv(pl):
   return (
     pl
-    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(globals.DATA_ROOT_DIR, globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
+    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
-          target_video_filename=str(urllib.parse.quote(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
-          video_seq_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
-          perspective_cam_id=int(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
-          compressed_mov_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
-          uncompressed_avi_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
-          uncompressed_avi_mirror_1_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
-          uncompressed_avi_mirror_2_url=str(x[globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
+          target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!
+          video_seq_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[1]]),                            
+          perspective_cam_id=int(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[2]]),                  
+          compressed_mov_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[3]]),            # this is actually a list with ';' as delimiter)
+          uncompressed_avi_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[4]]),                     
+          uncompressed_avi_mirror_1_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[5]]),   
+          uncompressed_avi_mirror_2_url=str(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[6]])
         )
       )
   ) # full_target_vid_index_schemad_pcoll
@@ -174,17 +174,17 @@ def pl__1__read_target_vid_index_csv(pl):
 def load_corpus_index_csv(d_corpus_info):
   """
   this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
-  so we fix the definition of dict_field_names to globals.SCHEMA_COL_NAMES__CORPUS_DS
+  so we fix the definition of dict_field_names to fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS
 
   d_corpus_info: {
-    'corpus_index_csv_path': globals.CORPUS_DS_PATH,
-    'max_len': globals.MAX_RAW_XML_B64_LEN
+    'corpus_index_csv_path': fidscs_globals.CORPUS_DS_PATH,
+    'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN
   }
   """
   return load_csv(
     d_corpus_info['corpus_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__CORPUS_DS,
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS,
     max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes due to base-64 encoding
   )
 
@@ -193,11 +193,11 @@ def pl__1__read_corpus_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the corpus index csv" >> beam.Create(
         [{
-          'corpus_index_csv_path': globals.CORPUS_DS_PATH,
-          'max_len': globals.MAX_RAW_XML_B64_LEN
+          'corpus_index_csv_path': fidscs_globals.CORPUS_DS_PATH,
+          'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN
         }]
       )
-    | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
+    | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS keys)
     | "Beam PL: apply schema to extracted corpus document info dicts" >> beam.Map(
         lambda d_corpus_document_info: beam.Row(
           # SCHEMA_COL_NAMES__CORPUS_DS = [
@@ -206,10 +206,10 @@ def pl__1__read_corpus_index_csv(pl):
           #   'XML_B64',
           #   'LEN'
           # ]
-          DocumentID=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
-          Filename=str(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
-          XML_B64=d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
-          LEN=int(d_corpus_document_info[globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
+          DocumentID=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[0]]),
+          Filename=str(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[1]]),
+          XML_B64=d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[2]],
+          LEN=int(d_corpus_document_info[fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS[3]])
         )
       )
     # debug
@@ -221,7 +221,7 @@ def load_asl_consultant_index_csv(d_asl_consultant_index_info):
   return load_csv(
     d_asl_consultant_index_info['asl_consultant_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS
   )
 
 def pl__1__read_asl_consultant_index_csv(pl):
@@ -229,11 +229,11 @@ def pl__1__read_asl_consultant_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the asl consultant index csv" >> beam.Create(
         [{
-          'asl_consultant_index_csv_path': globals.ASL_CONSULTANT_DS_PATH
+          'asl_consultant_index_csv_path': fidscs_globals.ASL_CONSULTANT_DS_PATH
         }]
       )
     # | "Beam PL: print path to asl_consultant_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("asl_consultant_index path"))
-    | "Beam PL: read asl consultant index into pcoll" >> beam.FlatMap(load_asl_consultant_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS keys)
+    | "Beam PL: read asl consultant index into pcoll" >> beam.FlatMap(load_asl_consultant_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS keys)
     | "Beam PL: apply schema to extracted document asl consultant index info dicts" >> beam.Map(
         lambda d_document_asl_consultant: beam.Row(
           # SCHEMA_COL_NAMES__ASL_CONSULTANT_DS = [
@@ -242,10 +242,10 @@ def pl__1__read_asl_consultant_index_csv(pl):
           #   'Age',
           #   'Gender'
           # ]
-          DocumentID=int(d_document_asl_consultant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[0]]),
-          Filename=str(d_document_asl_consultant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]]),
-          ASLConsultantID=int(d_document_asl_consultant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]]),
-          ParticipantName=str(d_document_asl_consultant[globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]])
+          DocumentID=int(d_document_asl_consultant[fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[0]]),
+          Filename=str(d_document_asl_consultant[fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[1]]),
+          ASLConsultantID=int(d_document_asl_consultant[fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[2]]),
+          ParticipantName=str(d_document_asl_consultant[fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS[3]])
         )
       )
     # debug
@@ -257,7 +257,7 @@ def load_document_asl_consultant_utterance_index_csv(d_document_asl_consultant_u
   return load_csv(
     d_document_asl_consultant_utterance_index_info['document_asl_consultant_utterance_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__UTTERANCE_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS
   )
 
 def pl__1__read_document_asl_consultant_utterance_index_csv(pl):
@@ -265,11 +265,11 @@ def pl__1__read_document_asl_consultant_utterance_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant utterance index csv" >> beam.Create(
         [{
-          'document_asl_consultant_utterance_index_csv_path': globals.UTTERANCE_DS_PATH
+          'document_asl_consultant_utterance_index_csv_path': fidscs_globals.UTTERANCE_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_utterance_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_index path"))
-    | "Beam PL: read document asl consultant utterance index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__UTTERANCE_DS keys)
+    | "Beam PL: read document asl consultant utterance index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS keys)
     | "Beam PL: apply schema to extracted document asl consultant utterance index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_utterance: beam.Row(
           # SCHEMA_COL_NAMES__UTTERANCE_DS = [
@@ -281,13 +281,13 @@ def pl__1__read_document_asl_consultant_utterance_index_csv(pl):
           #   'Tokens',
           #   'Translation'
           # ]
-          DocumentID=int(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[1]]),
-          UtteranceSequence=int(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[2]]),
-          StartTime=int(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[3]]),
-          EndTime=int(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[4]]),
-          Tokens=str(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[5]]),
-          Translation=str(d_document_asl_consultant_utterance[globals.SCHEMA_COL_NAMES__UTTERANCE_DS[6]])
+          DocumentID=int(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[1]]),
+          UtteranceSequence=int(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[2]]),
+          StartTime=int(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[3]]),
+          EndTime=int(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[4]]),
+          Tokens=str(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[5]]),
+          Translation=str(d_document_asl_consultant_utterance[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_DS[6]])
         )
       )
     # debug
@@ -299,7 +299,7 @@ def load_document_asl_consultant_target_video_index_csv(d_document_asl_consultan
   return load_csv(
     d_document_asl_consultant_target_video_index_info['document_asl_consultant_target_video_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS
   )
 
 def pl__1__read_document_asl_consultant_target_video_index_csv(pl):
@@ -307,11 +307,11 @@ def pl__1__read_document_asl_consultant_target_video_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant target video index csv" >> beam.Create(
         [{
-          'document_asl_consultant_target_video_index_csv_path': globals.VIDEO_DS_PATH
+          'document_asl_consultant_target_video_index_csv_path': fidscs_globals.VIDEO_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_target_video_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_target_video_index path"))
-    | "Beam PL: read document asl consultant target video index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__VIDEO_DS keys)
+    | "Beam PL: read document asl consultant target video index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS keys)
     | "Beam PL: apply schema to extracted document asl consultant target video index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_target_video_index_info: beam.Row(
           # SCHEMA_COL_NAMES__VIDEO_DS = [
@@ -320,10 +320,10 @@ def pl__1__read_document_asl_consultant_target_video_index_csv(pl):
           #   'CameraPerspective',
           #   'TargetVideoFilename'
           # ]
-          DocumentID=int(d_document_asl_consultant_target_video_index_info[globals.SCHEMA_COL_NAMES__VIDEO_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_target_video_index_info[globals.SCHEMA_COL_NAMES__VIDEO_DS[1]]),
-          CameraPerspective=int(d_document_asl_consultant_target_video_index_info[globals.SCHEMA_COL_NAMES__VIDEO_DS[2]]),
-          TargetVideoFilename=str(d_document_asl_consultant_target_video_index_info[globals.SCHEMA_COL_NAMES__VIDEO_DS[3]])
+          DocumentID=int(d_document_asl_consultant_target_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_target_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[1]]),
+          CameraPerspective=int(d_document_asl_consultant_target_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[2]]),
+          TargetVideoFilename=str(d_document_asl_consultant_target_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_DS[3]])
         )
       )
     # debug
@@ -335,7 +335,7 @@ def load_document_asl_consultant_utterance_video_index_csv(d_document_asl_consul
   return load_csv(
     d_document_asl_consultant_utterance_video_index_info['document_asl_consultant_utterance_video_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS
   )
 
 def pl__1__read_document_asl_consultant_utterance_video_index_csv(pl):
@@ -343,11 +343,11 @@ def pl__1__read_document_asl_consultant_utterance_video_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant utterance target video index csv" >> beam.Create(
         [{
-          'document_asl_consultant_utterance_video_index_csv_path': globals.UTTERANCE_VIDEO_DS_PATH
+          'document_asl_consultant_utterance_video_index_csv_path': fidscs_globals.UTTERANCE_VIDEO_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_target_video_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_target_video_index path"))
-    | "Beam PL: read document asl consultant utterance target video index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_video_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS keys)
+    | "Beam PL: read document asl consultant utterance target video index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_video_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS keys)
     | "Beam PL: apply schema to extracted document asl consultant utterance target video index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_utterance_video_index_info: beam.Row(
           # SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS = [
@@ -357,11 +357,11 @@ def pl__1__read_document_asl_consultant_utterance_video_index_csv(pl):
           #   'UtteranceSequence',
           #   'CameraPerspective'
           # ]
-          DocumentID=int(d_document_asl_consultant_utterance_video_index_info[globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_utterance_video_index_info[globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[1]]),
-          TargetVideoFilename=str(d_document_asl_consultant_utterance_video_index_info[globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[2]]),
-          UtteranceSequence=int(d_document_asl_consultant_utterance_video_index_info[globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3]]),
-          CameraPerspective=int(d_document_asl_consultant_utterance_video_index_info[globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[4]])
+          DocumentID=int(d_document_asl_consultant_utterance_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_utterance_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[1]]),
+          TargetVideoFilename=str(d_document_asl_consultant_utterance_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[2]]),
+          UtteranceSequence=int(d_document_asl_consultant_utterance_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[3]]),
+          CameraPerspective=int(d_document_asl_consultant_utterance_video_index_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_VIDEO_DS[4]])
         )
       )
     # debug
@@ -373,7 +373,7 @@ def load_document_target_video_segment_index_csv(d_document_target_video_segment
   return load_csv(
     d_document_target_video_segment_index_info['document_target_video_segment_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS
   )
 
 def pl__1__read_document_target_video_segment_index_csv(pl):
@@ -381,11 +381,11 @@ def pl__1__read_document_target_video_segment_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document target video segment index csv" >> beam.Create(
         [{
-          'document_target_video_segment_index_csv_path': globals.VIDEO_SEGMENT_DS_PATH
+          'document_target_video_segment_index_csv_path': fidscs_globals.VIDEO_SEGMENT_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_target_video_segment_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("document_target_video_segment_index path"))
-    | "Beam PL: read document target video segment index into pcoll" >> beam.FlatMap(load_document_target_video_segment_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS keys)
+    | "Beam PL: read document target video segment index into pcoll" >> beam.FlatMap(load_document_target_video_segment_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS keys)
     | "Beam PL: apply schema to extracted document target video segment index info dicts" >> beam.Map(
         lambda d_document_target_video_segment_index_info: beam.Row(
           # SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS = [
@@ -397,13 +397,13 @@ def pl__1__read_document_target_video_segment_index_csv(pl):
           #   'SegmentVideoFilename',
           #   'URL'
           # ]
-          DocumentID=int(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[0]]),
-          ASLConsultantID=int(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[1]]),
-          CameraPerspective=int(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[2]]),
-          TargetVideoFilename=str(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[3]]),
-          SegmentSequence=int(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[4]]),
-          SegmentVideoFilename=str(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[5]]),
-          URL=str(d_document_target_video_segment_index_info[globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[6]])
+          DocumentID=int(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[0]]),
+          ASLConsultantID=int(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[1]]),
+          CameraPerspective=int(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[2]]),
+          TargetVideoFilename=str(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[3]]),
+          SegmentSequence=int(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[4]]),
+          SegmentVideoFilename=str(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[5]]),
+          URL=str(d_document_target_video_segment_index_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_SEGMENT_DS[6]])
         )
       )
     # debug
@@ -415,7 +415,7 @@ def load_vocabulary_index_csv(d_vocabulary_index_info):
   return load_csv(
     d_vocabulary_index_info['vocabulary_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__VOCABULARY_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS
   )
 
 def pl__1__read_vocabulary_index_csv(pl):
@@ -423,19 +423,19 @@ def pl__1__read_vocabulary_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the vocabulary index csv" >> beam.Create(
         [{
-          'vocabulary_index_csv_path': globals.VOCABULARY_DS_PATH
+          'vocabulary_index_csv_path': fidscs_globals.VOCABULARY_DS_PATH
         }]
       )
     # | "Beam PL: print path to vocabulary_index" >> beam.ParDo(PipelinePcollPrinter("vocabulary_index path"))
-    | "Beam PL: read vocabulary index into pcoll" >> beam.FlatMap(load_vocabulary_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__VOCABULARY_DS keys)
+    | "Beam PL: read vocabulary index into pcoll" >> beam.FlatMap(load_vocabulary_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS keys)
     | "Beam PL: apply schema to extracted vocabulary index info dicts" >> beam.Map(
         lambda d_vocabulary_index_info: beam.Row(
           # SCHEMA_COL_NAMES__VOCABULARY_DS = [
           #   'TokenID',
           #   'Token'
           # ]
-          TokenID=int(d_vocabulary_index_info[globals.SCHEMA_COL_NAMES__VOCABULARY_DS[0]]),
-          Token=str(d_vocabulary_index_info[globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]])
+          TokenID=int(d_vocabulary_index_info[fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS[0]]),
+          Token=str(d_vocabulary_index_info[fidscs_globals.SCHEMA_COL_NAMES__VOCABULARY_DS[1]])
         )
       )
     # debug
@@ -447,7 +447,7 @@ def load_document_asl_consultant_utterance_token_index_csv(d_document_asl_consul
   return load_csv(
     d_document_asl_consultant_utterance_token_info['document_asl_consultant_utterance_token_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS
   )
 
 def pl__1__read_document_asl_consultant_utterance_token_index_csv(pl):
@@ -455,11 +455,11 @@ def pl__1__read_document_asl_consultant_utterance_token_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant utterance token index csv" >> beam.Create(
         [{
-          'document_asl_consultant_utterance_token_index_csv_path': globals.UTTERANCE_TOKEN_DS_PATH
+          'document_asl_consultant_utterance_token_index_csv_path': fidscs_globals.UTTERANCE_TOKEN_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_utterance_token_index" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_token_index path"))
-    | "Beam PL: read document asl consultant utterance token index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_token_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS keys)
+    | "Beam PL: read document asl consultant utterance token index into pcoll" >> beam.FlatMap(load_document_asl_consultant_utterance_token_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS keys)
     # | "Beam PL: print path to d_document_asl_consultant_utterance_token_info dicts" >> beam.ParDo(PipelinePcollPrinter("d_document_asl_consultant_utterance_token_info dict"))
     | "Beam PL: apply schema to extracted document asl consultant utterance token index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_utterance_token_info: beam.Row(
@@ -475,16 +475,16 @@ def pl__1__read_document_asl_consultant_utterance_token_index_csv(pl):
           #   'Field',
           #   'FieldValue'
           # ]
-          DocumentID=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[1]]),
-          UtteranceSequence=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[2]]),
-          TokenSequence=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[3]]),
+          DocumentID=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[1]]),
+          UtteranceSequence=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[2]]),
+          TokenSequence=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[3]]),
 
-          StartTime=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[4]]),
-          EndTime=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[5]]),
-          TokenID=int(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[6]]),
-          Field=str(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[7]]),
-          FieldValue=str(d_document_asl_consultant_utterance_token_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[8]]),
+          StartTime=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[4]]),
+          EndTime=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[5]]),
+          TokenID=int(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[6]]),
+          Field=str(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[7]]),
+          FieldValue=str(d_document_asl_consultant_utterance_token_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_DS[8]]),
         )
       )
     # debug
@@ -496,7 +496,7 @@ def load_document_asl_consultant_target_video_frame_index_csv(d_document_asl_con
   return load_csv(
     d_document_asl_consultant_target_video_frame_info['document_asl_consultant_target_video_frame_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS
   )
 
 def pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl):
@@ -504,11 +504,11 @@ def pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant target video frame index csv" >> beam.Create(
         [{
-          'document_asl_consultant_target_video_frame_index_csv_path': globals.VIDEO_FRAME_DS_PATH
+          'document_asl_consultant_target_video_frame_index_csv_path': fidscs_globals.VIDEO_FRAME_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_utterance_token_index" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_utterance_token_index path"))
-    | "Beam PL: read document asl consultant target video frame index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_frame_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS keys)
+    | "Beam PL: read document asl consultant target video frame index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_frame_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS keys)
     # | "Beam PL: print path to d_document_asl_consultant_target_video_frame_info dicts" >> beam.ParDo(PipelinePcollPrinter("d_document_asl_consultant_target_video_frame_info dict"))
     | "Beam PL: apply schema to extracted document asl consultant target video frame index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_target_video_frame_info: beam.Row(
@@ -521,12 +521,12 @@ def pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl):
           #   'FramePath',
           #   # 'JPEGBytes'
           # ]
-          DocumentID=int(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[1]]),
-          CameraPerspective=int(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[2]]),
-          TargetVideoFilename=str(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[3]]),
-          FrameSequence=int(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[4]]),
-          FramePath=str(d_document_asl_consultant_target_video_frame_info[globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[5]])
+          DocumentID=int(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[1]]),
+          CameraPerspective=int(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[2]]),
+          TargetVideoFilename=str(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[3]]),
+          FrameSequence=int(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[4]]),
+          FramePath=str(d_document_asl_consultant_target_video_frame_info[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_FRAME_DS[5]])
         )
       )
     # debug
@@ -538,7 +538,7 @@ def load_document_asl_consultant_target_video_utterance_token_frame_index_csv(d_
   return load_csv(
     d_document_asl_consultant_target_video_utterance_token_frame_info['document_asl_consultant_target_video_utterance_token_frame_index_csv_path'], 
     rows_to_dicts=True, 
-    dict_field_names=globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS
   )
 
 def pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl):
@@ -546,11 +546,11 @@ def pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index
     pl
     | "Beam PL: create initial pcoll containing info to load the document asl consultant target video utterance token frame index csv" >> beam.Create(
         [{
-          'document_asl_consultant_target_video_utterance_token_frame_index_csv_path': globals.UTTERANCE_TOKEN_FRAME_DS_PATH
+          'document_asl_consultant_target_video_utterance_token_frame_index_csv_path': fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH
         }]
       )
     # | "Beam PL: print path to document_asl_consultant_target_video_utterance_token_frame_index" >> beam.ParDo(PipelinePcollPrinter("document_asl_consultant_target_video_utterance_token_frame_index path"))
-    | "Beam PL: read document asl consultant target video utterance token frame index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_utterance_token_frame_index_csv) # outputs another pcoll but with each row as dict (with globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS keys)
+    | "Beam PL: read document asl consultant target video utterance token frame index into pcoll" >> beam.FlatMap(load_document_asl_consultant_target_video_utterance_token_frame_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS keys)
     # | "Beam PL: print path to d_document_asl_consultant_target_video_frame_info dicts" >> beam.ParDo(PipelinePcollPrinter("d_document_asl_consultant_target_video_frame_info dict"))
     | "Beam PL: apply schema to extracted document asl consultant target video utterance token frame index info dicts" >> beam.Map(
         lambda d_document_asl_consultant_target_video_utterance_token_frame_info: beam.Row(
@@ -564,14 +564,14 @@ def pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index
           #   'FrameSequence',
           #   'TokenID'
           # ]
-          DocumentID=int(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[0]]),
-          ASLConsultantID=int(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[1]]),
-          CameraPerspective=int(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[2]]),
-          TargetVideoFilename=str(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[3]]),
-          UtteranceSequence=int(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[4]]),
-          TokenSequence=str(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[5]]),
-          FrameSequence=str(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[6]]),
-          TokenID=str(d_document_asl_consultant_target_video_utterance_token_frame_info[globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[7]])
+          DocumentID=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[0]]),
+          ASLConsultantID=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[1]]),
+          CameraPerspective=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[2]]),
+          TargetVideoFilename=str(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[3]]),
+          UtteranceSequence=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[4]]),
+          TokenSequence=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[5]]),
+          FrameSequence=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[6]]),
+          TokenID=int(d_document_asl_consultant_target_video_utterance_token_frame_info[fidscs_globals.SCHEMA_COL_NAMES__UTTERANCE_TOKEN_FRAME_DS[7]])
         )
       )
     # debug
