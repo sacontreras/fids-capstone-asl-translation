@@ -16,8 +16,9 @@ set -e
 # Parse command line arguments
 SRC_DIR=.
 WORK_DIR=/tmp/cloudml-samples/molecules
-MAX_DATA_FILES=5
+MAX_TARGET_VIDEOS=5
 USE_BEAM=0
+BEAM_RUNNER=DirectRunner
 while [[ $# -gt 0 ]]; do
   case $1 in
     --src-dir)
@@ -28,14 +29,18 @@ while [[ $# -gt 0 ]]; do
       WORK_DIR=$2
       shift
       ;;
-    --max-data-files)
-      MAX_DATA_FILES=$2
+    --max-target-videos)
+      MAX_TARGET_VIDEOS=$2
       shift
       ;;
     --use-beam)
       USE_BEAM=$2 #${2:-1}
       shift
       ;;
+    # --beam-runner)
+    #   BEAM_RUNNER=$2
+    #   shift
+    #   ;;
     *)
       echo "error: unrecognized argument $1"
       exit 1
@@ -54,8 +59,9 @@ function run {
 echo '>> Extracting data'
 run python $SRC_DIR/data-extractor.py \
   --work-dir $WORK_DIR \
-  --max-data-files $MAX_DATA_FILES \
-  --use-beam $USE_BEAM
+  --max-target-videos $MAX_TARGET_VIDEOS \
+  --use-beam $USE_BEAM \
+  --beam-runner $BEAM_RUNNER
 echo ''
 
 # # Preprocess the datasets

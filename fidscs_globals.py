@@ -231,7 +231,7 @@ VIDEO_SEGMENT_DS_PATH = None
 VIDEO_FRAME_DS_PATH = None
 UTTERANCE_TOKEN_FRAME_DS_PATH = None
 VOCABULARY_DS_PATH = None
-MAX_DATA_FILES = None
+MAX_TARGET_VIDEOS = None
 
 D_IN_MEMORY_VARS = dict()
 # **************************************** global variables: END ****************************************

@@ -27,7 +27,7 @@ import fidscs_globals
 
 
 
-def run(max_data_files, data_dir, use_beam=False, beam_runner='DirectRunner'):
+def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner'):
   print(f"use_beam: {use_beam}")
 
   # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
@@ -84,7 +84,7 @@ def run(max_data_files, data_dir, use_beam=False, beam_runner='DirectRunner'):
   print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
   # ******************** global variables set at runtime: BEGIN ********************
-  fidscs_globals.MAX_DATA_FILES = max_data_files
+  fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
 
   fidscs_globals.DATA_ROOT_DIR = data_dir
   if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR):
@@ -147,11 +147,11 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
-    '--max-data-files',
+    '--max-target-videos',
     type=int,
     default=-1,
-    help='Maximum number of data files for every file pattern expansion. '
-          'Set to -1 to use all files.'
+    help='Maximum number of target videos to process. '
+          'Set to -1 to download/process all available target videos (and segments).'
   )
 
   # courtesy of https://stackoverflow.com/a/43357954
@@ -184,7 +184,7 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(f"args: {args}")
   run(
-    args.max_data_files if args.max_data_files!=-1 else None, 
+    args.max_target_videos if args.max_target_videos!=-1 else None, 
     os.path.join(args.work_dir, 'data'), 
     use_beam=args.use_beam,
     beam_runner=args.beam_runner

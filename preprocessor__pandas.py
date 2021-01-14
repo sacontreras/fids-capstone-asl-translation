@@ -812,11 +812,11 @@ def run():
       }
       target_videos.append(d)
 
-  if not fidscs_globals.MAX_DATA_FILES:
-      fidscs_globals.MAX_DATA_FILES = len(target_videos)
-  assert fidscs_globals.MAX_DATA_FILES >= 1
-  print('Found {} target video records, using {}'.format(len(target_videos), fidscs_globals.MAX_DATA_FILES))
-  target_videos = target_videos[:fidscs_globals.MAX_DATA_FILES]
+  if not fidscs_globals.MAX_TARGET_VIDEOS:
+      fidscs_globals.MAX_TARGET_VIDEOS = len(target_videos)
+  assert fidscs_globals.MAX_TARGET_VIDEOS >= 1
+  print('Found {} target video records, using {}'.format(len(target_videos), fidscs_globals.MAX_TARGET_VIDEOS))
+  target_videos = target_videos[:fidscs_globals.MAX_TARGET_VIDEOS]
 
   # download data (video segment) files in parallel (on the CPU of the machine - either local or VM in GCP DataFlow)
   #   note that in order to accomplish parallelism, since this uses the file system of the machine, this must be done

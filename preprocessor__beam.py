@@ -437,12 +437,12 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll):
 
 
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
-  # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_DATA_FILES: BEGIN ********************
+  # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: BEGIN ********************
   return (
     full_target_vid_index_schemad_pcoll
-    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(fidscs_globals.MAX_DATA_FILES) if fidscs_globals.MAX_DATA_FILES is not None and fidscs_globals.MAX_DATA_FILES>0 else ''}")
+    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(fidscs_globals.MAX_TARGET_VIDEOS) if fidscs_globals.MAX_TARGET_VIDEOS is not None and fidscs_globals.MAX_TARGET_VIDEOS>0 else ''}")
   )
-  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_DATA_FILES: END ********************
+  # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: END ********************
 
 
 def pl__1__bootstrap_corpus_index(pl):
