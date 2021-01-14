@@ -27,7 +27,7 @@ import fidscs_globals
 
 
 
-def run(max_data_files, data_dir, use_beam=False):
+def run(max_data_files, data_dir, use_beam=False, beam_runner='DirectRunner'):
   print(f"use_beam: {use_beam}")
 
   # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
@@ -125,7 +125,7 @@ def run(max_data_files, data_dir, use_beam=False):
 
   if use_beam:
     import preprocessor__beam
-    preprocessor__beam.run()
+    preprocessor__beam.run(beam_runner=beam_runner)
   else:
     import preprocessor__pandas
     preprocessor__pandas.run()
@@ -175,11 +175,18 @@ if __name__ == '__main__':
     help=""
   )
 
+  parser.add_argument(
+    '--beam-runner',
+    default='DirectRunner',
+    help='The runner that Apacche Beam will use. '
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
   run(
     args.max_data_files if args.max_data_files!=-1 else None, 
     os.path.join(args.work_dir, 'data'), 
-    use_beam=args.use_beam
+    use_beam=args.use_beam,
+    beam_runner=args.beam_runner
   )
   # **************************************** main: END ****************************************

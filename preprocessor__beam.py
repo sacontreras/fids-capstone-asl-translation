@@ -3454,7 +3454,7 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
   # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************
 
 
-def run():
+def run(beam_runner='DirectRunner'):
   # pipeline_options = PipelineOptions(
   #   save_main_session=True,
   #   runner='DirectRunner',
@@ -3464,7 +3464,7 @@ def run():
   # )
   options = {
     'project': 'my-project', # change
-    'runner': 'DirectRunner',
+    'runner': beam_runner,
     'direct_num_workers': 0, # 0 is use all available cores
     'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
     'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
