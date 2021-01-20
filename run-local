@@ -56,7 +56,7 @@ function run {
 }
 
 # Extract the data files
-echo '>> Extracting data'
+echo '>>>>>>>>>>>>>>>>>>>>>>>>> Extracting data <<<<<<<<<<<<<<<<<<<<<<<<<'
 run python $SRC_DIR/data_extractor.py \
   --work-dir $WORK_DIR \
   --max-target-videos $MAX_TARGET_VIDEOS \
@@ -64,17 +64,17 @@ run python $SRC_DIR/data_extractor.py \
   --beam-runner $BEAM_RUNNER
 echo ''
 
-# # Preprocess the datasets
-# echo '>> Preprocessing'
-# run python preprocess.py \
-#   --work-dir $WORK_DIR
-# echo ''
-
-# Train and evaluate the model
-echo '>> Training'
-run python train.py \
+# Preprocess the datasets
+echo '>>>>>>>>>>>>>>>>>>>>>>>>> Preprocessing <<<<<<<<<<<<<<<<<<<<<<<<<'
+run python preprocessor.py \
   --work-dir $WORK_DIR
 echo ''
+
+# # Train and evaluate the model
+# echo '>>>>>>>>>>>>>>>>>>>>>>>>> Training <<<<<<<<<<<<<<<<<<<<<<<<<'
+# run python train.py \
+#   --work-dir $WORK_DIR
+# echo ''
 
 # # Get the model path
 # EXPORT_DIR=$WORK_DIR/model/export/final
