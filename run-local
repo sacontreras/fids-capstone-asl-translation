@@ -57,7 +57,7 @@ function run {
 
 # Extract the data files
 echo '>> Extracting data'
-run python $SRC_DIR/data-extractor.py \
+run python $SRC_DIR/data_extractor.py \
   --work-dir $WORK_DIR \
   --max-target-videos $MAX_TARGET_VIDEOS \
   --use-beam $USE_BEAM \

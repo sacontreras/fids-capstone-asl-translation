@@ -124,11 +124,11 @@ def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner')
   # ******************** global variables set at runtime: END ********************
 
   if use_beam:
-    import preprocessor__beam
-    preprocessor__beam.run(beam_runner=beam_runner)
+    import data_extractor__beam
+    data_extractor__beam.run(beam_runner=beam_runner)
   else:
-    import preprocessor__pandas
-    preprocessor__pandas.run()
+    import data_extractor__pandas
+    data_extractor__pandas.run()
 
 
 

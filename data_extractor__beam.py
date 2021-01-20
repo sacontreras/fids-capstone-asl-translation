@@ -15,7 +15,7 @@ from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
 
 import fidscs_globals
-import preprocessor__common
+import data_extractor__common
 import utils
 
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
@@ -391,7 +391,7 @@ def pl__1__bootstrap_target_video_index(pl):
           }
         ]
       )
-    | "Beam PL: bootstrap target video index" >> beam.Map(preprocessor__common.boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+    | "Beam PL: bootstrap target video index" >> beam.Map(data_extractor__common.boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(beam__common.load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 

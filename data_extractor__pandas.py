@@ -18,7 +18,7 @@ import utils
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
-import preprocessor__common
+import data_extractor__common
 
 import fidscs_globals
 
@@ -766,7 +766,7 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
   return df_decomposition
 
 def run():
-  preprocessor__common.boostrap_target_video_index(d_vid_indexes_info={
+  data_extractor__common.boostrap_target_video_index(d_vid_indexes_info={
       'vid_indexes_dir': fidscs_globals.VIDEO_INDEXES_DIR, 
       'sel_vid_index_path': fidscs_globals.SELECTED_VIDEO_INDEX_PATH, 
       'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
