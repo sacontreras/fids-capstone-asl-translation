@@ -611,3 +611,126 @@ def pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index
     # debug
     # | "Beam PL: print document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("loaded document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll entry"))
   ) # document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
+
+
+def load_train_frame_sequences__assoc_index_csv(d_train_frame_sequences__assoc_index):
+  return load_csv(
+    d_train_frame_sequences__assoc_index['train_frame_sequences__assoc_index_csv_path'], 
+    rows_to_dicts=True, 
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+  )
+
+def pl__1__read_train_frame_sequences__assoc_index_csv(pl):
+  return (
+    pl
+    | "Beam PL: create initial pcoll containing info to load the train frame sequences (assoc) index csv" >> beam.Create(
+        [{
+          'train_frame_sequences__assoc_index_csv_path': fidscs_globals.TRAIN_ASSOC_DS_PATH
+        }]
+      )
+    | "Beam PL: read train frame sequences (assoc) index into pcoll" >> beam.FlatMap(load_train_frame_sequences__assoc_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX keys)
+    | "Beam PL: apply schema to extracted train frame sequences (assoc) index info dicts" >> beam.Map(
+          lambda d_train_frame_sequence_info: beam.Row(
+              # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+              #     'TokenID',
+              #     'CameraPerspective',
+              #     'ASLConsultantID',
+              #     'TargetVideoFilename',
+              #     'UtteranceSequence',
+              #     'TokenSequence',
+              #     'FrameSequence'
+              # ]
+              TokenID=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[0]]),
+              CameraPerspective=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[1]]),
+              ASLConsultantID=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[2]]),
+              TargetVideoFilename=str(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[3]]),
+              UtteranceSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[4]]),
+              TokenSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[5]]),
+              FrameSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[6]])
+          )
+      )
+    # debug
+    # | "Beam PL: print train_frame_sequences__assoc_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("loaded train_frame_sequences__assoc_index_schemad_pcoll entry"))
+  ) # train_frame_sequences__assoc_index_schemad_pcoll
+
+
+def load_val_frame_sequences_index_csv(d_val_frame_sequences_index_info):
+  return load_csv(
+    d_val_frame_sequences_index_info['val_frame_sequences_index_csv_path'], 
+    rows_to_dicts=True, 
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+  )
+
+def pl__1__read_val_frame_sequences__index_csv(pl):
+  return (
+    pl
+    | "Beam PL: create initial pcoll containing info to load the val frame sequences index csv" >> beam.Create(
+        [{
+          'val_frame_sequences_index_csv_path': fidscs_globals.VAL_DS_PATH
+        }]
+      )
+    | "Beam PL: read val frame sequences index into pcoll" >> beam.FlatMap(load_val_frame_sequences_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX keys)
+    | "Beam PL: apply schema to extracted val frame sequences index info dicts" >> beam.Map(
+          lambda d_val_frame_sequence_info: beam.Row(
+              # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+              #     'TokenID',
+              #     'CameraPerspective',
+              #     'ASLConsultantID',
+              #     'TargetVideoFilename',
+              #     'UtteranceSequence',
+              #     'TokenSequence',
+              #     'FrameSequence'
+              # ]
+              TokenID=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[0]]),
+              CameraPerspective=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[1]]),
+              ASLConsultantID=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[2]]),
+              TargetVideoFilename=str(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[3]]),
+              UtteranceSequence=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[4]]),
+              TokenSequence=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[5]]),
+              FrameSequence=int(d_val_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[6]])
+          )
+      )
+    # debug
+    # | "Beam PL: print val_frame_sequences_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("loaded val_frame_sequences_index_schemad_pcoll entry"))
+  ) # val_frame_sequences_index_schemad_pcoll
+
+
+def load_train_frame_sequences_index_csv(d_train_frame_sequences_index_info):
+  return load_csv(
+    d_train_frame_sequences_index_info['train_frame_sequences_index_csv_path'], 
+    rows_to_dicts=True, 
+    dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+  )
+
+def pl__1__read_train_frame_sequences_index_csv(pl):
+  return (
+    pl
+    | "Beam PL: create initial pcoll containing info to load the train frame sequences index csv" >> beam.Create(
+        [{
+          'train_frame_sequences_index_csv_path': fidscs_globals.TRAIN_DS_PATH
+        }]
+      )
+    | "Beam PL: read train frame sequences index into pcoll" >> beam.FlatMap(load_train_frame_sequences_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX keys)
+    | "Beam PL: apply schema to extracted train frame sequences index info dicts" >> beam.Map(
+          lambda d_train_frame_sequence_info: beam.Row(
+              # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+              #     'TokenID',
+              #     'CameraPerspective',
+              #     'ASLConsultantID',
+              #     'TargetVideoFilename',
+              #     'UtteranceSequence',
+              #     'TokenSequence',
+              #     'FrameSequence'
+              # ]
+              TokenID=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[0]]),
+              CameraPerspective=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[1]]),
+              ASLConsultantID=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[2]]),
+              TargetVideoFilename=str(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[3]]),
+              UtteranceSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[4]]),
+              TokenSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[5]]),
+              FrameSequence=int(d_train_frame_sequence_info[fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[6]])
+          )
+      )
+    # debug
+    # | "Beam PL: print train_frame_sequences_index_schemad_pcoll" >> beam.ParDo(PipelinePcollPrinter("loaded train_frame_sequences_index_schemad_pcoll entry"))
+  ) # train_frame_sequences_index_schemad_pcoll
