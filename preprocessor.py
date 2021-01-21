@@ -66,7 +66,7 @@ def pl__2__get_keys__train_val_split_candidates(document_asl_consultant_target_v
                     observation
 
             this guarantees that the validation set will have at least one observation 
-                keyed by (TokenID, CameraPerspective) in common with the training set
+                keyed by (TokenID, CameraPerspective) in common with the (initial) training set
 
         the second pcollection contains "dangling" observations, keyed by (TokenID, CameraPerspective)
             that have only a single observation associated with this pair; these instances will
@@ -408,7 +408,7 @@ def pl__4__create_train_frame_sequences__assoc(train__ctvusts_by_tcp, tcpctvusts
                         joined__train__ctvusts_by_tcp__to__tcpctvustsfs__tpl[0][3], # TargetVideoFilename
                         joined__train__ctvusts_by_tcp__to__tcpctvustsfs__tpl[0][4], # UtteranceSequence
                         joined__train__ctvusts_by_tcp__to__tcpctvustsfs__tpl[0][5], # TokenSequence
-                        frame_seq
+                        frame_seq                                                   # FrameSequence
                     ) for frame_seq in sorted(joined__train__ctvusts_by_tcp__to__tcpctvustsfs__tpl[1]['frame_sequences'])
                 ]
             )
@@ -418,6 +418,52 @@ def pl__4__create_train_frame_sequences__assoc(train__ctvusts_by_tcp, tcpctvusts
     )
 
     return train_tcpctvustsfs, frame_sequences__by__tcpctvustsfs
+
+
+def pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc):
+    """
+    train_frame_sequences__assoc:
+        (
+            <TokenID>,
+            <CameraPerspective>,
+            <ASLConsultantID>,
+            <TargetVideoFilename>,
+            <UtteranceSequence>,
+            <TokenSequence>,
+            <FrameSequence>
+        )
+    """
+    sorted_train_frame_sequences__assoc_index_pcoll = beam__common.pl__X__sort_pcoll(train_frame_sequences__assoc, pcoll_label="train_frame_sequences__assoc_index")
+    sorted_train_frame_sequences__assoc_index_csv_rows_pcoll = (
+        sorted_train_frame_sequences__assoc_index_pcoll
+        | "Beam PL: apply schema to sorted_train_frame_sequences__assoc_index" >> beam.Map(
+                lambda sorted_train_frame_sequences__assoc_index_pcoll_row_tpl: beam.Row(
+                    # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+                    #     'TokenID',
+                    #     'CameraPerspective',
+                    #     'ASLConsultantID',
+                    #     'TargetVideoFilename',
+                    #     'UtteranceSequence',
+                    #     'TokenSequence',
+                    #     'FrameSequence'
+                    # ]
+                    TokenID=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[0]),
+                    CameraPerspective=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[1]),
+                    ASLConsultantID=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[2]),
+                    TargetVideoFilename=str(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[3]),
+                    UtteranceSequence=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[4]),
+                    TokenSequence=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[5]),
+                    FrameSequence=int(sorted_train_frame_sequences__assoc_index_pcoll_row_tpl[6])
+                )
+            )
+        | beam.Map(lambda sorted_train_frame_sequences__assoc_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_train_frame_sequences__assoc_index_schemad_pcoll_row))
+    )
+    return beam__common.pl__X__write_pcoll_to_csv(
+        sorted_train_frame_sequences__assoc_index_csv_rows_pcoll, 
+        "TRAIN-FRAME-SEQUENCES-ASSOC-INDEX", 
+        fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME, 
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+    ) # train_frame_sequences__assoc_index_csv_path
 
 
 def pl__5__create_val_frame_sequences(val__ctvusts_by_tcp, frame_sequences__by__tcpctvustsfs):
@@ -487,6 +533,52 @@ def pl__5__create_val_frame_sequences(val__ctvusts_by_tcp, frame_sequences__by__
     )
 
     return val_tcpctvustsfs
+
+
+def pl__6__write_val_frame_sequences_index_csv(val_frame_sequences):
+    """
+    val_frame_sequences:
+        (
+            <TokenID>,
+            <CameraPerspective>,
+            <ASLConsultantID>,
+            <TargetVideoFilename>,
+            <UtteranceSequence>,
+            <TokenSequence>,
+            <FrameSequence>
+        )
+    """
+    sorted_val_frame_sequences_index_pcoll = beam__common.pl__X__sort_pcoll(val_frame_sequences, pcoll_label="val_frame_sequences_index")
+    sorted_val_frame_sequences_index_csv_rows_pcoll = (
+        sorted_val_frame_sequences_index_pcoll
+        | "Beam PL: apply schema to sorted_val_frame_sequences_index" >> beam.Map(
+                lambda sorted_val_frame_sequences_index_pcoll_row_tpl: beam.Row(
+                    # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+                    #     'TokenID',
+                    #     'CameraPerspective',
+                    #     'ASLConsultantID',
+                    #     'TargetVideoFilename',
+                    #     'UtteranceSequence',
+                    #     'TokenSequence',
+                    #     'FrameSequence'
+                    # ]
+                    TokenID=int(sorted_val_frame_sequences_index_pcoll_row_tpl[0]),
+                    CameraPerspective=int(sorted_val_frame_sequences_index_pcoll_row_tpl[1]),
+                    ASLConsultantID=int(sorted_val_frame_sequences_index_pcoll_row_tpl[2]),
+                    TargetVideoFilename=str(sorted_val_frame_sequences_index_pcoll_row_tpl[3]),
+                    UtteranceSequence=int(sorted_val_frame_sequences_index_pcoll_row_tpl[4]),
+                    TokenSequence=int(sorted_val_frame_sequences_index_pcoll_row_tpl[5]),
+                    FrameSequence=int(sorted_val_frame_sequences_index_pcoll_row_tpl[6])
+                )
+            )
+        | beam.Map(lambda sorted_val_frame_sequences__assoc_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_val_frame_sequences__assoc_index_schemad_pcoll_row))
+    )
+    return beam__common.pl__X__write_pcoll_to_csv(
+        sorted_val_frame_sequences_index_csv_rows_pcoll, 
+        "VAL-FRAME-SEQUENCES-ASSOC-INDEX", 
+        fidscs_globals.VAL_FRAME_SEQ_DS_FNAME, 
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+    ) # val_frame_sequences__assoc_index_csv_path
 
 
 def pl__5__create_train_frame_sequences(ctvusts_by_tcp__lte_1, frame_sequences__by__tcpctvustsfs, train_tcpctvustsfs__gt__1):
@@ -571,6 +663,52 @@ def pl__5__create_train_frame_sequences(ctvusts_by_tcp__lte_1, frame_sequences__
     )
 
     return train_tcpctvustsfs__all
+
+
+def pl__6__write_train_frame_sequences_index_csv(train_frame_sequences):
+    """
+    train_frame_sequences:
+        (
+            <TokenID>,
+            <CameraPerspective>,
+            <ASLConsultantID>,
+            <TargetVideoFilename>,
+            <UtteranceSequence>,
+            <TokenSequence>,
+            <FrameSequence>
+        )
+    """
+    sorted_train_frame_sequences_index_pcoll = beam__common.pl__X__sort_pcoll(train_frame_sequences, pcoll_label="train_frame_sequences_index")
+    sorted_train_frame_sequences_index_csv_rows_pcoll = (
+        sorted_train_frame_sequences_index_pcoll
+        | "Beam PL: apply schema to sorted_train_frame_sequences_index" >> beam.Map(
+                lambda sorted_train_frame_sequences_index_pcoll_row_tpl: beam.Row(
+                    # SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+                    #     'TokenID',
+                    #     'CameraPerspective',
+                    #     'ASLConsultantID',
+                    #     'TargetVideoFilename',
+                    #     'UtteranceSequence',
+                    #     'TokenSequence',
+                    #     'FrameSequence'
+                    # ]
+                    TokenID=int(sorted_train_frame_sequences_index_pcoll_row_tpl[0]),
+                    CameraPerspective=int(sorted_train_frame_sequences_index_pcoll_row_tpl[1]),
+                    ASLConsultantID=int(sorted_train_frame_sequences_index_pcoll_row_tpl[2]),
+                    TargetVideoFilename=str(sorted_train_frame_sequences_index_pcoll_row_tpl[3]),
+                    UtteranceSequence=int(sorted_train_frame_sequences_index_pcoll_row_tpl[4]),
+                    TokenSequence=int(sorted_train_frame_sequences_index_pcoll_row_tpl[5]),
+                    FrameSequence=int(sorted_train_frame_sequences_index_pcoll_row_tpl[6])
+                )
+            )
+        | beam.Map(lambda sorted_train_frame_sequences_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_train_frame_sequences_index_schemad_pcoll_row))
+    )
+    return beam__common.pl__X__write_pcoll_to_csv(
+        sorted_train_frame_sequences_index_csv_rows_pcoll, 
+        "TRAIN-FRAME-SEQUENCES-INDEX", 
+        fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME, 
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+    ) # train_frame_sequences_index_csv_path
 
 
 def pl__6__create_complete_utterances_from_val_tokens(val_tcpctvustsfs, tcpctvustsfs):
@@ -659,23 +797,13 @@ def pl__6__create_complete_utterances_from_val_tokens(val_tcpctvustsfs, tcpctvus
                 ) 
             )
         # debug
-        | "Beam PL: print complete_utterances__with__val_tcp" >> beam.ParDo(beam__common.PipelinePcollPrinter("complete_utterances__with__val_tcp entry"))
+        # | "Beam PL: print complete_utterances__with__val_tcp" >> beam.ParDo(beam__common.PipelinePcollPrinter("complete_utterances__with__val_tcp entry"))
     )
 
     return complete_utterances__with__val_tcp
 
 
 
-
-options = {
-    'project': 'my-project', # change
-    'runner': 'DirectRunner',
-    'direct_num_workers': 0, # 0 is use all available cores
-    'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
-    'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
-}
-pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
-print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
 def run(data_dir):
     fidscs_globals.DATA_ROOT_DIR = data_dir
@@ -695,62 +823,79 @@ def run(data_dir):
     fidscs_globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
     fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
     fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
+    fidscs_globals.TRAIN_ASSOC_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME)
+    fidscs_globals.VAL_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VAL_FRAME_SEQ_DS_FNAME)
+    fidscs_globals.TRAIN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME)
 
 
-    with beam.Pipeline(options=pipeline_options) as pl:
-        # full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-        # corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl) # XML is base-64 encode but we no longer need it (to decode it) since it is only used to create the datasets
-        # # corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll) # see above
-        # asl_consultant_index_schemad_pcoll = beam__common.pl__1__read_asl_consultant_index_csv(pl)
-        # document_asl_consultant_utterance_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_index_csv(pl)
-        # document_asl_consultant_target_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_index_csv(pl)
-        # document_asl_consultant_utterance_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_video_index_csv(pl)
-        # document_target_video_segment_index_schemad_pcoll = beam__common.pl__1__read_document_target_video_segment_index_csv(pl)
-        # vocabulary_index_schemad_pcoll = beam__common.pl__1__read_vocabulary_index_csv(pl)
-        # document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_token_index_csv(pl)
-        # document_asl_consultant_target_video_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl)
-        document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl)
+    if not beam__common.train_val_csv_files_exist():
+        options = {
+            'project': 'my-project', # change
+            'runner': 'DirectRunner',
+            'direct_num_workers': 0, # 0 is use all available cores
+            'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+            'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
+        }
+        pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+        print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+        
 
+        with beam.Pipeline(options=pipeline_options) as pl:
+            # full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+            # corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl) # XML is base-64 encode but we no longer need it (to decode it) since it is only used to create the datasets
+            # # corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll) # see above
+            # asl_consultant_index_schemad_pcoll = beam__common.pl__1__read_asl_consultant_index_csv(pl)
+            # document_asl_consultant_utterance_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_index_csv(pl)
+            # document_asl_consultant_target_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_index_csv(pl)
+            # document_asl_consultant_utterance_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_video_index_csv(pl)
+            # document_target_video_segment_index_schemad_pcoll = beam__common.pl__1__read_document_target_video_segment_index_csv(pl)
+            # vocabulary_index_schemad_pcoll = beam__common.pl__1__read_vocabulary_index_csv(pl)
+            # document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_token_index_csv(pl)
+            # document_asl_consultant_target_video_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl)
+            document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl)
 
-        (
-            train_val_split_candidates_keys, 
-            train_val_split_NON_candidates_keys,
-            tcpctvustsfs
-        ) = pl__2__get_keys__train_val_split_candidates(
-            document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
-        )
+            (
+                train_val_split_candidates_keys, 
+                train_val_split_NON_candidates_keys,
+                tcpctvustsfs
+            ) = pl__2__get_keys__train_val_split_candidates(
+                document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
+            )
 
-        (
-            train__keys, 
-            val__keys
-        ) = pl__3__do_train_val_split_keys(train_val_split_candidates_keys)
+            (
+                train__keys, 
+                val__keys
+            ) = pl__3__do_train_val_split_keys(train_val_split_candidates_keys)
 
-        (
-            train_frame_sequences__assoc,   # this is the initial set of training frames with (<TokenID>, <CameraPerspective>) tuples corresponding to at least one observation in the eventual val_frame_sequences set
-            frame_sequences__by__tcpctvustsfs
-        ) = pl__4__create_train_frame_sequences__assoc(
-            train__keys, 
-            tcpctvustsfs
-        )
+            (
+                train_frame_sequences__assoc,   # this is the initial set of training frames with (<TokenID>, <CameraPerspective>) tuples corresponding to at least one observation in the eventual val_frame_sequences set
+                frame_sequences__by__tcpctvustsfs
+            ) = pl__4__create_train_frame_sequences__assoc(
+                train__keys, 
+                tcpctvustsfs
+            )
+            pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc)
 
-        val_frame_sequences = pl__5__create_val_frame_sequences(
-            val__keys, 
-            frame_sequences__by__tcpctvustsfs
-        )
+            val_frame_sequences = pl__5__create_val_frame_sequences(
+                val__keys, 
+                frame_sequences__by__tcpctvustsfs
+            )
+            pl__6__write_val_frame_sequences_index_csv(val_frame_sequences)
 
-        # this step of the pipeline creates the final train_frame_sequences set
-            # which is the union of train_frame_sequences__assoc (from above) and those produced from train_val_split_NON_candidates_keys
-            # ultimately we train on some frame sequences that cannot be validated (but we still want to be able to offer some predictive capability based on them)
-        train_frame_sequences = pl__5__create_train_frame_sequences(
-            train_val_split_NON_candidates_keys, 
-            frame_sequences__by__tcpctvustsfs, 
-            train_frame_sequences__assoc
-        )
+            # this step of the pipeline creates the final train_frame_sequences set
+                # which is the union of train_frame_sequences__assoc (from above) and those produced from train_val_split_NON_candidates_keys
+                # ultimately we train on some frame sequences that cannot be validated (but we still want to be able to offer some predictive capability based on them)
+            train_frame_sequences = pl__5__create_train_frame_sequences(
+                train_val_split_NON_candidates_keys, 
+                frame_sequences__by__tcpctvustsfs, 
+                train_frame_sequences__assoc
+            )
+            pl__6__write_train_frame_sequences_index_csv(train_frame_sequences)
 
-        complete_utterances__from__val_tokens = pl__6__create_complete_utterances_from_val_tokens(
-            val_frame_sequences, 
-            tcpctvustsfs
-        )
+            complete_utterances__from__val_tokens = pl__6__create_complete_utterances_from_val_tokens(
+                val_frame_sequences, 
+                tcpctvustsfs
+            )
 
 
 

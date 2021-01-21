@@ -85,11 +85,6 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   return [os.path.join(corpus_dir,"*")]
 
 
-def beam_row_to_csv_string(row):
-  d_row = row.as_dict()
-  return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
-
-
 
 def get_video_segment_download_info(vid_index_schemad_pcoll_row):
   """
@@ -355,20 +350,6 @@ def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
     return [max_xml_b64_len]
 
 
-def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
-  return (
-    pcoll
-    | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
-        os.path.join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
-        file_name_suffix=".csv", 
-        append_trailing_newlines=True,
-        shard_name_template="",
-        header=",".join(schema_col_names)
-      )
-    | f"Beam PL: print path to {pcoll_label} csv" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg=f"{pcoll_label} CSV WRITTEN TO STORAGE"))
-  )
-
-
 
 
 def pl__1__bootstrap_target_video_index(pl):
@@ -426,9 +407,9 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll):
           uncompressed_avi_mirror_2_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url
         )
       )
-    | beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam_row_to_csv_string(sorted_full_target_vid_index_schemad_pcoll_row))
+    | beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_full_target_vid_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_corpus_index_csv_rows_pcoll, 
     "TARGET-VIDEO-INDEX", 
     fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
@@ -512,9 +493,9 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
           LEN=sorted_corpus_index_pcoll_row[3]
         )
       )
-    | beam.Map(lambda corpus_index_schemad_pcoll_row: beam_row_to_csv_string(corpus_index_schemad_pcoll_row))
+    | beam.Map(lambda corpus_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(corpus_index_schemad_pcoll_row))
   )
-  corpus_index_csv_path = pl__X__write_pcoll_to_csv(
+  corpus_index_csv_path = beam__common.pl__X__write_pcoll_to_csv(
     sorted_corpus_index_csv_rows_pcoll, 
     "CORPUS-INDEX", 
     fidscs_globals.CORPUS_DS_FNAME, 
@@ -827,9 +808,9 @@ def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
         Gender=sorted_asl_consultant_index_schemad_pcoll_row.Gender
       )
     )
-    | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: beam_row_to_csv_string(asl_consultant_index_schemad_pcoll_row))
+    | beam.Map(lambda asl_consultant_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(asl_consultant_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_asl_consultant_index_csv_rows_pcoll, 
     "ASLCONSULTANT-INDEX", 
     fidscs_globals.ASL_CONSULTANT_DS_FNAME, 
@@ -968,9 +949,9 @@ def pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index
           ASLConsultantID=int(sorted_distinct_document_asl_consultant_index_row[1])
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(distinct_document_asl_consultant_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-INDEX", 
     fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME, 
@@ -1133,9 +1114,9 @@ def pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consul
           Translation=distinct_document_asl_consultant_utterance_index_row[6]
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_utterance_index_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_index_row))
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_index_row: beam__common.beam_row_to_csv_string(distinct_document_asl_consultant_utterance_index_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_utterance_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-INDEX", 
     fidscs_globals.UTTERANCE_DS_FNAME, 
@@ -1630,9 +1611,9 @@ def pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll):
           Token=sorted_vocabulary_index_pcoll_row.Token
         )
       )
-    | beam.Map(lambda vocabulary_index_pcoll_row: beam_row_to_csv_string(vocabulary_index_pcoll_row))
+    | beam.Map(lambda vocabulary_index_pcoll_row: beam__common.beam_row_to_csv_string(vocabulary_index_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_vocabulary_index_csv_rows_pcoll, 
     "VOCABULARY-INDEX", 
     fidscs_globals.VOCABULARY_DS_FNAME, 
@@ -1704,9 +1685,9 @@ def pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_
           FieldValue=str(distinct_document_asl_consultant_utterance_token_index_row[8]),
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(distinct_document_asl_consultant_utterance_token_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_document_asl_consultant_utterance_token_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-TOKEN-INDEX", 
     fidscs_globals.UTTERANCE_TOKEN_DS_FNAME, 
@@ -2025,9 +2006,9 @@ def pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(
     #       # , JPEGBytes=document_asl_consultant_target_video_frame_index_schemad_pcoll_row.JPEGBytes
     #     )
     #   )
-    | beam.Map(lambda document_asl_consultant_target_video_frame_index_schemad_pcoll_row: beam_row_to_csv_string(document_asl_consultant_target_video_frame_index_schemad_pcoll_row))
+    | beam.Map(lambda document_asl_consultant_target_video_frame_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(document_asl_consultant_target_video_frame_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     document_asl_consultant_target_video_frame_index_csv_rows, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-FRAME-INDEX", 
     fidscs_globals.VIDEO_FRAME_DS_FNAME, 
@@ -2565,9 +2546,9 @@ def pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pc
 def pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):
   document_asl_consultant_target_video_utterance_token_frame_index_csv_rows = (
     document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
-    | beam.Map(lambda document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row: beam_row_to_csv_string(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row))
+    | beam.Map(lambda document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     document_asl_consultant_target_video_utterance_token_frame_index_csv_rows, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-UTTERANCE-TOKEN-FRAME-INDEX", 
     fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME, 
@@ -3183,9 +3164,9 @@ def pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_con
           Filename=str(distinct_document_asl_consultant_video_index_row[3])
         )
       )
-    | beam.Map(lambda distinct_document_asl_consultant_target_video_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_target_video_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_target_video_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(distinct_document_asl_consultant_target_video_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_video_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-VIDEO-INDEX", 
     fidscs_globals.VIDEO_DS_FNAME, 
@@ -3244,9 +3225,9 @@ def pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_
         CameraPerspective=int(distinct_document_asl_consultant_video_index_row[4])
       )
     )
-    | beam.Map(lambda distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row: beam_row_to_csv_string(distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row))
+    | beam.Map(lambda distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(distinct_document_asl_consultant_utterance_video_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_distinct_document_asl_consultant_utterance_video_index_csv_rows_pcoll, 
     "DOCUMENT-ASLCONSULTANT-UTTERANCE-TARGETVIDEO-INDEX", 
     fidscs_globals.UTTERANCE_VIDEO_DS_FNAME, 
@@ -3296,9 +3277,9 @@ def pl__7__write_document_target_video_segment_index_csv(document_target_video_s
           URL=sorted_distinct_target_video_segment_index_tpl[6]
         )
       )
-    | beam.Map(lambda sorted_target_video_segment_index_schemad_pcoll_row: beam_row_to_csv_string(sorted_target_video_segment_index_schemad_pcoll_row))
+    | beam.Map(lambda sorted_target_video_segment_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_target_video_segment_index_schemad_pcoll_row))
   )
-  return pl__X__write_pcoll_to_csv(
+  return beam__common.pl__X__write_pcoll_to_csv(
     sorted_target_video_segment_index_schemad_pcoll, 
     "DOCUMENT-ASLCONSULTANT-TARGETVIDEO-SEGMENT-INDEX", 
     fidscs_globals.VIDEO_SEGMENT_DS_FNAME, 
@@ -3475,101 +3456,99 @@ def run(beam_runner='DirectRunner'):
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
 
-  if not beam__common.dataset_csv_files_exist():
-
-    with beam.Pipeline(options=pipeline_options) as pl:
-      full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
-      pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
+    pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
 
 
-    with beam.Pipeline(options=pipeline_options) as pl:
-      full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-      filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
-      merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
-      merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
+    merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
+    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
 
 
-    with beam.Pipeline(options=pipeline_options) as pl:
-      pl__1__bootstrap_corpus_index(pl)
-    # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
-    #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
-    #   for reading yet
-    with beam.Pipeline(options=pipeline_options) as pl:
-      corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-      pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
-  
-
-    with beam.Pipeline(options=pipeline_options) as pl:
-      full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-      corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
-      corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
-      ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
-
-      # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
-
-      asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
-      pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
-
-      document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
-        ss_parsed_xmldb_pcoll, 
-        corpus_index_schemad_pcoll, 
-        asl_consultant_index_schemad_pcoll
-      )
-      pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
-
-      document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
-        ss_parsed_xmldb_pcoll, 
-        document_asl_consultant_index_schemad_pcoll
-      )
-      pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
-
-      document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
-        ss_parsed_xmldb_pcoll, 
-        document_asl_consultant_index_schemad_pcoll, 
-        full_target_vid_index_schemad_pcoll
-      )
-      pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-      pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-      pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
-
-      vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
-        ss_parsed_xmldb_pcoll, 
-        document_asl_consultant_index_schemad_pcoll
-      )
-      pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
-      pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
-
-      document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
-        document_asl_consultant_target_video_index_schemad_pcoll
-      )
-      pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
-
-      document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-        document_asl_consultant_utterance_token_index_schemad_pcoll,
-        document_asl_consultant_target_video_index_schemad_pcoll,
-        document_asl_consultant_target_video_frame_index_schemad_pcoll
-      )
-      pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    pl__1__bootstrap_corpus_index(pl)
+  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
+  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+  #   for reading yet
+  with beam.Pipeline(options=pipeline_options) as pl:
+    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+    pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
 
 
-    with beam.Pipeline(options=pipeline_options) as pl:
-      vid_indexes_dir_path_pcoll = (
-        pl
-        | f"Beam PL: create {fidscs_globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_INDEXES_DIR])
-      )
-      beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, fidscs_globals.VIDEO_INDEXES_DIR)
-    with beam.Pipeline(options=pipeline_options) as pl:
-      corpus_docs_dir_path_pcoll = (
-        pl
-        | f"Beam PL: create {fidscs_globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.CORPUS_DIR])
-      )
-      beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, fidscs_globals.CORPUS_DIR)
-    with beam.Pipeline(options=pipeline_options) as pl:
-      vid_download_dir_path_pcoll = (
-        pl
-        | f"Beam PL: create {fidscs_globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_DIR])
-      )
-      beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, fidscs_globals.VIDEO_DIR)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
+    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
+    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+
+    # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+
+    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
+    pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+
+    document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      corpus_index_schemad_pcoll, 
+      asl_consultant_index_schemad_pcoll
+    )
+    pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
+
+    document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll
+    )
+    pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
+
+    document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll, 
+      full_target_vid_index_schemad_pcoll
+    )
+    pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+    pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+    pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
+
+    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll
+    )
+    pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
+    pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
+
+    document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
+      document_asl_consultant_target_video_index_schemad_pcoll
+    )
+    pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
+
+    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+      document_asl_consultant_utterance_token_index_schemad_pcoll,
+      document_asl_consultant_target_video_index_schemad_pcoll,
+      document_asl_consultant_target_video_frame_index_schemad_pcoll
+    )
+    pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+
+
+  with beam.Pipeline(options=pipeline_options) as pl:
+    vid_indexes_dir_path_pcoll = (
+      pl
+      | f"Beam PL: create {fidscs_globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_INDEXES_DIR])
+    )
+    beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, fidscs_globals.VIDEO_INDEXES_DIR)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    corpus_docs_dir_path_pcoll = (
+      pl
+      | f"Beam PL: create {fidscs_globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.CORPUS_DIR])
+    )
+    beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, fidscs_globals.CORPUS_DIR)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    vid_download_dir_path_pcoll = (
+      pl
+      | f"Beam PL: create {fidscs_globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_DIR])
+    )
+    beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, fidscs_globals.VIDEO_DIR)
   
 
   print(f"Beam PL: ALL DONE!")

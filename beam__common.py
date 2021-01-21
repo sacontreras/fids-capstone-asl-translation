@@ -70,6 +70,22 @@ def dataset_csv_files_exist(dataset_csv_paths=None):
   return True
 
 
+def train_val_csv_files_exist(train_val_csv_paths=None):
+  if train_val_csv_paths is None or len(train_val_csv_paths)==0:
+    train_val_csv_paths = [
+      fidscs_globals.TRAIN_ASSOC_DS_PATH,
+      fidscs_globals.VAL_DS_PATH,
+      fidscs_globals.TRAIN_DS_PATH
+    ]
+  for train_val_csv_path in train_val_csv_paths:
+    if not tf.io.gfile.exists(train_val_csv_path):
+      # print(f"Dataset {dataset_csv_path} not found")
+      return False
+    else:
+      print(f"Found train/val dataset {train_val_csv_path}")
+  return True
+
+
 def _load_csv(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None, max_len=None):
   """
   this function opens the "readable file" (as a CSV),
@@ -150,6 +166,24 @@ def pl__X__sort_pcoll(pcoll, pcoll_label):
       )
     | f"Beam PL: 'implode' keyed {pcoll_label} for sort" >> beam.GroupByKey()
     | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
+  )
+
+
+def beam_row_to_csv_string(row):
+  d_row = row.as_dict()
+  return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
+  
+def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
+  return (
+    pcoll
+    | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
+        os.path.join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
+        file_name_suffix=".csv", 
+        append_trailing_newlines=True,
+        shard_name_template="",
+        header=",".join(schema_col_names)
+      )
+    | f"Beam PL: print path to {pcoll_label} csv" >> beam.ParDo(PipelinePcollPrinter(msg=f"{pcoll_label} CSV WRITTEN TO STORAGE"))
   )
 
 

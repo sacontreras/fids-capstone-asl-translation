@@ -23,65 +23,13 @@ sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
 import fidscs_globals
+import beam__common
 
 
 
 
 def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner'):
   print(f"use_beam: {use_beam}")
-
-  # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
-  #   tf.distribute.MirroredStrategy 
-  #     ... supports synchronous distributed training on multiple GPUs on one machine.
-  #     It creates one replica per GPU device. Each variable in the model is mirrored across all the replicas.
-  #     These variables are kept in sync with each other by applying identical updates. 
-  #     Efficient all-reduce algorithms are used to communicate the variable updates across the devices. 
-  #     All-reduce aggregates tensors across all the devices by adding them up, and makes them available on each device. 
-  #     It’s a fused algorithm that is very efficient and can reduce the overhead of synchronization significantly. 
-  #     There are many all-reduce algorithms and implementations available, depending on the type of communication available between devices. 
-  #     By default, it uses NVIDIA NCCL as the all-reduce implementation. You can choose from a few other options, or write your own.
-  # strategy = tf.distribute.MirroredStrategy()
-
-  #   tf.distribute.experimental.MultiWorkerMirroredStrategy
-  #     ... is very similar to MirroredStrategy. It implements synchronous distributed training across multiple workers, each with potentially multiple GPUs. 
-  #     Similar to MirroredStrategy, it creates copies of all variables in the model on each device across all workers.
-  #     It uses CollectiveOps as the multi-worker all-reduce communication method used to keep variables in sync. 
-  #     A collective op is a single op in the TensorFlow graph which can automatically choose an all-reduce algorithm in the TensorFlow runtime according to hardware, network topology and tensor sizes.
-  #     It also implements additional performance optimizations. 
-  #     For example, it includes a static optimization that converts multiple all-reductions on small tensors into fewer all-reductions on larger tensors. 
-  #     In addition, it is designed to have a plugin architecture - so that in the future, you will be able to plugin algorithms that are better tuned for your hardware. 
-  #     Note that collective ops also implement other collective operations such as broadcast and all-gather.
-  #     MultiWorkerMirroredStrategy currently allows you to choose between two different implementations of collective ops. 
-  #     CollectiveCommunication.RING implements ring-based collectives using gRPC as the communication layer. 
-  #     CollectiveCommunication.NCCL uses Nvidia's NCCL to implement collectives. CollectiveCommunication.AUTO defers the choice to the runtime.
-  #     The best choice of collective implementation depends upon the number and kind of GPUs, and the network interconnect in the cluster.
-  # strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-
-  #   tf.distribute.experimental.CentralStorageStrategy 
-  #     ... does synchronous training as well. Variables are not mirrored, instead they are placed on the CPU and operations are replicated across all local GPUs. 
-  #     If there is only one GPU, all variables and operations will be placed on that GPU.
-  # strategy = tf.distribute.experimental.CentralStorageStrategy()
-
-  #   tf.distribute.OneDeviceStrategy
-  #     ... is a strategy to place all variables and computation on a single specified device. This strategy is distinct from the default strategy in a number of ways. 
-  #     In default strategy, the variable placement logic remains unchanged when compared to running TensorFlow without any distribution strategy. 
-  #     But when using OneDeviceStrategy, all variables created in its scope are explicitly placed on the specified device. 
-  #     Moreover, any functions called via OneDeviceStrategy.run will also be placed on the specified device. 
-  #     Input distributed through this strategy will be prefetched to the specified device. In default strategy, there is no input distribution.
-  #     Similar to the default strategy, this strategy could also be used to test your code before switching to other strategies which actually distribute to multiple devices/machines. 
-  #     This will exercise the distribution strategy machinery somewhat more than default strategy, but not to the full extent as using MirroredStrategy or TPUStrategy etc. 
-  #     If you want code that behaves as if no strategy, then use default strategy. 
-
-  # if tf.config.list_physical_devices('gpu'):
-  #   # strategy = tf.distribute.MirroredStrategy()
-  #   strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-  #   # tf.distribute.experimental.CentralStorageStrategy()
-  # else:  # use default strategy
-  #   strategy = tf.distribute.get_strategy()
-  # strategy = tf.distribute.experimental.CentralStorageStrategy() 
-  # strategy = tf.distribute.MirroredStrategy()
-  strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-  print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
   # ******************** global variables set at runtime: BEGIN ********************
   fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
@@ -123,12 +71,67 @@ def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner')
   fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
   # ******************** global variables set at runtime: END ********************
 
-  if use_beam:
-    import data_extractor__beam
-    data_extractor__beam.run(beam_runner=beam_runner)
-  else:
-    import data_extractor__pandas
-    data_extractor__pandas.run()
+
+  if not beam__common.dataset_csv_files_exist():
+    # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
+    #   tf.distribute.MirroredStrategy 
+    #     ... supports synchronous distributed training on multiple GPUs on one machine.
+    #     It creates one replica per GPU device. Each variable in the model is mirrored across all the replicas.
+    #     These variables are kept in sync with each other by applying identical updates. 
+    #     Efficient all-reduce algorithms are used to communicate the variable updates across the devices. 
+    #     All-reduce aggregates tensors across all the devices by adding them up, and makes them available on each device. 
+    #     It’s a fused algorithm that is very efficient and can reduce the overhead of synchronization significantly. 
+    #     There are many all-reduce algorithms and implementations available, depending on the type of communication available between devices. 
+    #     By default, it uses NVIDIA NCCL as the all-reduce implementation. You can choose from a few other options, or write your own.
+    # strategy = tf.distribute.MirroredStrategy()
+
+    #   tf.distribute.experimental.MultiWorkerMirroredStrategy
+    #     ... is very similar to MirroredStrategy. It implements synchronous distributed training across multiple workers, each with potentially multiple GPUs. 
+    #     Similar to MirroredStrategy, it creates copies of all variables in the model on each device across all workers.
+    #     It uses CollectiveOps as the multi-worker all-reduce communication method used to keep variables in sync. 
+    #     A collective op is a single op in the TensorFlow graph which can automatically choose an all-reduce algorithm in the TensorFlow runtime according to hardware, network topology and tensor sizes.
+    #     It also implements additional performance optimizations. 
+    #     For example, it includes a static optimization that converts multiple all-reductions on small tensors into fewer all-reductions on larger tensors. 
+    #     In addition, it is designed to have a plugin architecture - so that in the future, you will be able to plugin algorithms that are better tuned for your hardware. 
+    #     Note that collective ops also implement other collective operations such as broadcast and all-gather.
+    #     MultiWorkerMirroredStrategy currently allows you to choose between two different implementations of collective ops. 
+    #     CollectiveCommunication.RING implements ring-based collectives using gRPC as the communication layer. 
+    #     CollectiveCommunication.NCCL uses Nvidia's NCCL to implement collectives. CollectiveCommunication.AUTO defers the choice to the runtime.
+    #     The best choice of collective implementation depends upon the number and kind of GPUs, and the network interconnect in the cluster.
+    # strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+
+    #   tf.distribute.experimental.CentralStorageStrategy 
+    #     ... does synchronous training as well. Variables are not mirrored, instead they are placed on the CPU and operations are replicated across all local GPUs. 
+    #     If there is only one GPU, all variables and operations will be placed on that GPU.
+    # strategy = tf.distribute.experimental.CentralStorageStrategy()
+
+    #   tf.distribute.OneDeviceStrategy
+    #     ... is a strategy to place all variables and computation on a single specified device. This strategy is distinct from the default strategy in a number of ways. 
+    #     In default strategy, the variable placement logic remains unchanged when compared to running TensorFlow without any distribution strategy. 
+    #     But when using OneDeviceStrategy, all variables created in its scope are explicitly placed on the specified device. 
+    #     Moreover, any functions called via OneDeviceStrategy.run will also be placed on the specified device. 
+    #     Input distributed through this strategy will be prefetched to the specified device. In default strategy, there is no input distribution.
+    #     Similar to the default strategy, this strategy could also be used to test your code before switching to other strategies which actually distribute to multiple devices/machines. 
+    #     This will exercise the distribution strategy machinery somewhat more than default strategy, but not to the full extent as using MirroredStrategy or TPUStrategy etc. 
+    #     If you want code that behaves as if no strategy, then use default strategy. 
+
+    # if tf.config.list_physical_devices('gpu'):
+    #   # strategy = tf.distribute.MirroredStrategy()
+    #   strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+    #   # tf.distribute.experimental.CentralStorageStrategy()
+    # else:  # use default strategy
+    #   strategy = tf.distribute.get_strategy()
+    # strategy = tf.distribute.experimental.CentralStorageStrategy() 
+    # strategy = tf.distribute.MirroredStrategy()
+    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+    print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
+
+    if use_beam:
+      import data_extractor__beam
+      data_extractor__beam.run(beam_runner=beam_runner)
+    else:
+      import data_extractor__pandas
+      data_extractor__pandas.run()
 
 
 

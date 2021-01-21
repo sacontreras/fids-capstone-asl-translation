@@ -51,6 +51,10 @@ UTTERANCE_TOKEN_FRAME_DS_FNAME = 'document-consultant-targetvideo-utterance-toke
 
 VOCABULARY_DS_FNAME = 'vocabulary-index.csv'
 
+TRAIN_FRAME_SEQ_ASSOC_DS_FNAME = 'train-assoc.csv'
+VAL_FRAME_SEQ_DS_FNAME = 'val.csv'
+TRAIN_FRAME_SEQ_DS_FNAME = 'train.csv'
+
 
 
 # ********** SCHEMA-related (FIXED) globals: BEGIN **********
@@ -213,6 +217,16 @@ SCHEMA_COL_NAMES__VIDEO_INDEX = [
   'uncompressed_avi_mirror_2_url'
 ]
 SCHEMA_PK__VIDEO_INDEX = [SCHEMA_COL_NAMES__VIDEO_INDEX[0]]
+
+SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX = [
+  'TokenID',
+  'CameraPerspective',
+  'ASLConsultantID',
+  'TargetVideoFilename',
+  'UtteranceSequence',
+  'TokenSequence',
+  'FrameSequence'
+]
 # ********** SCHEMA-related (FIXED) globals: END **********
 
 
@@ -233,6 +247,9 @@ VIDEO_SEGMENT_DS_PATH = None
 VIDEO_FRAME_DS_PATH = None
 UTTERANCE_TOKEN_FRAME_DS_PATH = None
 VOCABULARY_DS_PATH = None
+TRAIN_ASSOC_DS_PATH = None
+VAL_DS_PATH = None
+TRAIN_DS_PATH = None
 MAX_TARGET_VIDEOS = None
 
 D_IN_MEMORY_VARS = dict()
