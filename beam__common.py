@@ -75,7 +75,10 @@ def train_val_csv_files_exist(train_val_csv_paths=None):
     train_val_csv_paths = [
       fidscs_globals.TRAIN_ASSOC_DS_PATH,
       fidscs_globals.VAL_DS_PATH,
-      fidscs_globals.TRAIN_DS_PATH
+      fidscs_globals.TRAIN_DS_PATH,
+      fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH,
+      fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_PATH,
+      fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH
     ]
   for train_val_csv_path in train_val_csv_paths:
     if not tf.io.gfile.exists(train_val_csv_path):

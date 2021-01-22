@@ -711,96 +711,318 @@ def pl__6__write_train_frame_sequences_index_csv(train_frame_sequences):
     ) # train_frame_sequences_index_csv_path
 
 
-def pl__6__create_complete_utterances_from_val_tokens(val_tcpctvustsfs, tcpctvustsfs):
+def pl__6__create_complete_utterances_from_train_val_tokens(train_val_tcpctvustsfs, tcpdctvustsfs, dcusstettlstrs, token_map_by_id, name_train_val_tcpctvustsfs):
     """
+    tcpdctvustsfs:
+        (
+            <TokenID>,
+            <CameraPerspective>,
+            <DocumentID>,
+            <ASLConsultantID>,
+            <TargetVideoFilename>,
+            <UtteranceSequence>,
+            <TokenSequence>,
+            <FrameSequence>
+        )
+
+    dcusstettlstrs:
+        (
+            <DocumentID>,
+            <ASLConsultantID>,
+            <UtteranceSequence>,
+            <StartTime>,
+            <EndTime>,
+            <Tokens>,
+            <Translation>
+        )
+
+    token_map_by_id:
+        listof(<Token>) # indexed by <TokenID>
+
 
     returns:
-        complete_utterances__with__val_tcp
+        complete_utterances__with__train_val_tcp
+            tuples of the form:
+                (
+                    <DocumentID>,
+                    <ASLConsultantID>,
+                    <TargetVideoFilename>,
+                    <UtteranceSequence>,
+                    <CameraPerspective>,
+                    listof(<TokenID>)
+                )
     """
 
-    # find all COMPLETE utterances that can be formed with token-cameraperspective pairs from the validation set
-
-    val_tcp = (
-        val_tcpctvustsfs
-        | "Beam PL: extract (TokenID, CameraPerspective) from val_tcpctvustsfs" >> beam.Map(
+    train_val_tcp = (
+        train_val_tcpctvustsfs
+        | f"Beam PL: extract (TokenID, CameraPerspective) from {name_train_val_tcpctvustsfs}" >> beam.Map(
                 lambda tpl: (
                     tpl[0], # TokenID
                     tpl[1]  # CameraPerspective
                 )
             )
-        | "Beam PL: select distinct (TokenID, CameraPerspective) from val_tcpctvustsfs" >> beam.Distinct()
+        | f"Beam PL: select distinct (TokenID, CameraPerspective) from {name_train_val_tcpctvustsfs}" >> beam.Distinct()
     )
 
-    complete_utterances__with__val_tcp = (
-        tcpctvustsfs
-        | "Beam PL: extract (ASLConsultantID,TargetVideoFilename,CameraPerspective,UtteranceSequence,TokenSequence,TokenID) from tcpctvustsfs" >> beam.Map(
+    tvcptidl__by__dcus = (
+        tcpdctvustsfs
+        | f"Beam PL: extract (DocumentID,ASLConsultantID,TargetVideoFilename,CameraPerspective,UtteranceSequence,TokenSequence,TokenID) from tcpdctvustsfs for {name_train_val_tcpctvustsfs}" >> beam.Map(
                 lambda tpl: (
-                    tpl[2], # <ASLConsultantID>
-                    tpl[3], # <TargetVideoFilename>
-                    tpl[4], # <UtteranceSequence>
+                    tpl[2], # <DocumentID>
+                    tpl[3], # <ASLConsultantID>
+                    tpl[4], # <TargetVideoFilename>
+                    tpl[5], # <UtteranceSequence>
                     tpl[1], # <CameraPerspective>
 
-                    tpl[5], # <TokenSequence>
+                    tpl[6], # <TokenSequence>
                     tpl[0]  # <TokenID>
                 )
             )
-        | "Beam PL: select distinct (ASLConsultantID,TargetVideoFilename,CameraPerspective,UtteranceSequence,TokenSequence,TokenID) from tcpctvustsfs" >> beam.Distinct()
-        | "Beam PL: transform distinct ctvcpustst tuples to tst_by_ctvuscp" >> beam.Map(
+        | f"Beam PL: select distinct (DocumentID,ASLConsultantID,TargetVideoFilename,CameraPerspective,UtteranceSequence,TokenSequence,TokenID) from tcpdctvustsfs for {name_train_val_tcpctvustsfs}" >> beam.Distinct()
+        | f"Beam PL: transform distinct dctvcpustst tuples to tst_by_dctvuscp for {name_train_val_tcpctvustsfs}" >> beam.Map(
                 lambda tpl: (
                     (
-                        tpl[0], # <ASLConsultantID>
-                        tpl[1], # <TargetVideoFilename>
-                        tpl[2], # <UtteranceSequence>
-                        tpl[3]  # <CameraPerspective>
+                        tpl[0], # <DocumentID>
+                        tpl[1], # <ASLConsultantID>
+                        tpl[2], # <TargetVideoFilename>
+                        tpl[3], # <UtteranceSequence>
+                        tpl[4]  # <CameraPerspective>
                     ),
                     (
-                        tpl[4], # <TokenSequence>
-                        tpl[5]  # <TokenID>
+                        tpl[5], # <TokenSequence>
+                        tpl[6]  # <TokenID>
                     )
                 )
             )
-        | "Beam PL: collect list of tokenseq-tokenid for each (<ASLConsultantID>, <TargetVideoFilename>, <UtteranceSequence>, <CameraPerspective>)" >> beam.GroupByKey()
+        | f"Beam PL: collect list of tokenseq-tokenid for each (<DocumentID>, <ASLConsultantID>, <TargetVideoFilename>, <UtteranceSequence>, <CameraPerspective>) for {name_train_val_tcpctvustsfs}" >> beam.GroupByKey()
         # the above produces tuples of the form:
             # (
-            #     (<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>), # key
+            #     (<DocumentID>,<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>), # key
             #     listof((<TokenSequence>,<TokenID>))
             # )
-        | "Beam PL: sort list of tokenseq-tokenid by tokenseq for each (<ASLConsultantID>, <TargetVideoFilename>, <UtteranceSequence>, <CameraPerspective>)" >> beam.Map(
+        | f"Beam PL: sort list of tokenseq-tokenid by tokenseq for each (<DocumentID>, <ASLConsultantID>, <TargetVideoFilename>, <UtteranceSequence>, <CameraPerspective>) for {name_train_val_tcpctvustsfs}" >> beam.Map(
                 lambda tpl: (
                     (
-                        tpl[0][0], # <ASLConsultantID>
-                        tpl[0][1], # <TargetVideoFilename>
-                        tpl[0][2], # <UtteranceSequence>
-                        tpl[0][3]  # <CameraPerspective>
+                        tpl[0][0], # <DocumentID>
+                        tpl[0][1], # <ASLConsultantID>
+                        tpl[0][2], # <TargetVideoFilename>
+                        tpl[0][3], # <UtteranceSequence>
+                        tpl[0][4]  # <CameraPerspective>
                     ),
                     [(tst_tpl[1], tpl[0][3]) for tst_tpl in sorted(tpl[1], key=lambda tst_tpl: tst_tpl[0])]
                 )
             )
         # the above produces tuples of the form:
             # (
-            #     (<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>), # key
+            #     (<DocumentID>,<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>), # key
             #     listof((<TokenID>, <CameraPerspective>)) # sorted by <TokenSequence>
             # )
-
-        # now we need to filter all of the above (<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>) where every (<TokenID>, <CameraPerspective>) in the corresponding list exists in val_tcp
-        | "Beam PL: filter matching rows from vid index" >> beam.Filter(
-            lambda list_tcp_tpl__by__ctvuscp__tpl, existing_val_tcp_tpls: all(tcp_tpl in existing_val_tcp_tpls for tcp_tpl in list_tcp_tpl__by__ctvuscp__tpl[1]),
-            existing_val_tcp_tpls=beam.pvalue.AsIter(val_tcp)
+        # now we need to filter all of the above (<DocumentID>,<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>) where every (<TokenID>, <CameraPerspective>) in the corresponding list exists in train_val_tcp
+        | f"Beam PL: filter matching token-cameraperspective tuples for {name_train_val_tcpctvustsfs} from tcpdctvustsfs" >> beam.Filter(
+            lambda list_tcp_tpl__by__dctvuscp__tpl, existing_train_val_tcp_tpls: all(tcp_tpl in existing_train_val_tcp_tpls for tcp_tpl in list_tcp_tpl__by__dctvuscp__tpl[1]),
+            existing_train_val_tcp_tpls=beam.pvalue.AsIter(train_val_tcp)
         )
-        | "Beam PL: extract (<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>,listof(<TokenID>))" >> beam.Map(
+        | f"Beam PL: extract (<DocumentID>,<ASLConsultantID>,<TargetVideoFilename>,<UtteranceSequence>,<CameraPerspective>,listof(<TokenID>)) for {name_train_val_tcpctvustsfs}" >> beam.Map(
                 lambda tpl: (
-                    tpl[0][0],  # <ASLConsultantID>
-                    tpl[0][1],  # <TargetVideoFilename>
-                    tpl[0][2],  # <UtteranceSequence>
-                    tpl[0][3],  # <CameraPerspective>
-                    [tcp_tpl[0] for tcp_tpl in tpl[1]] # listof(<TokenID>)
+                    (
+                        tpl[0][0],  # <DocumentID>
+                        tpl[0][1],  # <ASLConsultantID>
+                        tpl[0][3]   # <UtteranceSequence>
+                    ),
+                    (
+                        tpl[0][2],  # <TargetVideoFilename>
+                        tpl[0][4],  # <CameraPerspective>
+                        [tcp_tpl[0] for tcp_tpl in tpl[1]] # listof(<TokenID>)
+                    )
                 ) 
             )
         # debug
-        # | "Beam PL: print complete_utterances__with__val_tcp" >> beam.ParDo(beam__common.PipelinePcollPrinter("complete_utterances__with__val_tcp entry"))
+        # | f"Beam PL: print complete_utterances__with__train_val_tcp for {name_train_val_tcpctvustsfs}" >> beam.ParDo(beam__common.PipelinePcollPrinter(f"complete_utterance (for {name_train_val_tcpctvustsfs}) entry"))
     )
 
-    return complete_utterances__with__val_tcp
+    stettlstrs__by__dcus = (
+        dcusstettlstrs
+        | f"Beam PL: transform dcusstettlstrs to ((<DocumentID>,<ASLConsultantID>,<UtteranceSequence>),(<StartTime>,<EndTime>,<Tokens>,<Translation>)) for {name_train_val_tcpctvustsfs}" >> beam.Map(
+                lambda stettlstrs_tpl: (
+                    (
+                        stettlstrs_tpl[0],  # <DocumentID>
+                        stettlstrs_tpl[1],  # <ASLConsultantID>
+                        stettlstrs_tpl[2]   # <UtteranceSequence>
+                    ),
+                    (
+                        stettlstrs_tpl[3],  # <StartTime>
+                        stettlstrs_tpl[4],  # <EndTime>
+                        stettlstrs_tpl[5],  # <Tokens>          # note that this is a literal string of the concatenated ascii tokens
+                        stettlstrs_tpl[6]   # <Translation>     # this is the English translation of the ascii string representation of concatenated (ordered) tokens
+                    )
+                )
+            )
+    )
+
+    def resolve_tokens(ctvuscpstetlsttidlsttstrtrstr_tpl, token_map_by_id):
+        """
+        ctvuscpstetlsttidlsttstrtrstr_tpl:
+            (
+                <ASLConsultantID>, 
+                <TargetVideoFilename>, 
+                <UtteranceSequence>, 
+                <CameraPerspective>, 
+                <StartTime>, 
+                <EndTime>, 
+                listof(<TokenID>), 
+                <Tokens>, 
+                <Translation>
+            )
+        """
+        resolved_tokens = ' '.join([token_map_by_id[tid] for tid in ctvuscpstetlsttidlsttstrtrstr_tpl[6]])
+        resolved_tokens = resolved_tokens.replace("\\", "")
+        return (
+            ctvuscpstetlsttidlsttstrtrstr_tpl[0],                                               # <ASLConsultantID>
+            ctvuscpstetlsttidlsttstrtrstr_tpl[1],                                               # <TargetVideoFilename>
+            ctvuscpstetlsttidlsttstrtrstr_tpl[2],                                               # <UtteranceSequence>
+            ctvuscpstetlsttidlsttstrtrstr_tpl[3],                                               # <CameraPerspective>
+            ctvuscpstetlsttidlsttstrtrstr_tpl[4],                                               # <StartTime>
+            ctvuscpstetlsttidlsttstrtrstr_tpl[5],                                               # <EndTime>
+            ' '.join([str(tid) for tid in ctvuscpstetlsttidlsttstrtrstr_tpl[6]]),               # space-delimited string of ordered <TokenID> (avoids the need to encode ',' when we write to CSV)
+            resolved_tokens,                                                                    # resolved token string
+            ctvuscpstetlsttidlsttstrtrstr_tpl[7],                                               # check token string (retrieved directly from corpus document during data extraction phase)
+            ctvuscpstetlsttidlsttstrtrstr_tpl[8]                                                # English translation
+        )
+
+    complete_utterances__with__train_val_tcp = (
+        ({
+            'tvcptidl': tvcptidl__by__dcus,
+            'stettlstrs': stettlstrs__by__dcus
+        })
+        | f"Beam PL: join tvcptidl to stettlstrs for {name_train_val_tcpctvustsfs}" >> beam.CoGroupByKey()
+        # the above produces tuples of the form:
+            # (
+            #     (
+            #         <DocumentID>,
+            #         <ASLConsultantID>,
+            #         <UtteranceSequence>
+            #     ),
+            #     {
+            #         'tvcptidl': listof((<TargetVideoFilename>,<CameraPerspective>,listof(<TokenID>)),     # there will be as many as there are camera perspectives for this utterance-targetvideo combo
+            #         'stettlstrs': listof((<StartTime>,<EndTime>,<Tokens>,<Translation>))                  # should only be one
+            #     }
+            # )
+        | f"Beam PL: filter out tuples with empty 'tvcptidl' or 'stettlstrs' lists for {name_train_val_tcpctvustsfs}" >> beam.Filter(
+                lambda tvcptidl__joined__stettlstrs__tpl: len(tvcptidl__joined__stettlstrs__tpl[1]['tvcptidl'])>0 and len(tvcptidl__joined__stettlstrs__tpl[1]['stettlstrs'])>0
+            )
+        | f"Beam PL: explode listof((<TargetVideoFilename>,<CameraPerspective>,listof(<TokenID>)) of tvcptidl__joined__stettlstrs for {name_train_val_tcpctvustsfs}" >> beam.Map(
+                lambda tvcptidl__joined__stettlstrs__tpl: [
+                    (
+                        tvcptidl__joined__stettlstrs__tpl[0][1],                    # <ASLConsultantID>
+                        tvcptidl_tpl[0],                                            # <TargetVideoFilename>
+                        tvcptidl__joined__stettlstrs__tpl[0][2],                    # <UtteranceSequence>
+                        tvcptidl_tpl[1],                                            # <CameraPerspective>
+                        tvcptidl__joined__stettlstrs__tpl[1]['stettlstrs'][0][0],   # <StartTime>
+                        tvcptidl__joined__stettlstrs__tpl[1]['stettlstrs'][0][1],   # <EndTime>
+                        tvcptidl_tpl[2],                                            # listof(<TokenID>)
+                        tvcptidl__joined__stettlstrs__tpl[1]['stettlstrs'][0][2],   # <Tokens>              # string of concatenated token ascii literals
+                        tvcptidl__joined__stettlstrs__tpl[1]['stettlstrs'][0][3]    # <Translation>
+                    ) for tvcptidl_tpl in tvcptidl__joined__stettlstrs__tpl[1]['tvcptidl']
+                ]
+            )
+        | f"Beam PL: 'explode' lst_complete_utterances__with__train_val_tcp__tpl for {name_train_val_tcpctvustsfs}" >> beam.FlatMap(
+                lambda lst_complete_utterances__with__train_val_tcp__tpl: lst_complete_utterances__with__train_val_tcp__tpl
+            )
+        | f"Beam PL: resolve tokens for comparison for {name_train_val_tcpctvustsfs}" >> beam.Map(
+                resolve_tokens, 
+                token_map_by_id=beam.pvalue.AsSingleton(token_map_by_id)
+            )
+        # the above produces tuples of the form:
+            # (
+            #     <ASLConsultantID>,
+            #     <TargetVideoFilename>,
+            #     <UtteranceSequence>,
+            #     <CameraPerspective>,
+            #     <StartTime>,
+            #     <EndTime>,
+            #     str(listof(<TokenID>)),                       # space-delimited
+            #     <Tokens (resolved)>                           # resolved token string
+            #     <Tokens (master, from corpus document)>,      # string of concatenated token ascii literals
+            #     <Translation>
+            # )
+
+        # debug
+        # | f"Beam PL: print complete_utterances__with__train_val_tcp for {name_train_val_tcpctvustsfs}" >> beam.ParDo(beam__common.PipelinePcollPrinter(f"complete_utterance (for {name_train_val_tcpctvustsfs}) entry"))
+    )
+
+    complete_utterances__with__train_val_tcp__failed_token_resolution = (
+        complete_utterances__with__train_val_tcp
+        | f"Beam PL: filter failed token resolution for {name_train_val_tcpctvustsfs}" >> beam.Filter(
+                lambda complete_utterances__with__train_val_tcp__tpl: complete_utterances__with__train_val_tcp__tpl[7] != complete_utterances__with__train_val_tcp__tpl[8]
+            )
+        # NOT DEBUG! THIS IS A LEGIT NOTIFICATION!
+        | f"Beam PL: print failed token resolution for {name_train_val_tcpctvustsfs}" >> beam.ParDo(beam__common.PipelinePcollPrinter(f"{fidscs_globals.VALIDATION_WARNING_TEXT} failed token resolution for {name_train_val_tcpctvustsfs} entry"))
+    )
+
+    # complete_utterances__with__train_val_tcp = (
+    #     complete_utterances__with__train_val_tcp
+    #     | f"Beam PL: filter successful token resolution for {name_train_val_tcpctvustsfs}" >> beam.Filter(
+    #             lambda complete_utterances__with__train_val_tcp__tpl: complete_utterances__with__train_val_tcp__tpl[7] == complete_utterances__with__train_val_tcp__tpl[8]
+    #         )
+    # )
+
+    return complete_utterances__with__train_val_tcp, complete_utterances__with__train_val_tcp__failed_token_resolution
+
+
+def pl__6__write_complete_utterances_from_train_val_tokens(complete_utterances__with__train_val_tcp, name_complete_utterances_train_val_index, fname_complete_utterances_train_val_index):
+    """
+    complete_utterances__with__train_val_tcp:
+        (
+            <ASLConsultantID>,
+            <TargetVideoFilename>,
+            <UtteranceSequence>,
+            <CameraPerspective>,
+            <StartTime>,
+            <EndTime>,
+            str(listof(<TokenID>)),                       # space-delimited
+            <Tokens (resolved)>                           # resolved token string
+            <Tokens (master, from corpus document)>,      # string of concatenated token ascii literals
+            <Translation>
+        )
+    """
+    sorted_complete_utterances__with__train_val_tcp = beam__common.pl__X__sort_pcoll(complete_utterances__with__train_val_tcp, pcoll_label=name_complete_utterances_train_val_index)
+    sorted_complete_utterances__with__train_val_tcp_csv_rows_pcoll = (
+        sorted_complete_utterances__with__train_val_tcp
+        | f"Beam PL: apply schema to sorted_complete_utterances__with__train_val_tcp for {name_complete_utterances_train_val_index}" >> beam.Map(
+                lambda sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl: beam.Row(
+                    # SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX = [
+                    #     'ASLConsultantID',
+                    #     'TargetVideoFilename',
+                    #     'UtteranceSequence',
+                    #     'CameraPerspective',
+                    #     'StartTime',
+                    #     'EndTime',
+                    #     'TokenIDs',
+                    #     'Tokens',
+                    #     'Translation'
+                    # ]
+                    ASLConsultantID=int(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[0]),
+                    TargetVideoFilename=str(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[1]),
+                    UtteranceSequence=int(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[2]),
+                    CameraPerspective=int(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[3]),
+                    StartTime=int(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[4]),
+                    EndTime=int(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[5]),
+                    TokenIDs=str(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[6]),
+                    Tokens=str(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[8]),
+                    Translation=str(sorted_complete_utterances__with__train_val_tcp_pcoll_row_tpl[9])
+                )
+            )
+        | f"Beam PL: beam row to csv string for {name_complete_utterances_train_val_index}" >> beam.Map(
+                lambda sorted_complete_utterances__with__train_val_tcp_index_schemad_pcoll_row: 
+                    beam__common.beam_row_to_csv_string(sorted_complete_utterances__with__train_val_tcp_index_schemad_pcoll_row)
+            )
+    )
+    return beam__common.pl__X__write_pcoll_to_csv(
+        sorted_complete_utterances__with__train_val_tcp_csv_rows_pcoll, 
+        name_complete_utterances_train_val_index, 
+        fname_complete_utterances_train_val_index, 
+        fidscs_globals.SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX
+    )
 
 
 
@@ -826,6 +1048,9 @@ def run(data_dir):
     fidscs_globals.TRAIN_ASSOC_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME)
     fidscs_globals.VAL_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VAL_FRAME_SEQ_DS_FNAME)
     fidscs_globals.TRAIN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME)
+    fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME)
+    fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_FNAME)
+    fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME)
 
 
     if not beam__common.train_val_csv_files_exist():
@@ -845,14 +1070,67 @@ def run(data_dir):
             # corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl) # XML is base-64 encode but we no longer need it (to decode it) since it is only used to create the datasets
             # # corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll) # see above
             # asl_consultant_index_schemad_pcoll = beam__common.pl__1__read_asl_consultant_index_csv(pl)
-            # document_asl_consultant_utterance_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_index_csv(pl)
+
+            document_asl_consultant_utterance_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_index_csv(pl)
+            dcusstettlstrs = (
+                document_asl_consultant_utterance_index_schemad_pcoll
+                | "Beam PL: extract (DocumentID,ASLConsultantID,UtteranceSequence,StartTime,EndTime,Tokens,Translation) from dcu schemad pcoll" >> beam.Map(
+                        lambda dcuiscp_row: (
+                            dcuiscp_row.DocumentID,
+                            dcuiscp_row.ASLConsultantID,
+                            dcuiscp_row.UtteranceSequence,
+                            dcuiscp_row.StartTime,
+                            dcuiscp_row.EndTime,
+                            dcuiscp_row.Tokens,
+                            dcuiscp_row.Translation
+                        )
+                    )
+            )
+
             # document_asl_consultant_target_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_index_csv(pl)
             # document_asl_consultant_utterance_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_video_index_csv(pl)
             # document_target_video_segment_index_schemad_pcoll = beam__common.pl__1__read_document_target_video_segment_index_csv(pl)
-            # vocabulary_index_schemad_pcoll = beam__common.pl__1__read_vocabulary_index_csv(pl)
+
+            vocabulary_index_schemad_pcoll = beam__common.pl__1__read_vocabulary_index_csv(pl)
+            tidt = (
+                vocabulary_index_schemad_pcoll
+                | "Beam PL: transform vocabulary_index_schemad_pcoll row to (TokenID, Token)" >> beam.Map(
+                        lambda vocabulary_index_schemad_pcoll_row: (
+                            vocabulary_index_schemad_pcoll_row.TokenID,
+                            str(vocabulary_index_schemad_pcoll_row.Token[2:-1]) # this implicitly converted to a string from bytes, thus we have to remove to preceding "b" and trailing "'"
+                        )
+                    )
+                # debug
+                # | f"Beam PL: print tidt" >> beam.ParDo(beam__common.PipelinePcollPrinter(f"tidt entry"))
+            )
+            tidt = beam__common.pl__X__sort_pcoll(tidt, "tidt")
+            token_map_by_id = (
+                tidt
+                | "Beam PL: extract (1, Token) from sorted tidt pcoll" >> beam.Map(lambda tidt_tpl: (1, tidt_tpl[1]))
+                | "Beam PL: group (1, Token) by key (1)" >> beam.GroupByKey()
+                | "Beam PL: extract listof(<Token>) (ordered/indexed by <TokenID>)" >> beam.Map(lambda list_token_tpl: list_token_tpl[1])
+            )
+
             # document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_token_index_csv(pl)
             # document_asl_consultant_target_video_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl)
+
             document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl)
+            tcpdctvustsfs = (
+                document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
+                | "Beam PL: extract (TokenID,CameraPerspective,DocumentID,ASLConsultantID,TargetVideoFilename,UtteranceSequence,TokenSequence,FrameSequence) from dctvustsfs schemad pcoll" >> beam.Map(
+                        lambda dctvustsfs_row: (
+                            dctvustsfs_row.TokenID,
+                            dctvustsfs_row.CameraPerspective,
+                            dctvustsfs_row.DocumentID,
+                            dctvustsfs_row.ASLConsultantID,
+                            dctvustsfs_row.TargetVideoFilename,
+                            dctvustsfs_row.UtteranceSequence,
+                            dctvustsfs_row.TokenSequence,
+                            dctvustsfs_row.FrameSequence
+                        )
+                    )
+            )
+
 
             (
                 train_val_split_candidates_keys, 
@@ -892,9 +1170,43 @@ def run(data_dir):
             )
             pl__6__write_train_frame_sequences_index_csv(train_frame_sequences)
 
-            complete_utterances__from__val_tokens = pl__6__create_complete_utterances_from_val_tokens(
+            complete_utterances__from__train_assoc_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
+                train_frame_sequences__assoc, 
+                tcpdctvustsfs,
+                dcusstettlstrs,
+                token_map_by_id,
+                name_train_val_tcpctvustsfs="train_frame_sequences__assoc"
+            )
+            pl__6__write_complete_utterances_from_train_val_tokens(
+                complete_utterances__from__train_assoc_tokens, 
+                "COMPLETE-UTTERANCES-TRAIN-ASSOC-INDEX", 
+                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME
+            )
+
+            complete_utterances__from__val_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
                 val_frame_sequences, 
-                tcpctvustsfs
+                tcpdctvustsfs,
+                dcusstettlstrs,
+                token_map_by_id,
+                name_train_val_tcpctvustsfs="val_frame_sequences"
+            )
+            pl__6__write_complete_utterances_from_train_val_tokens(
+                complete_utterances__from__val_tokens, 
+                "COMPLETE-UTTERANCES-VAL-INDEX", 
+                fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_FNAME
+            )
+
+            complete_utterances__from__train_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
+                train_frame_sequences, 
+                tcpdctvustsfs,
+                dcusstettlstrs,
+                token_map_by_id,
+                name_train_val_tcpctvustsfs="train_frame_sequences"
+            )
+            pl__6__write_complete_utterances_from_train_val_tokens(
+                complete_utterances__from__train_tokens, 
+                "COMPLETE-UTTERANCES-TRAIN-INDEX", 
+                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME
             )
 
 

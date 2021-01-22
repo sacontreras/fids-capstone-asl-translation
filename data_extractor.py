@@ -40,39 +40,30 @@ def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner')
   if not tf.io.gfile.exists(fidscs_globals.TMP_DIR):
     tf.io.gfile.makedirs(fidscs_globals.TMP_DIR)
 
-  fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
-  if not tf.io.gfile.exists(fidscs_globals.VIDEO_DIR):
-    tf.io.gfile.makedirs(fidscs_globals.VIDEO_DIR)
-
-  fidscs_globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
-  if not tf.io.gfile.exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
-    tf.io.gfile.makedirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
-
   fidscs_globals.CORPUS_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
-
   fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
-
   fidscs_globals.ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
-
   fidscs_globals.VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
-
   fidscs_globals.VIDEO_SEGMENT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
-
   fidscs_globals.VIDEO_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
-
   fidscs_globals.UTTERANCE_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
-
   fidscs_globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
-
   fidscs_globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
-
   fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
-
   fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
   # ******************** global variables set at runtime: END ********************
 
 
   if not beam__common.dataset_csv_files_exist():
+    fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
+    if not tf.io.gfile.exists(fidscs_globals.VIDEO_DIR):
+      tf.io.gfile.makedirs(fidscs_globals.VIDEO_DIR)
+
+    fidscs_globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
+    if not tf.io.gfile.exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
+      tf.io.gfile.makedirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
+
+
     # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training
     #   tf.distribute.MirroredStrategy 
     #     ... supports synchronous distributed training on multiple GPUs on one machine.

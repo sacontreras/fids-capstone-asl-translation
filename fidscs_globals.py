@@ -55,6 +55,10 @@ TRAIN_FRAME_SEQ_ASSOC_DS_FNAME = 'train-assoc.csv'
 VAL_FRAME_SEQ_DS_FNAME = 'val.csv'
 TRAIN_FRAME_SEQ_DS_FNAME = 'train.csv'
 
+COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME = 'complete-utterances-train-assoc.csv'
+COMPLETE_UTTERANCES_VAL_DS_FNAME = 'complete-utterances-val.csv'
+COMPLETE_UTTERANCES_TRAIN_DS_FNAME = 'complete-utterances-train.csv'
+
 
 
 # ********** SCHEMA-related (FIXED) globals: BEGIN **********
@@ -235,6 +239,18 @@ SCHEMA_PK__TRAIN_OR_VAL_INDEX = [
   SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[4],
   SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX[5]
 ]
+
+SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX = [
+    'ASLConsultantID',
+    'TargetVideoFilename',
+    'UtteranceSequence',
+    'CameraPerspective',
+    'StartTime',
+    'EndTime',
+    'TokenIDs',
+    'Tokens',
+    'Translation'
+]
 # ********** SCHEMA-related (FIXED) globals: END **********
 
 
@@ -258,6 +274,9 @@ VOCABULARY_DS_PATH = None
 TRAIN_ASSOC_DS_PATH = None
 VAL_DS_PATH = None
 TRAIN_DS_PATH = None
+COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH = None
+COMPLETE_UTTERANCES_VAL_DS_PATH = None
+COMPLETE_UTTERANCES_TRAIN_DS_PATH = None
 MAX_TARGET_VIDEOS = None
 
 D_IN_MEMORY_VARS = dict()
