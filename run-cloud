@@ -86,8 +86,8 @@ run python $SRC_DIR/data_extractor.py \
   --use-beam $USE_BEAM \
   --beam-runner $BEAM_RUNNER \
   --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region BEAM_GCP_REGION \
-  --beam-gcs-temp_location $WORK_DIR/beam-temp
+  --beam-gcp-region $BEAM_GCP_REGION \
+  --beam-gcs-temp-location $WORK_DIR/beam-temp
 echo ''
 
 # Missing required option: region.
@@ -99,7 +99,8 @@ echo '>>>>>>>>>>>>>>>>>>>>>>>>> Preprocessing <<<<<<<<<<<<<<<<<<<<<<<<<'
 run python preprocessor.py \
   --work-dir $WORK_DIR \
   --beam-gcp-project $PROJECT \
-  --beam-gcs-temp_location $WORK_DIR/beam-temp \
+  --beam-gcp-region $BEAM_GCP_REGION \
+  --beam-gcs-temp-location $WORK_DIR/beam-temp \
 echo ''
 
 # # Train and evaluate the model
