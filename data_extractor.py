@@ -203,7 +203,7 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
-    '-beam-gcp-region',
+    '--beam-gcp-region',
     default=None,
     help='The GCP region of the bucket.'
   )
