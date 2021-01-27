@@ -7,9 +7,10 @@ import setuptools
 
 # change to latest !
 REQUIRED_PACKAGES = [
+    'numpy==1.16.0',
     'google-auth==1.21.1',
     'apache-beam[gcp]==2.26.*',
-    'apache-beam[interactive]==2.26.*'
+    'apache-beam[interactive]==2.26.*',
     'tensorflow-transform==0.26.*',
     'tensorflow==2.3.*',   
     'opencv-python==4.4.*'            
