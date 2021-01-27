@@ -14,6 +14,7 @@
 from __future__ import absolute_import
 import os
 import argparse
+import subprocess
 import numpy as np
 import tensorflow as tf
 from importlib import import_module
@@ -50,10 +51,18 @@ def run(
   # ******************** global variables set at runtime: BEGIN ********************
   fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
 
-  fidscs_globals.DATA_ROOT_DIR = data_dir
-  print(f"fidscs_globals.DATA_ROOT_DIR: {fidscs_globals.DATA_ROOT_DIR}")
+  if data_dir[0:5]=='gs://':
+    data_path_segments = data_dir[5:].split('/')
+    gcs_bucket = 'gs://' + data_path_segments[0]
+    local_fs_mount_point = '/tmp/fids-capstone-data'
+    print(f"Mounting GCS bucket gcs_bucket {gcs_bucket} to local filesystem as {local_fs_mount_point}...")
+    sp_output = subprocess.run(["gcsfuse", gcs_bucket, local_fs_mount_point])
+    print(f"\toutput: '{sp_output}', return code: {sp_output.returncode}")
+    fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point
+  else:
+    fidscs_globals.DATA_ROOT_DIR = data_dir
+  
   if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR):
-    print(f"\tcreating {fidscs_globals.DATA_ROOT_DIR}...")
     tf.io.gfile.makedirs(fidscs_globals.DATA_ROOT_DIR)
   if not tf.io.gfile.exists(fidscs_globals.TMP_DIR):
     tf.io.gfile.makedirs(fidscs_globals.TMP_DIR)
@@ -221,7 +230,7 @@ if __name__ == '__main__':
 
   run(
     args.max_target_videos if args.max_target_videos!=-1 else None, 
-    os.path.join(args.work_dir, 'data/'), 
+    os.path.join(args.work_dir, 'data'), 
     use_beam=args.use_beam,
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
