@@ -12,11 +12,12 @@ REQUIRED_PACKAGES = [
     'apache-beam[interactive]==2.25.*',
     'tensorflow-transform==0.26.*',
     'tensorflow==2.3.*',
-    'avro==1.10.1',   
+    'avro-python3==1.8.1',   
     'opencv-python==4.4.*',
     'protobuf==3.12.2',
     'absl-py==0.9',
-    'numpy==1.16.5'
+    'numpy==1.16.5',
+    'tqdm==4.56.0'
 ]
 
 setuptools.setup(

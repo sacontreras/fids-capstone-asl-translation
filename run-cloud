@@ -89,6 +89,10 @@ run python preprocessor.py \
   --work-dir $WORK_DIR
 echo ''
 
+# Missing required option: region.
+# Missing GCS path option: temp_location.
+# Missing GCS path option: staging_location.
+
 # # Train and evaluate the model
 # echo '>>>>>>>>>>>>>>>>>>>>>>>>> Training <<<<<<<<<<<<<<<<<<<<<<<<<'
 # run python train.py \
