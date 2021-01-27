@@ -51,7 +51,9 @@ def run(
   fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
 
   fidscs_globals.DATA_ROOT_DIR = data_dir
+  print(f"fidscs_globals.DATA_ROOT_DIR: {fidscs_globals.DATA_ROOT_DIR}")
   if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR):
+    print(f"\tcreating {fidscs_globals.DATA_ROOT_DIR}...")
     tf.io.gfile.makedirs(fidscs_globals.DATA_ROOT_DIR)
   if not tf.io.gfile.exists(fidscs_globals.TMP_DIR):
     tf.io.gfile.makedirs(fidscs_globals.TMP_DIR)
