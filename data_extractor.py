@@ -175,12 +175,26 @@ if __name__ == '__main__':
     help='The runner that Apacche Beam will use. '
   )
 
+  parser.add_argument(
+    '--beam-gcp-project',
+    required=True,
+    help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
+  )
+
+  parser.add_argument(
+    '--beam-gcs-temp-location',
+    required=True,
+    help='The GCS path for beam temp storage.'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
   run(
     args.max_target_videos if args.max_target_videos!=-1 else None, 
     os.path.join(args.work_dir, 'data'), 
     use_beam=args.use_beam,
-    beam_runner=args.beam_runner
+    beam_runner=args.beam_runner,
+    beam_gcp_project=args.beam_gcp_project,
+    beam_gcs_temp_location=args.beam_gcs_temp_location
   )
   # **************************************** main: END ****************************************

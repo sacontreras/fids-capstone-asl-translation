@@ -40,10 +40,10 @@ while [[ $# -gt 0 ]]; do
     #   USE_BEAM=$2 #${2:-1}
     #   shift
     #   ;;
-    # --beam-runner)
-    #   BEAM_RUNNER=$2
-    #   shift
-    #   ;;
+    --beam-runner)  # in case we want to run on AWS or someplace other than GCP Dataflow
+      BEAM_RUNNER=$2
+      shift
+      ;;
     *)
       echo "error: unrecognized argument $1"
       exit 1
@@ -80,18 +80,22 @@ run python $SRC_DIR/data_extractor.py \
   --work-dir $WORK_DIR \
   --max-target-videos $MAX_TARGET_VIDEOS \
   --use-beam $USE_BEAM \
-  --beam-runner $BEAM_RUNNER
-echo ''
-
-# Preprocess the datasets
-echo '>>>>>>>>>>>>>>>>>>>>>>>>> Preprocessing <<<<<<<<<<<<<<<<<<<<<<<<<'
-run python preprocessor.py \
-  --work-dir $WORK_DIR
+  --beam-runner $BEAM_RUNNER \
+  --beam-gcp-project $PROJECT \
+  --beam-gcs-temp_location $WORK_DIR/beam-temp
 echo ''
 
 # Missing required option: region.
 # Missing GCS path option: temp_location.
 # Missing GCS path option: staging_location.
+
+# Preprocess the datasets
+echo '>>>>>>>>>>>>>>>>>>>>>>>>> Preprocessing <<<<<<<<<<<<<<<<<<<<<<<<<'
+run python preprocessor.py \
+  --work-dir $WORK_DIR \
+  --beam-gcp-project $PROJECT \
+  --beam-gcs-temp_location $WORK_DIR/beam-temp \
+echo ''
 
 # # Train and evaluate the model
 # echo '>>>>>>>>>>>>>>>>>>>>>>>>> Training <<<<<<<<<<<<<<<<<<<<<<<<<'
