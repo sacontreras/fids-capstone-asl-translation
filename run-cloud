@@ -67,7 +67,7 @@ if [[ $WORK_DIR != gs://* ]]; then
   exit 1
 fi
 
-if [[ -z $PROJECT ]]; then
+if [[ -z $BEAM_GCP_PROJECT ]]; then
   echo 'error: --project is required to run in Google Cloud Platform.'
   exit 1
 fi
