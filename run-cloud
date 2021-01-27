@@ -44,10 +44,10 @@ while [[ $# -gt 0 ]]; do
       BEAM_RUNNER=$2
       shift
       ;;
-    # --beam-gcp-project) # this is retrieved automatically via the script
-    #   BEAM_RUNNER=$2
-    #   shift
-    #   ;;
+    --beam-gcp-project) # this is retrieved automatically via the script
+      BEAM_RUNNER=$2
+      shift
+      ;;
     *)
       echo "error: unrecognized argument $1"
       exit 1
