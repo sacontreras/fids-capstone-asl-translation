@@ -43,7 +43,8 @@ def run(
   beam_runner='DirectRunner',
   beam_gcp_project=None,
   beam_gcp_region=None,
-  beam_gcs_temp_location=None
+  beam_gcs_temp_location=None,
+  beam_gcp_setup_file=None
 ):
 
   print(f"use_beam: {use_beam}")
@@ -150,7 +151,8 @@ def run(
         beam_runner=beam_runner,
         beam_gcp_project=beam_gcp_project,
         beam_gcp_region=beam_gcp_region,
-        beam_gcs_temp_location=beam_gcs_temp_location
+        beam_gcs_temp_location=beam_gcs_temp_location,
+        beam_gcp_setup_file=args.beam_gcp_setup_file
       )
     else:
       import data_extractor__pandas
@@ -225,6 +227,12 @@ if __name__ == '__main__':
     help='The GCS path for beam temp storage.'
   )
 
+  parser.add_argument(
+    '--beam-gcp-setup-file',
+    default=None,
+    help='The path to the python setup file (used by worker nodes to install dependencies).'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -235,6 +243,7 @@ if __name__ == '__main__':
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
     beam_gcp_region=args.beam_gcp_region,
-    beam_gcs_temp_location=args.beam_gcs_temp_location
+    beam_gcs_temp_location=args.beam_gcs_temp_location,
+    beam_gcp_setup_file=args.beam_gcp_setup_file
   )
   # **************************************** main: END ****************************************

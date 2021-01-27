@@ -20,7 +20,7 @@ WORK_DIR=gs://sc-fids-capstone-bucket/fids-capstone-data
 MAX_TARGET_VIDEOS=5
 USE_BEAM=1
 BEAM_RUNNER=DataflowRunner
-BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $BEAM_GCP_PROJECT)
+# BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $BEAM_GCP_PROJECT)
 BEAM_GCP_REGION=us-central1
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -88,11 +88,8 @@ run python $SRC_DIR/data_extractor.py \
   --beam-gcp-project $BEAM_GCP_PROJECT \
   --beam-gcp-region $BEAM_GCP_REGION \
   --beam-gcs-temp-location $WORK_DIR/beam-temp
+  --beam-gcp-setup-file ./setup.py
 echo ''
-
-# Missing required option: region.
-# Missing GCS path option: temp_location.
-# Missing GCS path option: staging_location.
 
 # Preprocess the datasets
 echo '>>>>>>>>>>>>>>>>>>>>>>>>> Preprocessing <<<<<<<<<<<<<<<<<<<<<<<<<'
@@ -101,6 +98,7 @@ run python preprocessor.py \
   --beam-gcp-project $PROJECT \
   --beam-gcp-region $BEAM_GCP_REGION \
   --beam-gcs-temp-location $WORK_DIR/beam-temp \
+  --beam-gcp-setup-file ./setup.py
 echo ''
 
 # # Train and evaluate the model

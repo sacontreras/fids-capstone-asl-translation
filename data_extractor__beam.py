@@ -3439,7 +3439,8 @@ def run(
   beam_runner='DirectRunner', 
   beam_gcp_project=None,
   beam_gcp_region=None,
-  beam_gcs_temp_location=None
+  beam_gcs_temp_location=None,
+  beam_gcp_setup_file=None
 ):
   options = {
     'runner': beam_runner,
@@ -3448,7 +3449,8 @@ def run(
     'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
     'project': beam_gcp_project,
     'region': beam_gcp_region, 
-    'temp_location': beam_gcs_temp_location
+    'temp_location': beam_gcs_temp_location,
+    'setup_file': beam_gcp_setup_file
   }
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
   print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
