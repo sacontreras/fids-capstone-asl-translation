@@ -20,8 +20,8 @@ WORK_DIR=gs://sc-fids-capstone-bucket/fids-capstone-data
 MAX_TARGET_VIDEOS=5
 USE_BEAM=1
 BEAM_RUNNER=DataflowRunner
-BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $PROJECT)
-REGION=us-central1
+BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $BEAM_GCP_PROJECT)
+BEAM_GCP_REGION=us-central1
 while [[ $# -gt 0 ]]; do
   case $1 in
     --src-dir)
@@ -44,8 +44,8 @@ while [[ $# -gt 0 ]]; do
       BEAM_RUNNER=$2
       shift
       ;;
-    --beam-gcp-project) # this is retrieved automatically via the script
-      BEAM_RUNNER=$2
+    --beam-gcp-project)
+      BEAM_GCP_PROJECT=$2
       shift
       ;;
     *)
@@ -86,6 +86,7 @@ run python $SRC_DIR/data_extractor.py \
   --use-beam $USE_BEAM \
   --beam-runner $BEAM_RUNNER \
   --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region BEAM_GCP_REGION \
   --beam-gcs-temp_location $WORK_DIR/beam-temp
 echo ''
 

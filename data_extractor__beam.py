@@ -3438,6 +3438,7 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
 def run(
   beam_runner='DirectRunner', 
   beam_gcp_project=None,
+  beam_gcp_region=None,
   beam_gcs_temp_location=None
 ):
   options = {
@@ -3446,6 +3447,7 @@ def run(
     'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
     'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
     'project': beam_gcp_project,
+    'region': beam_gcp_region, 
     'temp_location': beam_gcs_temp_location
   }
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way

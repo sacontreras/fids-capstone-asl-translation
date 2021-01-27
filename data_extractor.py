@@ -28,7 +28,23 @@ import beam__common
 
 
 
-def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner'):
+# args.max_target_videos if args.max_target_videos!=-1 else None, 
+# os.path.join(args.work_dir, 'data'), 
+# use_beam=args.use_beam,
+# beam_runner=args.beam_runner,
+# beam_gcp_project=args.beam_gcp_project,
+# beam_gcp_region=args.beam_gcp_region,
+# beam_gcs_temp_location=args.beam_gcs_temp_location
+def run(
+  max_target_videos, 
+  data_dir, 
+  use_beam=False, 
+  beam_runner='DirectRunner',
+  beam_gcp_project=None,
+  beam_gcp_region=None,
+  beam_gcs_temp_location=None
+):
+
   print(f"use_beam: {use_beam}")
 
   # ******************** global variables set at runtime: BEGIN ********************
@@ -119,7 +135,12 @@ def run(max_target_videos, data_dir, use_beam=False, beam_runner='DirectRunner')
 
     if use_beam:
       import data_extractor__beam
-      data_extractor__beam.run(beam_runner=beam_runner)
+      data_extractor__beam.run(
+        beam_runner=beam_runner,
+        beam_gcp_project=beam_gcp_project,
+        beam_gcp_region=beam_gcp_region,
+        beam_gcs_temp_location=beam_gcs_temp_location
+      )
     else:
       import data_extractor__pandas
       data_extractor__pandas.run()
@@ -172,29 +193,31 @@ if __name__ == '__main__':
   parser.add_argument(
     '--beam-runner',
     default='DirectRunner',
-    help='The runner that Apacche Beam will use. '
+    help='The runner that Apache Beam will use. '
   )
 
   parser.add_argument(
     '--beam-gcp-project',
-    required=True,
+    default=None,
     help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
   )
 
   parser.add_argument(
     '--beam-gcs-temp-location',
-    required=True,
+    default=None,
     help='The GCS path for beam temp storage.'
   )
 
   args = parser.parse_args()
   print(f"args: {args}")
+  
   run(
     args.max_target_videos if args.max_target_videos!=-1 else None, 
     os.path.join(args.work_dir, 'data'), 
     use_beam=args.use_beam,
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
+    beam_gcp_region=args.beam_gcp_region,
     beam_gcs_temp_location=args.beam_gcs_temp_location
   )
   # **************************************** main: END ****************************************
