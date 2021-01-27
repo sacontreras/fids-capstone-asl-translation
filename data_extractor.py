@@ -203,6 +203,12 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
+    '-beam-gcp-region',
+    default=None,
+    help='The GCP region of the bucket.'
+  )
+
+  parser.add_argument(
     '--beam-gcs-temp-location',
     default=None,
     help='The GCS path for beam temp storage.'
@@ -210,7 +216,7 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
   print(f"args: {args}")
-  
+
   run(
     args.max_target_videos if args.max_target_videos!=-1 else None, 
     os.path.join(args.work_dir, 'data'), 
