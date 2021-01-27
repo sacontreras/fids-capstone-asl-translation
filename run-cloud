@@ -36,10 +36,10 @@ while [[ $# -gt 0 ]]; do
       MAX_TARGET_VIDEOS=$2
       shift
       ;;
-    --use-beam)
-      USE_BEAM=$2 #${2:-1}
-      shift
-      ;;
+    # --use-beam)
+    #   USE_BEAM=$2 #${2:-1}
+    #   shift
+    #   ;;
     # --beam-runner)
     #   BEAM_RUNNER=$2
     #   shift

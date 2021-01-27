@@ -3436,13 +3436,6 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
 
 
 def run(beam_runner='DirectRunner'):
-  # pipeline_options = PipelineOptions(
-  #   save_main_session=True,
-  #   runner='DirectRunner',
-  #   direct_num_workers=0,
-  #   direct_running_mode='multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
-  #   streaming=False,
-  # )
   options = {
     'project': 'my-project', # change
     'runner': beam_runner,
