@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
   run(
     args.max_target_videos if args.max_target_videos!=-1 else None, 
-    os.path.join(args.work_dir, 'data'), 
+    os.path.join(args.work_dir, 'data/'), 
     use_beam=args.use_beam,
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
