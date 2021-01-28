@@ -52,14 +52,14 @@ BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $BEAM_GCP_PROJECT)
 ./run-cloud --work-dir gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT --max-target-videos -1 --beam-gcp-project $BEAM_GCP_PROJECT
 ```
 
-python ./fids_capstone_asl_translation__dataflow__main.py \
+python ./run_cloud.py \
   --work-dir gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT  \
   --max-target-videos -1 \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
   --beam-gcp-region us-central1 \
   --dataflow-job-name fids-capston-asl-translation-$USER
 
-python fids-capstone-asl-translation/fids_capstone_asl_translation__dataflow__main.py \
+python fids-capstone-asl-translation/run_cloud.py \
   --work-dir gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT  \
   --max-target-videos -1 \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
