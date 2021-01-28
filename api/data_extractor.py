@@ -18,10 +18,8 @@ import subprocess
 import numpy as np
 import tensorflow as tf
 from importlib import import_module
-# import signstreamxmlparser.analysis as sxa
-# import signstreamxmlparser.analysis.signstream as ss
-sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
-ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
+sxa = import_module('signstreamxmlparser-refactored.analysis', '.')
+ss = import_module('signstreamxmlparser-refactored.analysis.signstream', '.')
 import cv2
 from . import fidscs_globals
 from . import beam__common
