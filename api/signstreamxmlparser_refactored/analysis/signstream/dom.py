@@ -2,11 +2,11 @@
 # $Id$
 
 # DOM-specific classes and functionality, to make the __init__.py file less cluttered.
-
-
+from __future__ import absolute_import
 
 # import analysis.xmlbase as xmlbase
 from .. import xmlbase
+
 
 class SignstreamError(xmlbase.XMLException):
   def __init__(self, message):

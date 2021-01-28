@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import csv
 import io
 import os
@@ -7,7 +9,7 @@ import urllib
 import apache_beam as beam
 import tensorflow as tf
 
-from . import fidscs_globals
+import fidscs_globals
 
 
 class PipelinePcollElementProcessor(beam.DoFn):

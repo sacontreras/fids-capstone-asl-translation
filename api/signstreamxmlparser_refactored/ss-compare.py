@@ -7,7 +7,10 @@
 # Note that this comparison does not cover every attribute, but it does
 # touch on all the useful ones.
 
+from __future__ import absolute_import
+
 import sys
+
 import analysis.signstream as ss
 
 if len(sys.argv) != 3:

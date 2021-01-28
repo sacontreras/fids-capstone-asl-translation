@@ -4,8 +4,10 @@
 # $Id$
 
 # Simple example showing how to display the glosses track of a signstream database
+from __future__ import absolute_import
 
 import sys
+
 import analysis.signstream as ss
 
 if len(sys.argv) != 2:

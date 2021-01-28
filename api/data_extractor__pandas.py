@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import io
 import multiprocessing as mp
 import os
@@ -11,7 +13,10 @@ import cv2
 import pandas as pd
 import tensorflow as tf
 
-from . import data_extractor__common, fidscs_globals, utils
+import data_extractor__common
+import fidscs_globals
+import utils
+
 from .signstreamxmlparser_refactored.analysis import signstream as ss
 
 

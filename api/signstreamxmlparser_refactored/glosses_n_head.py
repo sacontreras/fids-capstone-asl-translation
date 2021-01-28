@@ -5,8 +5,10 @@
 
 # Simple example showing how to display the glosses track of a signstream database,
 # and head shake movements that coincide with specific glosses
+from __future__ import absolute_import
 
 import sys
+
 import analysis.signstream as ss
 
 if len(sys.argv) != 2:

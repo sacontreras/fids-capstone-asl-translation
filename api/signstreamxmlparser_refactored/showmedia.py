@@ -4,8 +4,10 @@
 # $Id$
 
 # Simple example showing how to display the media for each utterance
+from __future__ import absolute_import
 
 import sys
+
 from .analysis import signstream as ss
 
 if len(sys.argv) != 2:

@@ -9,17 +9,14 @@ python ./fids_capstone_asl_translation__dataflow__main.py \
 
 from __future__ import absolute_import
 
+import argparse
 import logging
-
-# from apache_beam.examples.complete.juliaset.juliaset import juliaset
-from api import data_extractor
 import os
 
-import argparse
+import api.data_extractor as data_extractor
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
-  # juliaset.run()
 
   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 

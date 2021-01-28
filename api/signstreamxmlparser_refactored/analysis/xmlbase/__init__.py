@@ -2,11 +2,11 @@
 # $Id$
 
 # Functionality for managing, as well as loading and saving a dataset
+from __future__ import absolute_import
 
-
-
-import xml.sax as sax
 import logging
+import xml.sax as sax
+
 
 class XMLException(Exception):
   """The base class for all XML parser exceptions. These are caught by some

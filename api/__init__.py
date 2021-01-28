@@ -1,3 +1,1 @@
-
-def __init__():
-    pass
+from __future__ import absolute_import

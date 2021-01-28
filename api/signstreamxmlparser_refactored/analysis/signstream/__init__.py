@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 # $Id$
-
-
+from __future__ import absolute_import
 
 import xml.sax as sax
+
 # import analysis.xmlbase as xmlbase
 from ...analysis import xmlbase
-
 # from analysis.signstream.dom import *
 from ...analysis.signstream.dom import *
+
 
 class SignStreamDatabase(object):
   """Represents a SignStream database"""

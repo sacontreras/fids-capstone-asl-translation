@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import argparse
 import os
 import random
@@ -8,7 +10,8 @@ import apache_beam.transforms.sql
 import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from . import beam__common, fidscs_globals
+import beam__common
+import fidscs_globals
 
 
 def pl__2__get_keys__train_val_split_candidates(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):
