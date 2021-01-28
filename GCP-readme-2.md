@@ -57,11 +57,11 @@ python ./run_cloud.py \
   --max-target-videos -1 \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
   --beam-gcp-region us-central1 \
-  --dataflow-job-name fids-capston-asl-translation-$USER
+  --beam-gcp-dataflow-job-name fids-capston-asl-translation-$USER
 
 python fids-capstone-asl-translation/run_cloud.py \
   --work-dir gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT  \
   --max-target-videos -1 \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
   --beam-gcp-region us-central1 \
-  --dataflow-job-name fids-capston-asl-translation-$USER  
+  --beam-gcp-dataflow-job-name fids-capston-asl-translation-$USER  

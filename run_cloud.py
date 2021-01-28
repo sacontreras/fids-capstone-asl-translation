@@ -48,7 +48,7 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
-    '--dataflow-job-name',
+    '--beam-gcp-dataflow-job-name',
     required=True,
     help='The name of the GCP Dataflow job to create.'
   )
