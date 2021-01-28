@@ -4,7 +4,6 @@ import random
 import sys
 import urllib
 import zipfile
-from importlib import import_module
 
 import apache_beam as beam
 # from apache_beam.transforms.sql import SqlTransform
@@ -18,8 +17,8 @@ import fidscs_globals
 import data_extractor__common
 import utils
 
-sxa = import_module('signstreamxmlparser-refactored.analysis')
-ss = import_module('signstreamxmlparser-refactored.analysis.signstream')
+import signstreamxmlparser_refactored.analysis as sxa
+import signstreamxmlparser_refactored.analysis.signstream as ss
 import base64
 import math
 import re

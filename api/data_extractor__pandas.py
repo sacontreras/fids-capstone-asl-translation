@@ -5,7 +5,6 @@ import signal
 import sys
 import urllib
 import zipfile
-from importlib import import_module
 
 import apache_beam as beam
 import pandas as pd
@@ -13,8 +12,8 @@ import tensorflow as tf
 
 import utils
 
-sxa = import_module('signstreamxmlparser-refactored.analysis')
-ss = import_module('signstreamxmlparser-refactored.analysis.signstream')
+import signstreamxmlparser_refactored.analysis as sxa
+import signstreamxmlparser_refactored.analysis.signstream as ss
 import cv2
 import data_extractor__common
 import fidscs_globals
