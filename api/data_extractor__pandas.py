@@ -13,10 +13,7 @@ import cv2
 import pandas as pd
 import tensorflow as tf
 
-import data_extractor__common
-import fidscs_globals
-import utils
-
+from . import data_extractor__common, fidscs_globals, utils
 from .signstreamxmlparser_refactored.analysis import signstream as ss
 
 
