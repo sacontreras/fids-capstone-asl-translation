@@ -42,7 +42,7 @@ sudo echo "deb http://packages.cloud.google.com/apt gcsfuse-bionic main" > /etc/
 sudo curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 sudo apt -qq update
 sudo apt -qq install gcsfuse
-sudo gcsfuse gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT /tmp/fids-capstone-data
+# sudo gcsfuse sc-fids-capstone-bucket-$BEAM_GCP_PROJECT /tmp/fids-capstone-data
 ```
 
 ## Run the GCP Dataflow Apache Beam Pipeline!

@@ -48,12 +48,14 @@ def run(
     local_fs_mount_point = '/tmp/fids-capstone-data'
 
     print(f"Mounting GCS bucket gcs_bucket {gcs_bucket} to local filesystem as {local_fs_mount_point}...")
-    sp_output = subprocess.run(["gcsfuse", gcs_bucket, local_fs_mount_point])
+    sp_output = subprocess.run(["sudo", "mkdir", local_fs_mount_point])
+    print(f"\toutput: '{sp_output}', return code: {sp_output.returncode}")
+    sp_output = subprocess.run(["sudo", "gcsfuse", data_path_segments[0], local_fs_mount_point])
     print(f"\toutput: '{sp_output}', return code: {sp_output.returncode}")
 
     fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point + '/' + data_path_segments[1]
 
-    beam_gcs_staging_bucket = gcs_bucket
+    beam_gcs_staging_bucket = gcs_bucket + '/staging'
     beam_gcs_temp_location = gcs_bucket + '/tmp'
     beam_gcp_setup_file = beam_gcp_dataflow_setup_file
 
