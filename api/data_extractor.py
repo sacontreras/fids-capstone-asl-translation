@@ -12,18 +12,14 @@
 # the License.
 
 from __future__ import absolute_import
-import os
+
 import argparse
+import os
 import subprocess
-import numpy as np
+
 import tensorflow as tf
-from signstreamxmlparser_refactored import analysis as sxa
-from signstreamxmlparser_refactored.analysis import signstream as ss
-import cv2
-import fidscs_globals
-import beam__common
 
-
+from . import beam__common, fidscs_globals
 
 
 def run(

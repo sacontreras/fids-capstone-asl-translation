@@ -7,7 +7,7 @@ import urllib
 import apache_beam as beam
 import tensorflow as tf
 
-import fidscs_globals
+from . import fidscs_globals
 
 
 class PipelinePcollElementProcessor(beam.DoFn):

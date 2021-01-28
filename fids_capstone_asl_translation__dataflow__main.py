@@ -59,18 +59,6 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(f"args: {args}")
 
-
-  # data_extractor.run(
-  #   max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
-  #   data_dir=os.path.join(args.work_dir, 'data'), 
-  #   beam_gcp_project=args.beam_gcp_project, 
-  #   beam_gcp_region=args.beam_gcp_region, 
-  #   beam_gcp_setup_file=args.beam_gcp_setup_file, 
-  #   beam_gcs_staging_location=args.beam_gcs_staging_location, 
-  #   beam_gcs_temp_location=args.beam_gcs_temp_location, 
-  #   beam_runner='DataflowRunner', 
-  #   use_beam=True
-  # )
   data_extractor.run(
     max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
     data_dir=os.path.join(args.work_dir, 'data'), 

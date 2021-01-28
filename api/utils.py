@@ -1,9 +1,11 @@
+import os
 import urllib
 import urllib.request
-from tqdm.auto import tqdm, trange
-import os
 from io import BytesIO
+
 import tensorflow as tf
+from tqdm.auto import tqdm, trange
+
 
 def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None):
   http_file = urllib.request.urlopen(url)

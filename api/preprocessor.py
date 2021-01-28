@@ -1,17 +1,14 @@
 import argparse
 import os
-
-import apache_beam as beam
-import tensorflow as tf
-from apache_beam.options.pipeline_options import PipelineOptions
-import apache_beam.runners.interactive.interactive_beam as ib
-import apache_beam.transforms.sql
-
-import beam__common
-import fidscs_globals
 import random
 
+import apache_beam as beam
+# import apache_beam.runners.interactive.interactive_beam as ib
+import apache_beam.transforms.sql
+import tensorflow as tf
+from apache_beam.options.pipeline_options import PipelineOptions
 
+from . import beam__common, fidscs_globals
 
 
 def pl__2__get_keys__train_val_split_candidates(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):

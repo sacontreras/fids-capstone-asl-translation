@@ -7,16 +7,12 @@ import urllib
 import zipfile
 
 import apache_beam as beam
+import cv2
 import pandas as pd
 import tensorflow as tf
 
-import utils
-
-from signstreamxmlparser_refactored import analysis as sxa
-from signstreamxmlparser_refactored.analysis import signstream as ss
-import cv2
-import data_extractor__common
-import fidscs_globals
+from . import data_extractor__common, fidscs_globals, utils
+from .signstreamxmlparser_refactored.analysis import signstream as ss
 
 
 def _function_wrapper(args_tuple):

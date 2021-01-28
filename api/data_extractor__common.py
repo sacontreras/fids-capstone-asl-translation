@@ -1,8 +1,6 @@
-import tensorflow as tf
 import os
-import utils
-import zipfile
-import fidscs_globals
+
+from . import fidscs_globals, utils, zipfile
 
 
 def boostrap_target_video_index(d_vid_indexes_info):

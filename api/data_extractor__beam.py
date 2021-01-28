@@ -1,32 +1,25 @@
+import base64
 import io
+import math
 import os
 import random
+import re
 import sys
+import time
 import urllib
 import zipfile
 
 import apache_beam as beam
 # from apache_beam.transforms.sql import SqlTransform
 import apache_beam.transforms.sql
+import cv2
 # import apache_beam.runners.interactive.interactive_beam as ib
 import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
 
-import fidscs_globals
-import data_extractor__common
-import utils
-
-from signstreamxmlparser_refactored import analysis as sxa
-from signstreamxmlparser_refactored.analysis import signstream as ss
-import base64
-import math
-import re
-import time
-
-import cv2
-
-import beam__common
+from . import beam__common, data_extractor__common, fidscs_globals, utils
+from .signstreamxmlparser_refactored.analysis import signstream as ss
 
 # from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
