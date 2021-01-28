@@ -3,7 +3,8 @@ from __future__ import absolute_import
 import os
 import zipfile
 
-from . import fidscs_globals, utils
+import fidscs_globals
+import utils
 
 
 def boostrap_target_video_index(d_vid_indexes_info):

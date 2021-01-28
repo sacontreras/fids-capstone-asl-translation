@@ -13,7 +13,7 @@ import argparse
 import logging
 import os
 
-from .api import data_extractor
+from api import data_extractor
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)

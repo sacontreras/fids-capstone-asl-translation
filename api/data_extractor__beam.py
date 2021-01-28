@@ -20,8 +20,11 @@ import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from . import beam__common, data_extractor__common, fidscs_globals, utils
-from .signstreamxmlparser_refactored.analysis import signstream as ss
+import beam__common
+import data_extractor__common
+import fidscs_globals
+import signstreamxmlparser_refactored.analysis.signstream as ss
+import utils
 
 # from tensorflow.keras.preprocessing.image import img_to_array, load_img
 

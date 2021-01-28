@@ -13,8 +13,10 @@ import cv2
 import pandas as pd
 import tensorflow as tf
 
-from . import data_extractor__common, fidscs_globals, utils
-from .signstreamxmlparser_refactored.analysis import signstream as ss
+import data_extractor__common
+import fidscs_globals
+import signstreamxmlparser_refactored.analysis.signstream as ss
+import utils
 
 
 def _function_wrapper(args_tuple):

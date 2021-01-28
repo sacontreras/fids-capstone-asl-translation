@@ -19,7 +19,8 @@ import subprocess
 
 import tensorflow as tf
 
-from . import beam__common, fidscs_globals
+import beam__common
+import fidscs_globals
 
 
 def run(
