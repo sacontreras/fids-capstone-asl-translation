@@ -35,16 +35,17 @@ def run(
   use_beam=False, 
   beam_runner='DirectRunner',
   beam_gcp_project=None,
-  beam_gcp_region=None,
-  beam_gcs_staging_location=None,
-  beam_gcs_temp_location=None,
-  beam_gcp_setup_file=None
+  beam_gcp_region=None
 ):
 
   print(f"use_beam: {use_beam}")
 
   # ******************** global variables set at runtime: BEGIN ********************
   fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
+
+  beam_gcs_staging_location=None
+  beam_gcs_temp_location=None
+  beam_gcp_setup_file=None
 
   if data_dir[0:5]=='gs://':
     data_path_segments = data_dir[5:].split('/')
@@ -54,7 +55,13 @@ def run(
     sp_output = subprocess.run(["gcsfuse", gcs_bucket, local_fs_mount_point])
     print(f"\toutput: '{sp_output}', return code: {sp_output.returncode}")
     fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point
+
+    beam_gcs_staging_location = gcs_bucket + '/staging'
+    beam_gcs_temp_location = gcs_bucket + '/tmp'
+    beam_gcp_setup_file = '.setup.py'
+
   else:
+
     fidscs_globals.DATA_ROOT_DIR = data_dir
   
   if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR):
@@ -230,26 +237,6 @@ if __name__ == '__main__':
     help='The GCP region of the bucket.'
   )
 
-  parser.add_argument(
-    '--beam-gcs-staging-location',
-    default=None,
-    help='The path to the Apache Beam staging location.'
-          'Full path, prepended with GCS bucket - e.g. gs://<your GCS bucket id>/beam-staging'
-  )
-
-  parser.add_argument(
-    '--beam-gcs-temp-location',
-    default=None,
-    help='The GCS path for Apache Beam temp storage.'
-          'Full path, prepended with GCS bucket - e.g. gs://<your GCS bucket id>/beam-temp'
-  )
-
-  parser.add_argument(
-    '--beam-gcp-setup-file',
-    default=None,
-    help='The (local) path to the python setup file (used by worker nodes to install dependencies).'
-  )
-
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -259,9 +246,6 @@ if __name__ == '__main__':
     use_beam=args.use_beam,
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
-    beam_gcp_region=args.beam_gcp_region,
-    beam_gcs_staging_location=args.beam_gcs_staging_location,
-    beam_gcs_temp_location=args.beam_gcs_temp_location,
-    beam_gcp_setup_file=args.beam_gcp_setup_file
+    beam_gcp_region=args.beam_gcp_region
   )
   # **************************************** main: END ****************************************
