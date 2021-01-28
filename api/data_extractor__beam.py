@@ -14,12 +14,12 @@ import tensorflow as tf
 from apache_beam.io import fileio
 from apache_beam.options.pipeline_options import PipelineOptions
 
-import fidscs_globals
-import data_extractor__common
-import utils
+from . import fidscs_globals
+from . import data_extractor__common
+from . import utils
 
-sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
-ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
+sxa = import_module('signstreamxmlparser-refactored.analysis', '.')
+ss = import_module('signstreamxmlparser-refactored.analysis.signstream', '.')
 import base64
 import math
 import re

@@ -7,8 +7,8 @@ from apache_beam.options.pipeline_options import PipelineOptions
 import apache_beam.runners.interactive.interactive_beam as ib
 import apache_beam.transforms.sql
 
-import beam__common
-import fidscs_globals
+from . import beam__common
+from . import fidscs_globals
 import random
 
 

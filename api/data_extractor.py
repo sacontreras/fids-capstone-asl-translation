@@ -23,8 +23,8 @@ from importlib import import_module
 sxa = import_module('.analysis', 'signstreamxmlparser-refactored')
 ss = import_module('.signstream', 'signstreamxmlparser-refactored.analysis')
 import cv2
-import fidscs_globals
-import beam__common
+from . import fidscs_globals
+from . import beam__common
 
 
 

@@ -1,7 +1,7 @@
 """
-python fids_capstone_asl_translation__dataflow__main \
-  --work-dir gs://<YOUR-BUCKET-ID>
-  --max-target-videos <-1 for ALL | n max videos to process>
+python ./fids_capstone_asl_translation__dataflow__main.py \
+  --work-dir gs://<YOUR-BUCKET-ID> \
+  --max-target-videos <-1 for ALL | n max videos to process> \
   --beam-gcp-project YOUR-PROJECT \
   --beam-gcp-region us-central1 \
   --dataflow-job-name fids-capston-asl-translation-$USER
