@@ -12,8 +12,8 @@ import tensorflow as tf
 
 import utils
 
-import signstreamxmlparser_refactored.analysis as sxa
-import signstreamxmlparser_refactored.analysis.signstream as ss
+from signstreamxmlparser_refactored import analysis as sxa
+from signstreamxmlparser_refactored.analysis import signstream as ss
 import cv2
 import data_extractor__common
 import fidscs_globals

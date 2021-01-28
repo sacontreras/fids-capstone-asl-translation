@@ -17,8 +17,8 @@ import fidscs_globals
 import data_extractor__common
 import utils
 
-import signstreamxmlparser_refactored.analysis as sxa
-import signstreamxmlparser_refactored.analysis.signstream as ss
+from signstreamxmlparser_refactored import analysis as sxa
+from signstreamxmlparser_refactored.analysis import signstream as ss
 import base64
 import math
 import re
