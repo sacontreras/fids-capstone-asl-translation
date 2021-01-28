@@ -53,6 +53,12 @@ if __name__ == '__main__':
     help='The name of the GCP Dataflow job to create.'
   )
 
+  parser.add_argument(
+    '--beam-gcp-dataflow-setup-file',
+    default=None,
+    help='The path to the setup.py file (used by Apache Beam worker nodes).'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -63,5 +69,6 @@ if __name__ == '__main__':
     beam_runner='DataflowRunner',
     beam_gcp_project=args.beam_gcp_project,
     beam_gcp_region=args.beam_gcp_region,
-    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name
+    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
+    beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
   )

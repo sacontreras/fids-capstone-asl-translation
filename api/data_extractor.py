@@ -29,7 +29,8 @@ def run(
   beam_runner='DirectRunner',
   beam_gcp_project=None,
   beam_gcp_region=None,
-  beam_gcp_dataflow_job_name=None
+  beam_gcp_dataflow_job_name=None,
+  beam_gcp_dataflow_setup_file=None
 ):
 
   print(f"use_beam: {use_beam}")
@@ -52,7 +53,7 @@ def run(
 
     beam_gcs_staging_location = gcs_bucket + '/staging'
     beam_gcs_temp_location = gcs_bucket + '/tmp'
-    beam_gcp_setup_file = '.setup.py'
+    beam_gcp_setup_file = beam_gcp_dataflow_setup_file
 
   else:
 
@@ -238,6 +239,12 @@ if __name__ == '__main__':
     help='The name to use for the new GCP Dataflow job.'
   )
 
+  parser.add_argument(
+    '--beam-gcp-dataflow-setup-file',
+    default=None,
+    help='The path to the setup.py file (used by Apache Beam worker nodes).'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -248,6 +255,7 @@ if __name__ == '__main__':
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
     beam_gcp_region=args.beam_gcp_region,
-    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name
+    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
+    beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
   )
   # **************************************** main: END ****************************************
