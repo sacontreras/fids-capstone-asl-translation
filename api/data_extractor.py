@@ -21,8 +21,8 @@ from importlib import import_module
 sxa = import_module('signstreamxmlparser-refactored.analysis', '.')
 ss = import_module('signstreamxmlparser-refactored.analysis.signstream', '.')
 import cv2
-from . import fidscs_globals
-from . import beam__common
+import fidscs_globals
+import beam__common
 
 
 
@@ -238,7 +238,7 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
-    '--beam-gcp-dataflow-jobname',
+    '--beam-gcp-dataflow-job-name',
     default=None,
     help='The name to use for the new GCP Dataflow job.'
   )

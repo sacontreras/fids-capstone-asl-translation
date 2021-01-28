@@ -11,13 +11,13 @@ import apache_beam as beam
 import pandas as pd
 import tensorflow as tf
 
-from . import utils
+import utils
 
 sxa = import_module('signstreamxmlparser-refactored.analysis', '.')
 ss = import_module('signstreamxmlparser-refactored.analysis.signstream', '.')
 import cv2
-from . import data_extractor__common
-from . import fidscs_globals
+import data_extractor__common
+import fidscs_globals
 
 
 def _function_wrapper(args_tuple):
