@@ -28,22 +28,27 @@ class build(_build):  # pylint: disable=invalid-name
   sub_commands = _build.sub_commands + [('CustomCommands', None)]
 
 
+s_cmd_1 = "echo 'deb http://packages.cloud.google.com/apt gcsfuse-bionic main' > /etc/apt/sources.list.d/gcsfuse.list"
+s_cmd_2 = "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -"
+s_cmd_3 = "apt -qq update"
+s_cmd_4 = "apt -qq install gcsfuse"
+
 CUSTOM_COMMANDS = [
-    ['echo', '\nrunning command: "echo \'deb http://packages.cloud.google.com/apt gcsfuse-bionic main\' > /etc/apt/sources.list.d/gcsfuse.list"...']
+    ['echo', f'\nrunning command: "{s_cmd_1}"...'],
     ['sudo', 'echo', '"deb http://packages.cloud.google.com/apt gcsfuse-bionic main"', '>', '/etc/apt/sources.list.d/gcsfuse.list'],
     ['echo', '\tDONE!\n'],
 
-    ['echo', '\nrunning command: "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -"...']
+    ['echo', f'\nrunning command: "{s_cmd_2}"...'],
     ['sudo', 'curl', 'https://packages.cloud.google.com/apt/doc/apt-key.gpg', '|', 'apt-key', 'add', '-'],
     ['echo', '\tDONE!\n'],
 
-    ['echo', '\nrunning command: "apt -qq update"...'],
+    ['echo', f'\nrunning command: "{s_cmd_3}"...'],
     ['sudo', 'apt', '-qq', 'update'],
     ['echo', '\tDONE!\n'],
 
-    ['echo', '\nrunning command: "apt -qq install gcsfuse"...'],
+    ['echo', f'\nrunning command: "{s_cmd_4}"...'],
     ['sudo', 'apt', '-qq', 'install', 'gcsfuse'],
-    ['echo', '\tDONE!\n'],
+    ['echo', '\tDONE!\n']
 ]
 class CustomCommands(setuptools.Command):
   """A setuptools Command class able to run arbitrary commands."""
