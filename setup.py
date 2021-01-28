@@ -62,32 +62,18 @@ class CustomCommands(setuptools.Command):
       self.RunCustomCommand(command)
 
 
-# change to latest !
 REQUIRED_PACKAGES = [
-    # 'google-auth==1.21.1',
     'google-auth==1.21.1',
-
     'apache-beam[gcp]==2.25.*',
-    # 'apache-beam==2.26.0',                # doesn't work after all
     'apache-beam[interactive]==2.25.*',
-    # 'apache-beam[interactive]==2.26.0',     # doesn't work after all
-
-    # 'tensorflow-transform==0.26.*',
     'tensorflow-transform==0.26.0',
-    # 'tensorflow==2.3.*',
     'tensorflow==2.3.0',
     'avro-python3==1.8.1',
-    # 'avro-python3==1.9.2.1',
-    # 'opencv-python==4.4.*',
     'opencv-python==4.4.0.46',
-    # 'protobuf==3.12.2',
     'protobuf==3.13.0',
-    # 'absl-py==0.9',
     'absl-py==0.10.0',
-    # 'numpy==1.16.5',
     'numpy==1.18.5',
     'tqdm==4.56.0'
-    # tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1594937875116/work
 ]
 
 setuptools.setup(
@@ -101,6 +87,6 @@ setuptools.setup(
         # Command class instantiated and run during pip install scenarios.
         'build': build,
         'CustomCommands': CustomCommands,
-    },
-    include_package_data=True
+    }
+    # , include_package_data=True
 )

@@ -46,10 +46,12 @@ def run(
     data_path_segments = data_dir[5:].split('/')
     gcs_bucket = 'gs://' + data_path_segments[0]
     local_fs_mount_point = '/tmp/fids-capstone-data'
+
     print(f"Mounting GCS bucket gcs_bucket {gcs_bucket} to local filesystem as {local_fs_mount_point}...")
     sp_output = subprocess.run(["gcsfuse", gcs_bucket, local_fs_mount_point])
     print(f"\toutput: '{sp_output}', return code: {sp_output.returncode}")
-    fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point
+
+    fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point + '/' + data_path_segments[1]
 
     beam_gcs_staging_location = gcs_bucket + '/staging'
     beam_gcs_temp_location = gcs_bucket + '/tmp'
@@ -160,102 +162,102 @@ def run(
 
 
 
-# **************************************** main: BEGIN ****************************************
-if __name__ == '__main__':
-  """
-  Main function:
-    will be executed by running either the run-local or run-cloud bash script:
-      for example, the run-cloud script will execute:
-        python $SRC_DIR/data_extractor.py \
-          --work-dir $WORK_DIR \
-          --max-target-videos $MAX_TARGET_VIDEOS \
-          --use-beam $USE_BEAM \
-          --beam-runner $BEAM_RUNNER \
-          --beam-gcp-project $BEAM_GCP_PROJECT \
-          --beam-gcp-region $BEAM_GCP_REGION \
-          --beam-gcs-staging-location $WORK_DIR/beam-staging \
-          --beam-gcs-temp-location $WORK_DIR/beam-temp \
-          --beam-gcp-setup-file ./setup.py
-  """
-  parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# # **************************************** main: BEGIN ****************************************
+# if __name__ == '__main__':
+#   """
+#   Main function:
+#     will be executed by running either the run-local or run-cloud bash script:
+#       for example, the run-cloud script will execute:
+#         python $SRC_DIR/data_extractor.py \
+#           --work-dir $WORK_DIR \
+#           --max-target-videos $MAX_TARGET_VIDEOS \
+#           --use-beam $USE_BEAM \
+#           --beam-runner $BEAM_RUNNER \
+#           --beam-gcp-project $BEAM_GCP_PROJECT \
+#           --beam-gcp-region $BEAM_GCP_REGION \
+#           --beam-gcs-staging-location $WORK_DIR/beam-staging \
+#           --beam-gcs-temp-location $WORK_DIR/beam-temp \
+#           --beam-gcp-setup-file ./setup.py
+#   """
+#   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-  parser.add_argument(
-    '--work-dir',
-    required=True,
-    help='Directory for staging and working files. '
-          'This can be a Google Cloud Storage path.'
-  )
+#   parser.add_argument(
+#     '--work-dir',
+#     required=True,
+#     help='Directory for staging and working files. '
+#           'This can be a Google Cloud Storage path.'
+#   )
 
-  parser.add_argument(
-    '--max-target-videos',
-    type=int,
-    default=-1,
-    help='Maximum number of target videos to process. '
-          'Set to -1 to download/process all available target videos (and segments).'
-  )
+#   parser.add_argument(
+#     '--max-target-videos',
+#     type=int,
+#     default=-1,
+#     help='Maximum number of target videos to process. '
+#           'Set to -1 to download/process all available target videos (and segments).'
+#   )
 
-  # courtesy of https://stackoverflow.com/a/43357954
-  #   script --use_beam
-  #   script --use_beam <bool>
-  def str2bool(v):
-    if isinstance(v, bool):
-       return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
-  parser.add_argument(
-    "--use-beam", 
-    type=str2bool, 
-    nargs='?',
-    const=True, 
-    default=True,
-    help=""
-  )
+#   # courtesy of https://stackoverflow.com/a/43357954
+#   #   script --use_beam
+#   #   script --use_beam <bool>
+#   def str2bool(v):
+#     if isinstance(v, bool):
+#        return v
+#     if v.lower() in ('yes', 'true', 't', 'y', '1'):
+#         return True
+#     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+#         return False
+#     else:
+#         raise argparse.ArgumentTypeError('Boolean value expected.')
+#   parser.add_argument(
+#     "--use-beam", 
+#     type=str2bool, 
+#     nargs='?',
+#     const=True, 
+#     default=True,
+#     help=""
+#   )
 
-  parser.add_argument(
-    '--beam-runner',
-    default='DirectRunner',
-    help='The runner that Apache Beam will use. '
-  )
+#   parser.add_argument(
+#     '--beam-runner',
+#     default='DirectRunner',
+#     help='The runner that Apache Beam will use. '
+#   )
 
-  parser.add_argument(
-    '--beam-gcp-project',
-    default=None,
-    help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
-  )
+#   parser.add_argument(
+#     '--beam-gcp-project',
+#     default=None,
+#     help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
+#   )
 
-  parser.add_argument(
-    '--beam-gcp-region',
-    default=None,
-    help='The GCP region of the bucket.'
-  )
+#   parser.add_argument(
+#     '--beam-gcp-region',
+#     default=None,
+#     help='The GCP region of the bucket.'
+#   )
 
-  parser.add_argument(
-    '--beam-gcp-dataflow-job-name',
-    default=None,
-    help='The name to use for the new GCP Dataflow job.'
-  )
+#   parser.add_argument(
+#     '--beam-gcp-dataflow-job-name',
+#     default=None,
+#     help='The name to use for the new GCP Dataflow job.'
+#   )
 
-  parser.add_argument(
-    '--beam-gcp-dataflow-setup-file',
-    default=None,
-    help='The path to the setup.py file (used by Apache Beam worker nodes).'
-  )
+#   parser.add_argument(
+#     '--beam-gcp-dataflow-setup-file',
+#     default=None,
+#     help='The path to the setup.py file (used by Apache Beam worker nodes).'
+#   )
 
-  args = parser.parse_args()
-  print(f"args: {args}")
+#   args = parser.parse_args()
+#   print(f"args: {args}")
 
-  run(
-    args.max_target_videos if args.max_target_videos!=-1 else None, 
-    os.path.join(args.work_dir, 'data'), 
-    use_beam=args.use_beam,
-    beam_runner=args.beam_runner,
-    beam_gcp_project=args.beam_gcp_project,
-    beam_gcp_region=args.beam_gcp_region,
-    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
-    beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
-  )
-  # **************************************** main: END ****************************************
+#   run(
+#     args.max_target_videos if args.max_target_videos!=-1 else None, 
+#     os.path.join(args.work_dir, 'data'), 
+#     use_beam=args.use_beam,
+#     beam_runner=args.beam_runner,
+#     beam_gcp_project=args.beam_gcp_project,
+#     beam_gcp_region=args.beam_gcp_region,
+#     beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
+#     beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
+#   )
+#   # **************************************** main: END ****************************************

@@ -54,5 +54,5 @@ python ./run_cloud.py \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
   --beam-gcp-region us-central1 \
   --beam-gcp-dataflow-job-name fids-capston-asl-translation \
-  --beam-gcp-dataflow-setup-file <PATH_TO_SETUP_FILE>
+  --beam-gcp-dataflow-setup-file ./setup.py
 ```
