@@ -29,13 +29,6 @@ import beam__common
 
 
 
-# args.max_target_videos if args.max_target_videos!=-1 else None, 
-# os.path.join(args.work_dir, 'data'), 
-# use_beam=args.use_beam,
-# beam_runner=args.beam_runner,
-# beam_gcp_project=args.beam_gcp_project,
-# beam_gcp_region=args.beam_gcp_region,
-# beam_gcs_temp_location=args.beam_gcs_temp_location
 def run(
   max_target_videos, 
   data_dir, 
@@ -43,6 +36,7 @@ def run(
   beam_runner='DirectRunner',
   beam_gcp_project=None,
   beam_gcp_region=None,
+  beam_gcs_staging_location=None,
   beam_gcs_temp_location=None,
   beam_gcp_setup_file=None
 ):
@@ -151,8 +145,9 @@ def run(
         beam_runner=beam_runner,
         beam_gcp_project=beam_gcp_project,
         beam_gcp_region=beam_gcp_region,
+        beam_gcs_staging_location=beam_gcs_staging_location,
         beam_gcs_temp_location=beam_gcs_temp_location,
-        beam_gcp_setup_file=args.beam_gcp_setup_file
+        beam_gcp_setup_file=beam_gcp_setup_file
       )
     else:
       import data_extractor__pandas
@@ -164,7 +159,21 @@ def run(
 
 # **************************************** main: BEGIN ****************************************
 if __name__ == '__main__':
-  """Main function"""
+  """
+  Main function:
+    will be executed by running either the run-local or run-cloud bash script:
+      for example, the run-cloud script will execute:
+        python $SRC_DIR/data_extractor.py \
+          --work-dir $WORK_DIR \
+          --max-target-videos $MAX_TARGET_VIDEOS \
+          --use-beam $USE_BEAM \
+          --beam-runner $BEAM_RUNNER \
+          --beam-gcp-project $BEAM_GCP_PROJECT \
+          --beam-gcp-region $BEAM_GCP_REGION \
+          --beam-gcs-staging-location $WORK_DIR/beam-staging \
+          --beam-gcs-temp-location $WORK_DIR/beam-temp \
+          --beam-gcp-setup-file ./setup.py
+  """
   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
   parser.add_argument(
@@ -222,15 +231,23 @@ if __name__ == '__main__':
   )
 
   parser.add_argument(
+    '--beam-gcs-staging-location',
+    default=None,
+    help='The path to the Apache Beam staging location.'
+          'Full path, prepended with GCS bucket - e.g. gs://<your GCS bucket id>/beam-staging'
+  )
+
+  parser.add_argument(
     '--beam-gcs-temp-location',
     default=None,
-    help='The GCS path for beam temp storage.'
+    help='The GCS path for Apache Beam temp storage.'
+          'Full path, prepended with GCS bucket - e.g. gs://<your GCS bucket id>/beam-temp'
   )
 
   parser.add_argument(
     '--beam-gcp-setup-file',
     default=None,
-    help='The path to the python setup file (used by worker nodes to install dependencies).'
+    help='The (local) path to the python setup file (used by worker nodes to install dependencies).'
   )
 
   args = parser.parse_args()
@@ -243,6 +260,7 @@ if __name__ == '__main__':
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
     beam_gcp_region=args.beam_gcp_region,
+    beam_gcs_staging_location=args.beam_gcs_staging_location,
     beam_gcs_temp_location=args.beam_gcs_temp_location,
     beam_gcp_setup_file=args.beam_gcp_setup_file
   )

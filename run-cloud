@@ -22,6 +22,7 @@ USE_BEAM=1
 BEAM_RUNNER=DataflowRunner
 # BEAM_GCP_PROJECT=$(gcloud config get-value project || echo $BEAM_GCP_PROJECT)
 BEAM_GCP_REGION=us-central1
+# BEAM_GCP_STAGING_BUCKET
 while [[ $# -gt 0 ]]; do
   case $1 in
     --src-dir)
@@ -87,7 +88,8 @@ run python $SRC_DIR/data_extractor.py \
   --beam-runner $BEAM_RUNNER \
   --beam-gcp-project $BEAM_GCP_PROJECT \
   --beam-gcp-region $BEAM_GCP_REGION \
-  --beam-gcs-temp-location $WORK_DIR/beam-temp
+  --beam-gcs-staging-location $WORK_DIR/beam-staging \
+  --beam-gcs-temp-location $WORK_DIR/beam-temp \
   --beam-gcp-setup-file ./setup.py
 echo ''
 

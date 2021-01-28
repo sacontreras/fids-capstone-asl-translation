@@ -3439,19 +3439,28 @@ def run(
   beam_runner='DirectRunner', 
   beam_gcp_project=None,
   beam_gcp_region=None,
+  beam_gcs_staging_location=None,
   beam_gcs_temp_location=None,
   beam_gcp_setup_file=None
 ):
-  options = {
-    'runner': beam_runner,
-    'direct_num_workers': 0, # 0 is use all available cores
-    'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
-    'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
-    'project': beam_gcp_project,
-    'region': beam_gcp_region, 
-    'temp_location': beam_gcs_temp_location,
-    'setup_file': beam_gcp_setup_file
-  }
+  options = None
+  if beam_runner != 'DirectRunner':
+    options = {
+      'runner': beam_runner,
+      'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
+      'project': beam_gcp_project,
+      'region': beam_gcp_region, 
+      'staging_bucket': beam_gcs_staging_location,
+      'temp_location': beam_gcs_temp_location,
+      'setup_file': beam_gcp_setup_file
+    }
+  else:
+    options = {
+      'runner': 'DirectRunner',
+      'direct_num_workers': 0, # 0 is use all available cores
+      'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+      'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub),
+    }
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
   print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
