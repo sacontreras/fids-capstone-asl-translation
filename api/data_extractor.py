@@ -35,7 +35,8 @@ def run(
   use_beam=False, 
   beam_runner='DirectRunner',
   beam_gcp_project=None,
-  beam_gcp_region=None
+  beam_gcp_region=None,
+  beam_gcp_dataflow_job_name=None
 ):
 
   print(f"use_beam: {use_beam}")
@@ -149,9 +150,10 @@ def run(
     if use_beam:
       import data_extractor__beam
       data_extractor__beam.run(
-        beam_runner=beam_runner,
+        beam_runner=beam_runner, 
         beam_gcp_project=beam_gcp_project,
         beam_gcp_region=beam_gcp_region,
+        beam_gcp_dataflow_job_name=beam_gcp_dataflow_job_name,
         beam_gcs_staging_location=beam_gcs_staging_location,
         beam_gcs_temp_location=beam_gcs_temp_location,
         beam_gcp_setup_file=beam_gcp_setup_file
@@ -237,6 +239,12 @@ if __name__ == '__main__':
     help='The GCP region of the bucket.'
   )
 
+  parser.add_argument(
+    '--beam-gcp-dataflow-jobname',
+    default=None,
+    help='The name to use for the new GCP Dataflow job.'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -246,6 +254,7 @@ if __name__ == '__main__':
     use_beam=args.use_beam,
     beam_runner=args.beam_runner,
     beam_gcp_project=args.beam_gcp_project,
-    beam_gcp_region=args.beam_gcp_region
+    beam_gcp_region=args.beam_gcp_region,
+    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name
   )
   # **************************************** main: END ****************************************

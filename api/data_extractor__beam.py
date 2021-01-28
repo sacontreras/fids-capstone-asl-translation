@@ -3439,6 +3439,7 @@ def run(
   beam_runner='DirectRunner', 
   beam_gcp_project=None,
   beam_gcp_region=None,
+  beam_gcp_dataflow_job_name=None,
   beam_gcs_staging_location=None,
   beam_gcs_temp_location=None,
   beam_gcp_setup_file=None
@@ -3452,7 +3453,8 @@ def run(
       'region': beam_gcp_region, 
       'staging_bucket': beam_gcs_staging_location,
       'temp_location': beam_gcs_temp_location,
-      'setup_file': beam_gcp_setup_file
+      'setup_file': beam_gcp_setup_file,
+      'job_name': beam_gcp_dataflow_job_name
     }
   else:
     options = {
