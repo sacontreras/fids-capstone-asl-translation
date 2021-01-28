@@ -1,6 +1,3 @@
-
-import setuptools
-
 # NOTE: Any additional file besides the `main.py` file has to be in a module
 #       (inside a directory) so it can be packaged and staged correctly for
 #       cloud runs.
