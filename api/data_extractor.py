@@ -38,7 +38,7 @@ def run(
   # ******************** global variables set at runtime: BEGIN ********************
   fidscs_globals.MAX_TARGET_VIDEOS = max_target_videos
 
-  beam_gcs_staging_location=None
+  beam_gcs_staging_bucket=None
   beam_gcs_temp_location=None
   beam_gcp_setup_file=None
 
@@ -53,7 +53,7 @@ def run(
 
     fidscs_globals.DATA_ROOT_DIR = local_fs_mount_point + '/' + data_path_segments[1]
 
-    beam_gcs_staging_location = gcs_bucket + '/staging'
+    beam_gcs_staging_bucket = gcs_bucket
     beam_gcs_temp_location = gcs_bucket + '/tmp'
     beam_gcp_setup_file = beam_gcp_dataflow_setup_file
 
@@ -150,7 +150,7 @@ def run(
         beam_gcp_project=beam_gcp_project,
         beam_gcp_region=beam_gcp_region,
         beam_gcp_dataflow_job_name=beam_gcp_dataflow_job_name,
-        beam_gcs_staging_location=beam_gcs_staging_location,
+        beam_gcs_staging_bucket=beam_gcs_staging_bucket,
         beam_gcs_temp_location=beam_gcs_temp_location,
         beam_gcp_setup_file=beam_gcp_setup_file
       )

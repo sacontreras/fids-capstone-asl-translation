@@ -3434,7 +3434,7 @@ def run(
   beam_gcp_project=None,
   beam_gcp_region=None,
   beam_gcp_dataflow_job_name=None,
-  beam_gcs_staging_location=None,
+  beam_gcs_staging_bucket=None,
   beam_gcs_temp_location=None,
   beam_gcp_setup_file=None
 ):
@@ -3445,7 +3445,7 @@ def run(
       'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
       'project': beam_gcp_project,
       'region': beam_gcp_region, 
-      'staging_bucket': beam_gcs_staging_location,
+      'staging_bucket': beam_gcs_staging_bucket,
       'temp_location': beam_gcs_temp_location,
       'setup_file': beam_gcp_setup_file,
       'job_name': beam_gcp_dataflow_job_name

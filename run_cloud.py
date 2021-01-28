@@ -62,13 +62,21 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(f"args: {args}")
 
+  # data_extractor.run(
+  #   max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
+  #   data_dir=os.path.join(args.work_dir, 'data'), 
+  #   use_beam=True,
+  #   beam_runner='DataflowRunner',
+  #   beam_gcp_project=args.beam_gcp_project,
+  #   beam_gcp_region=args.beam_gcp_region,
+  #   beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
+  #   beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
+  # )
+
+  # test with DirectRunner in GCP console
   data_extractor.run(
     max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
     data_dir=os.path.join(args.work_dir, 'data'), 
     use_beam=True,
-    beam_runner='DataflowRunner',
-    beam_gcp_project=args.beam_gcp_project,
-    beam_gcp_region=args.beam_gcp_region,
-    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
-    beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
+    beam_runner='DirectRunner'
   )

@@ -32,7 +32,9 @@ cd fids-capstone-asl-translation
 python setup.py develop
 ```
 
-python setup.py install (?)
+## Create GSC bucket
+**name**: *sc-fids-capstone-bucket-\$BEAM_GCP_PROJECT*
+**region**: *us-central1*
 
 ## Mount GCS bucket as local file system
 ```
@@ -40,11 +42,8 @@ sudo echo "deb http://packages.cloud.google.com/apt gcsfuse-bionic main" > /etc/
 sudo curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 sudo apt -qq update
 sudo apt -qq install gcsfuse
+sudo gcsfuse gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT /tmp/fids-capstone-data
 ```
-
-## Create GSC bucket
-name: sc-fids-capstone-bucket-\<GCP-PROJECT\>
-folder: fids-capstone-data
 
 ## Run the GCP Dataflow Apache Beam Pipeline!
 ```
