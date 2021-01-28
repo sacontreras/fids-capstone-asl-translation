@@ -66,8 +66,10 @@ class CustomCommands(setuptools.Command):
 REQUIRED_PACKAGES = [
     # 'google-auth==1.21.1',
     'google-auth==1.21.1',
+
     # 'apache-beam[gcp]==2.25.*',
-    'apache-beam==2.26.0',
+    # 'apache-beam==2.26.0',        # doesn't work after all
+
     # 'apache-beam[interactive]==2.25.*',
     'apache-beam[interactive]==2.26.0',
     # 'tensorflow-transform==0.26.*',
