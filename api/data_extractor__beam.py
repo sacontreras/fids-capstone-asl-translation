@@ -18,8 +18,8 @@ import fidscs_globals
 import data_extractor__common
 import utils
 
-sxa = import_module('signstreamxmlparser-refactored.analysis', '.')
-ss = import_module('signstreamxmlparser-refactored.analysis.signstream', '.')
+sxa = import_module('signstreamxmlparser-refactored.analysis')
+ss = import_module('signstreamxmlparser-refactored.analysis.signstream')
 import base64
 import math
 import re
