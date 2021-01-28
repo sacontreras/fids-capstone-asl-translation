@@ -19,8 +19,7 @@ import subprocess
 
 import tensorflow as tf
 
-import beam__common
-import fidscs_globals
+from api import beam__common, fidscs_globals
 
 
 def run(
@@ -142,7 +141,7 @@ def run(
     print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
     if use_beam:
-      import data_extractor__beam
+      from api import data_extractor__beam
       data_extractor__beam.run(
         beam_runner=beam_runner, 
         beam_gcp_project=beam_gcp_project,
@@ -153,7 +152,7 @@ def run(
         beam_gcp_setup_file=beam_gcp_setup_file
       )
     else:
-      import data_extractor__pandas
+      from api import data_extractor__pandas
       data_extractor__pandas.run()
 
 

@@ -32,6 +32,8 @@ cd fids-capstone-asl-translation
 python setup.py develop
 ```
 
+python setup.py install (?)
+
 ## Mount GCS bucket as local file system
 ```
 sudo echo "deb http://packages.cloud.google.com/apt gcsfuse-bionic main" > /etc/apt/sources.list.d/gcsfuse.list
@@ -56,3 +58,10 @@ python ./fids_capstone_asl_translation__dataflow__main.py \
   --beam-gcp-project $BEAM_GCP_PROJECT  \
   --beam-gcp-region us-central1 \
   --dataflow-job-name fids-capston-asl-translation-$USER
+
+python fids-capstone-asl-translation/fids_capstone_asl_translation__dataflow__main.py \
+  --work-dir gs://sc-fids-capstone-bucket-$BEAM_GCP_PROJECT  \
+  --max-target-videos -1 \
+  --beam-gcp-project $BEAM_GCP_PROJECT  \
+  --beam-gcp-region us-central1 \
+  --dataflow-job-name fids-capston-asl-translation-$USER  

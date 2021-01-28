@@ -16,7 +16,7 @@ import os
 from api import data_extractor
 
 if __name__ == '__main__':
-  logging.getLogger().setLevel(logging.INFO)
+#   logging.getLogger().setLevel(logging.INFO) # too much output!
 
   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     '--work-dir',
     required=True,
     help='Directory for staging and working files. '
-          'This should be a Google Cloud Storage path.'
+          'This can be a Google Cloud Storage path.'
   )
 
   parser.add_argument(
@@ -35,22 +35,25 @@ if __name__ == '__main__':
           'Set to -1 to download/process all available target videos (and segments).'
   )
 
+  # courtesy of https://stackoverflow.com/a/43357954
+  #   script --use_beam
+  #   script --use_beam <bool>
+  def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
   parser.add_argument(
-    '--beam-gcp-project',
-    required=True,
-    help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
-  )
-
-  parser.add_argument(
-    '--beam-gcp-region',
-    required=True,
-    help='The GCP region of the bucket.'
-  )
-
-  parser.add_argument(
-    '--dataflow-job-name',
-    required=True,
-    help='The name of the GCP Dataflow job to create.'
+    "--use-beam", 
+    type=str2bool, 
+    nargs='?',
+    const=True, 
+    default=True,
+    help=""
   )
 
   args = parser.parse_args()
@@ -59,9 +62,6 @@ if __name__ == '__main__':
   data_extractor.run(
     max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
     data_dir=os.path.join(args.work_dir, 'data'), 
-    use_beam=True,
-    beam_runner='DataflowRunner',
-    beam_gcp_project=args.beam_gcp_project,
-    beam_gcp_region=args.beam_gcp_region,
-    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name
+    use_beam=args.use_beam,
+    beam_runner='DirectRunner'
   )

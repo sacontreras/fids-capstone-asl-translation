@@ -14,7 +14,7 @@
 set -e
 
 # Parse command line arguments
-SRC_DIR=./api
+SRC_DIR=fids-capstone-asl-translation/api
 WORK_DIR=/tmp/fids-capstone-data
 MAX_TARGET_VIDEOS=5
 USE_BEAM=0
