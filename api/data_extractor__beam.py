@@ -109,7 +109,7 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
   return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
 
-def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=3, label=""):
+def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=fidscs_globals.DOWNLOAD_MAX_FAIL_COUNT, label=""):
   """
   expects d_target_vid_seg_download_info: {'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
   """
@@ -132,7 +132,7 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
         n_fail += 1
         if n_fail < max_fail:
           print(f"{label+': ' if len(label)>0 else ''}*** {e} ***: fail count: {n_fail}, max fail: {max_fail} --> sleeping 1 second, then trying again...")
-          time.sleep(1)
+          time.sleep(fidscs_globals.DOWNLOAD_FAIL_SLEEP_TIME)
         else:
           print(f"{label+': ' if len(label)>0 else ''}*** {e} ***: fail count: {n_fail}, max fail: {max_fail} --> giving up!")
   else:
@@ -3539,23 +3539,11 @@ def run(
 
 
   with beam.Pipeline(options=pipeline_options) as pl:
-    vid_indexes_dir_path_pcoll = (
+    tmp_dir_path_pcoll = (
       pl
-      | f"Beam PL: create {fidscs_globals.VIDEO_INDEXES_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_INDEXES_DIR])
+      | f"Beam PL: create {fidscs_globals.TMP_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.TMP_DIR])
     )
-    beam__common.pl__X__rmdir(vid_indexes_dir_path_pcoll, fidscs_globals.VIDEO_INDEXES_DIR)
-  with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_docs_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {fidscs_globals.CORPUS_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.CORPUS_DIR])
-    )
-    beam__common.pl__X__rmdir(corpus_docs_dir_path_pcoll, fidscs_globals.CORPUS_DIR)
-  with beam.Pipeline(options=pipeline_options) as pl:
-    vid_download_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {fidscs_globals.VIDEO_DIR} pcoll for cleanup" >> beam.Create([fidscs_globals.VIDEO_DIR])
-    )
-    beam__common.pl__X__rmdir(vid_download_dir_path_pcoll, fidscs_globals.VIDEO_DIR)
+    beam__common.pl__X__rmdir(tmp_dir_path_pcoll, fidscs_globals.TMP_DIR)
   
 
   print(f"Beam PL: ALL DONE!")

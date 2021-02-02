@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
   data_extractor.run(
     max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
-    data_dir=os.path.join(args.work_dir, 'data'), 
+    work_dir=args.work_dir,
     use_beam=args.use_beam,
     beam_runner='DirectRunner'
   )
