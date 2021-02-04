@@ -1028,7 +1028,7 @@ def pl__6__write_complete_utterances_from_train_val_tokens(complete_utterances__
 
 def run(data_dir):
     fidscs_globals.DATA_ROOT_DIR = data_dir
-    if not tf.io.gfile.exists(fidscs_globals.DATA_ROOT_DIR) or len(tf.io.gfile.listdir(fidscs_globals.DATA_ROOT_DIR))==0:
+    if not beam__common.path_exists(fidscs_globals.DATA_ROOT_DIR) or len(beam__common.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
         return
     fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')

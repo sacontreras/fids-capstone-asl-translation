@@ -19,7 +19,7 @@ from apache_beam.io import fileio
 from apache_beam.io.filesystems import FileSystems
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from api import beam__common, data_extractor__common, fidscs_globals, utils
+from api import beam__common, data_extractor__common, fidscs_globals
 from api.signstreamxmlparser_refactored.analysis import signstream as ss
 
 # from tensorflow.keras.preprocessing.image import img_to_array, load_img
@@ -61,7 +61,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   remote_archive_path = 'http://secrets.rutgers.edu/dai/xml/'+d_corpus_info['corpus_archive']
   local_archive_parent_dir = d_corpus_info['tmp_dir']
   local_archive_path = beam__common.path_join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
-  utils.download(
+  data_extractor__common.download(
     remote_archive_path, 
     local_archive_path, 
     block_sz=fidscs_globals._1MB
@@ -121,7 +121,7 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
   if not beam__common.path_exists(local_segment_path):
     while n_fail < max_fail:
       try:
-        memfile = utils.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
+        memfile = data_extractor__common.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
         memfile.seek(0)
         with beam__common.open_file_write(local_segment_path) as f:
           f.write(memfile.getvalue())
@@ -3439,26 +3439,29 @@ def run(
   beam_gcs_temp_location=None,
   beam_gcp_dataflow_setup_file=None
 ):
-
-  if beam_gcp_dataflow_setup_file != './setup.py':
-    print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
-    return
-
   options = None
+
   if beam_runner != 'DirectRunner':
+    if beam_gcp_dataflow_setup_file != './setup.py':
+      print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
+      return
+
     options = {
       'runner': beam_runner,
       'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
+      'max_num_workers': 8,
+      'autoscaling_algorithm': 'THROUGHPUT_BASED',
+      'save_main_session': True,
+
+      # GCP options
       'project': beam_gcp_project,
-      'region': beam_gcp_region, 
+      'region': beam_gcp_region,
+      'worker_region': beam_gcp_region,
+      # 'service_account_email': 'steve.a.contreras@gmail.com',
       'staging_location': beam_gcs_staging_bucket,
       'temp_location': beam_gcs_temp_location,
       'setup_file': beam_gcp_dataflow_setup_file,
-      'job_name': beam_gcp_dataflow_job_name,
-      'max_num_workers': 8,
-      'worker_region': beam_gcp_region,
-      'autoscaling_algorithm': 'THROUGHPUT_BASED',
-      'save_main_session': True
+      'job_name': beam_gcp_dataflow_job_name
     }
   else:
     options = {
@@ -3470,6 +3473,8 @@ def run(
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
   print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
+  # FileSystems.set_options()
+
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
 
@@ -3478,74 +3483,74 @@ def run(
     pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
 
 
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-  #   filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
-  #   merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
-  #   merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
+    merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
+    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
 
 
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   pl__1__bootstrap_corpus_index(pl)
-  # # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
-  # #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
-  # #   for reading yet
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-  #   pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+  with beam.Pipeline(options=pipeline_options) as pl:
+    pl__1__bootstrap_corpus_index(pl)
+  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
+  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+  #   for reading yet
+  with beam.Pipeline(options=pipeline_options) as pl:
+    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+    pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
 
 
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-  #   corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
-  #   corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
-  #   ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
+    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
+    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
 
-  #   # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+    # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
 
-  #   asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
-  #   pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
+    pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
 
-  #   document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
-  #     ss_parsed_xmldb_pcoll, 
-  #     corpus_index_schemad_pcoll, 
-  #     asl_consultant_index_schemad_pcoll
-  #   )
-  #   pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
+    document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      corpus_index_schemad_pcoll, 
+      asl_consultant_index_schemad_pcoll
+    )
+    pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
 
-  #   document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
-  #     ss_parsed_xmldb_pcoll, 
-  #     document_asl_consultant_index_schemad_pcoll
-  #   )
-  #   pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
+    document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll
+    )
+    pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
 
-  #   document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
-  #     ss_parsed_xmldb_pcoll, 
-  #     document_asl_consultant_index_schemad_pcoll, 
-  #     full_target_vid_index_schemad_pcoll
-  #   )
-  #   pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-  #   pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-  #   pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
+    document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll, 
+      full_target_vid_index_schemad_pcoll
+    )
+    pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+    pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+    pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
 
-  #   vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
-  #     ss_parsed_xmldb_pcoll, 
-  #     document_asl_consultant_index_schemad_pcoll
-  #   )
-  #   pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
-  #   pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
+    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+      ss_parsed_xmldb_pcoll, 
+      document_asl_consultant_index_schemad_pcoll
+    )
+    pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
+    pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
-  #   document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
-  #     document_asl_consultant_target_video_index_schemad_pcoll
-  #   )
-  #   pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
+    document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
+      document_asl_consultant_target_video_index_schemad_pcoll
+    )
+    pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
 
-  #   document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-  #     document_asl_consultant_utterance_token_index_schemad_pcoll,
-  #     document_asl_consultant_target_video_index_schemad_pcoll,
-  #     document_asl_consultant_target_video_frame_index_schemad_pcoll
-  #   )
-  #   pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+      document_asl_consultant_utterance_token_index_schemad_pcoll,
+      document_asl_consultant_target_video_index_schemad_pcoll,
+      document_asl_consultant_target_video_frame_index_schemad_pcoll
+    )
+    pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
 
 
   with beam.Pipeline(options=pipeline_options) as pl:

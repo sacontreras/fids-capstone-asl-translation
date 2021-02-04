@@ -6,18 +6,14 @@ import sys
 import urllib
 
 import apache_beam as beam
-import apache_beam.io.filesystem
 import tensorflow as tf
 from apache_beam.io.filesystems import FileSystems
-from apache_beam.io.gcp.gcsfilesystem import GCSFileSystem
-from apache_beam.io.localfilesystem import LocalFileSystem
-from google.cloud.storage.bucket import Bucket
+from tensorflow.python.lib.io.file_io import FileIO
 
 from api import fidscs_globals
 
 
 def dir_path_to_pattern(path):
-  # FileSystems.get_filesystem()
   if path[-2:] != '/*':
     if path[-1] == '/':
       path += '*'
@@ -36,17 +32,14 @@ def gcs_correct_dir_path_form(dir_path, strip_prefix=False):
 def path_join(path, endpoint):
   return FileSystems.join(path, endpoint)
 
-
 def path_exists(path):
-  return FileSystems.exists(gcs_correct_dir_path_form(path) if type(FileSystems.get_filesystem(fidscs_globals.WORK_DIR))==GCSFileSystem else path)
+  return FileSystems.exists(gcs_correct_dir_path_form(path) if fidscs_globals.GCS_CLIENT is not None else path)
 
 
-def list_dir(path_path, exclude_subdir=False):
-  fs = FileSystems.get_filesystem(fidscs_globals.WORK_DIR)
-  if type(fs)==GCSFileSystem:
-    gcs_form_dir_path = gcs_correct_dir_path_form(path_path, strip_prefix=True)
+def list_dir(dir_path, exclude_subdir=False):
+  if fidscs_globals.GCS_CLIENT is not None:
+    gcs_form_dir_path = gcs_correct_dir_path_form(dir_path, strip_prefix=True)
     blobs_in_dir = list(fidscs_globals.GCS_CLIENT.list_blobs(fidscs_globals.GCS_BUCKET.name, prefix=gcs_form_dir_path))
-    # print(f"\nblobs in gcs bucket ({fidscs_globals.GCS_BUCKET.name}) {gcs_form_dir_path}:\n{blobs_in_dir}")
     if len(blobs_in_dir)==1 and blobs_in_dir[0].name==gcs_form_dir_path:
       blobs_in_dir = []
     else:
@@ -58,36 +51,73 @@ def list_dir(path_path, exclude_subdir=False):
       blob_paths_in_dir = list(filter(lambda blob_path_in_dir: not blob_path_in_dir.endswith('/'), blob_paths_in_dir))
     return blob_paths_in_dir
   else:
-    return tf.io.gfile.listdir(path_path)
+    return tf.io.gfile.listdir(dir_path)
 
 
 def make_dirs(path):
-  fs = FileSystems.get_filesystem(fidscs_globals.WORK_DIR)
-  if type(fs)==GCSFileSystem:
+  if fidscs_globals.GCS_CLIENT:
     gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
-    # print(f"beam__common.make_dirs (debug): making directory {path} (gcs-corrected: {gcs_form_path}) for GCSFileSystem")
     blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
-    # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}, creating...")
     blob_path_create_result = blob_path.upload_from_string('', content_type='application/x-www-form-urlencoded;charset=UTF-8')
-    print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}")
+    # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}")
     return blob_path_create_result
   else:
     return FileSystems.mkdirs(path)
 
 
 def open_file_read(fpath):
-  return FileSystems.open(fpath)
+  if fidscs_globals.GCS_CLIENT:
+    gcs_form_path = gcs_correct_dir_path_form(fpath, strip_prefix=True)
+    return fidscs_globals.GCS_IO.open(gcs_form_path)
+  else:
+    return FileSystems.open(fpath)
 
 
 def open_file_write(fpath):
-  return FileSystems.create(fpath)
+  if fidscs_globals.GCS_CLIENT:
+    # gcs_form_path = gcs_correct_dir_path_form(fpath, strip_prefix=True)
+    return fidscs_globals.GCS_IO.open(fpath, mode='w')
+  else:
+    return FileSystems.create(fpath)
 
 
 def delete_paths(paths):
   return FileSystems.delete(paths)
 
-def delete_file(path):
-  return delete_paths([path])
+
+def delete_file(path, recursive=False):
+  if fidscs_globals.GCS_CLIENT:
+    # print(f"delete_file (debug): path: {path}, recursive: {recursive}")
+    if recursive:
+      child_paths = list_dir(path, exclude_subdir=False)
+      for child_path in child_paths:
+        child_path = gcs_correct_dir_path_form(path, strip_prefix=True)+child_path
+        delete_file(child_path, recursive=True)
+    blob_path = fidscs_globals.GCS_BUCKET.blob(path)
+    exists = blob_path.exists(fidscs_globals.GCS_CLIENT)
+    if exists:
+      # print(f"\n{path}: {blob_path}, exists: True (before delete attempt)")
+      blob_path_delete_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
+      # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)} (before delete attempt)\n")
+      return blob_path_delete_result
+    else:
+      gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
+      blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
+      exists = blob_path.exists(fidscs_globals.GCS_CLIENT)
+      if exists:
+        blob_path_delete_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
+        return blob_path_delete_result
+      else:
+        return True
+  else:
+    return delete_paths([path])
+
+
+def get_file_size(fpath):
+  if fidscs_globals.GCS_CLIENT:
+    return fidscs_globals.GCS_IO.size(fpath)
+  else:
+    return FileIO(fpath, "rb").size()
 
 
 
@@ -222,11 +252,12 @@ def rmdir(path_coll_row):
   n_files = len(list_dir(path))
   if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
     print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  fs = FileSystems.get_filesystem(path)
-  if type(fs)==LocalFileSystem:
-    tf.io.gfile.rmtree(path)
+  if fidscs_globals.GCS_CLIENT:
+    gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
+    blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
+    blob_path_create_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
   else:
-    FileSystems.delete([path])
+    delete_paths([path])
   return path
 
 def pl__X__rmdir(path, path_label):

@@ -15,10 +15,9 @@ from __future__ import absolute_import
 
 import argparse
 import os
-import subprocess
 
 import tensorflow as tf
-from apache_beam.io.filesystems import FileSystems
+from apache_beam.io.gcp import gcsio
 
 from api import beam__common, fidscs_globals
 
@@ -55,6 +54,8 @@ def run(
     fidscs_globals.GCS_CLIENT = gcs.Client.from_service_account_json(gcp_auth_key_path)
     fidscs_globals.GCS_BUCKET = gcs.Bucket(fidscs_globals.GCS_CLIENT, name=gcs_bucket, user_project=beam_gcp_project)
     print(f"fidscs_globals.GCS_BUCKET: {fidscs_globals.GCS_BUCKET}")
+    fidscs_globals.GCS_IO = gcsio.GcsIO(storage_client=fidscs_globals.GCS_CLIENT)
+    print(f"fidscs_globals.GCS_IO: {fidscs_globals.GCS_IO}")
 
     beam_gcs_staging_bucket = beam__common.path_join(fidscs_globals.WORK_DIR, 'dataflow/staging')
     beam_gcs_temp_location = beam__common.path_join(fidscs_globals.WORK_DIR, 'dataflow/tmp')
@@ -163,7 +164,7 @@ def run(
     # strategy = tf.distribute.experimental.CentralStorageStrategy() 
     # strategy = tf.distribute.MirroredStrategy()
     strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-    print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
+    # print(f'Number of devices available for parallel processing: {strategy.num_replicas_in_sync}')
 
     if use_beam:
       from api import data_extractor__beam
