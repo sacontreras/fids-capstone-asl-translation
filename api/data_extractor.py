@@ -19,7 +19,7 @@ import os
 import tensorflow as tf
 from apache_beam.io.gcp import gcsio
 
-from api import beam__common, fidscs_globals
+from api import beam__common, fidscs_globals, fileio
 
 
 def run(
@@ -57,60 +57,60 @@ def run(
     fidscs_globals.GCS_IO = gcsio.GcsIO(storage_client=fidscs_globals.GCS_CLIENT)
     print(f"fidscs_globals.GCS_IO: {fidscs_globals.GCS_IO}")
 
-    beam_gcs_staging_bucket = beam__common.path_join(fidscs_globals.WORK_DIR, 'dataflow/staging')
-    beam_gcs_temp_location = beam__common.path_join(fidscs_globals.WORK_DIR, 'dataflow/tmp')
+    beam_gcs_staging_bucket = fileio.path_join(fidscs_globals.WORK_DIR, 'dataflow/staging')
+    beam_gcs_temp_location = fileio.path_join(fidscs_globals.WORK_DIR, 'dataflow/tmp')
   
-  fidscs_globals.DATA_ROOT_DIR = beam__common.path_join(work_dir, 'data')
+  fidscs_globals.DATA_ROOT_DIR = fileio.path_join(work_dir, 'data')
   print(f"fidscs_globals.DATA_ROOT_DIR: {fidscs_globals.DATA_ROOT_DIR}")
-  if not beam__common.path_exists(fidscs_globals.DATA_ROOT_DIR):
-    beam__common.make_dirs(fidscs_globals.DATA_ROOT_DIR)
+  if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR):
+    fileio.make_dirs(fidscs_globals.DATA_ROOT_DIR)
 
-  fidscs_globals.TMP_DIR = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, 'tmp')
+  fidscs_globals.TMP_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'tmp')
   print(f"fidscs_globals.TMP_DIR: {fidscs_globals.TMP_DIR}")
-  if not beam__common.path_exists(fidscs_globals.TMP_DIR):
-    beam__common.make_dirs(fidscs_globals.TMP_DIR)
+  if not fileio.path_exists(fidscs_globals.TMP_DIR):
+    fileio.make_dirs(fidscs_globals.TMP_DIR)
 
-  fidscs_globals.CORPUS_DIR = beam__common.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_BASE)
+  fidscs_globals.CORPUS_DIR = fileio.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_BASE)
   print(f"fidscs_globals.CORPUS_DIR: {fidscs_globals.CORPUS_DIR}")
-  fidscs_globals.CORPUS_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
+  fidscs_globals.CORPUS_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
   print(f"fidscs_globals.CORPUS_DS_PATH: {fidscs_globals.CORPUS_DS_PATH}")
-  fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
+  fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
   print(f"fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH: {fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH}")
-  fidscs_globals.ASL_CONSULTANT_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
+  fidscs_globals.ASL_CONSULTANT_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
   print(f"fidscs_globals.ASL_CONSULTANT_DS_PATH: {fidscs_globals.ASL_CONSULTANT_DS_PATH}")
-  fidscs_globals.VIDEO_INDEXES_DIR = beam__common.path_join(fidscs_globals.TMP_DIR, fidscs_globals.VIDEO_INDEX_BASE)
+  fidscs_globals.VIDEO_INDEXES_DIR = fileio.path_join(fidscs_globals.TMP_DIR, fidscs_globals.VIDEO_INDEX_BASE)
   print(f"fidscs_globals.VIDEO_INDEXES_DIR: {fidscs_globals.VIDEO_INDEXES_DIR}")
-  fidscs_globals.SELECTED_VIDEO_INDEX_PATH = beam__common.path_join(fidscs_globals.VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
+  fidscs_globals.SELECTED_VIDEO_INDEX_PATH = fileio.path_join(fidscs_globals.VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
   print(f"fidscs_globals.SELECTED_VIDEO_INDEX_PATH: {fidscs_globals.SELECTED_VIDEO_INDEX_PATH}")
-  fidscs_globals.VIDEO_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
+  fidscs_globals.VIDEO_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
   print(f"fidscs_globals.VIDEO_DS_PATH: {fidscs_globals.VIDEO_DS_PATH}")
-  fidscs_globals.VIDEO_SEGMENT_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
+  fidscs_globals.VIDEO_SEGMENT_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
   print(f"fidscs_globals.VIDEO_SEGMENT_DS_PATH: {fidscs_globals.VIDEO_SEGMENT_DS_PATH}")
-  fidscs_globals.VIDEO_FRAME_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
+  fidscs_globals.VIDEO_FRAME_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
   print(f"fidscs_globals.VIDEO_FRAME_DS_PATH: {fidscs_globals.VIDEO_FRAME_DS_PATH}")
-  fidscs_globals.UTTERANCE_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
+  fidscs_globals.UTTERANCE_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
   print(f"fidscs_globals.UTTERANCE_DS_PATH: {fidscs_globals.UTTERANCE_DS_PATH}")
-  fidscs_globals.UTTERANCE_VIDEO_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
+  fidscs_globals.UTTERANCE_VIDEO_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
   print(f"fidscs_globals.UTTERANCE_VIDEO_DS_PATH: {fidscs_globals.UTTERANCE_VIDEO_DS_PATH}")
-  fidscs_globals.UTTERANCE_TOKEN_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
+  fidscs_globals.UTTERANCE_TOKEN_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
   print(f"fidscs_globals.UTTERANCE_TOKEN_DS_PATH: {fidscs_globals.UTTERANCE_TOKEN_DS_PATH}")
-  fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
+  fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
   print(f"fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH: {fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH}")
-  fidscs_globals.VOCABULARY_DS_PATH = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
+  fidscs_globals.VOCABULARY_DS_PATH = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
   print(f"fidscs_globals.VOCABULARY_DS_PATH: {fidscs_globals.VOCABULARY_DS_PATH}")
   # ******************** global variables set at runtime: END ********************
 
 
   if not beam__common.dataset_csv_files_exist():
-    fidscs_globals.VIDEO_DIR = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, 'videos')
+    fidscs_globals.VIDEO_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'videos')
     print(f"fidscs_globals.VIDEO_DIR: {fidscs_globals.VIDEO_DIR}")
-    if not beam__common.path_exists(fidscs_globals.VIDEO_DIR):
-      beam__common.make_dirs(fidscs_globals.VIDEO_DIR)
+    if not fileio.path_exists(fidscs_globals.VIDEO_DIR):
+      fileio.make_dirs(fidscs_globals.VIDEO_DIR)
 
-    fidscs_globals.STICHED_VIDEO_FRAMES_DIR = beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
+    fidscs_globals.STICHED_VIDEO_FRAMES_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
     print(f"fidscs_globals.STICHED_VIDEO_FRAMES_DIR: {fidscs_globals.STICHED_VIDEO_FRAMES_DIR}")
-    if not beam__common.path_exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
-      beam__common.make_dirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
+    if not fileio.path_exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
+      fileio.make_dirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
 
 
     # see https://www.tensorflow.org/tutorials/distribute/keras, https://www.tensorflow.org/guide/distributed_training

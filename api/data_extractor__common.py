@@ -7,7 +7,7 @@ from io import BytesIO
 
 from tqdm.auto import tqdm, trange
 
-from api import beam__common, fidscs_globals
+from api import beam__common, fileio
 
 
 def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None):
@@ -44,14 +44,14 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
         tqdm_pb.update(n_bytes)
 
     memfile.seek(0)
-    with beam__common.open_file_write(local_fname) as f:
+    with fileio.open_file_write(local_fname) as f:
       f.write(memfile.getvalue())
   finally:
     if f is not None:
       f.close()
 
   # file_size_local = os.path.getsize(f.name)
-  file_size_local = beam__common.get_file_size(local_fname)
+  file_size_local = fileio.get_file_size(local_fname)
   if file_size_local != file_size:
       raise ValueError(f"URL file {url} is {file_size} bytes but we only downloaded {file_size_local} bytes to local file {local_fname}.")
   else:
@@ -126,23 +126,26 @@ def boostrap_target_video_index(d_vid_indexes_info):
 
   remote_archive_path = 'http://www.bu.edu/asllrp/ncslgr-for-download/'+d_vid_indexes_info['video_indexes_archive']
   local_archive_parent_dir = d_vid_indexes_info['tmp_dir']
-  local_archive_path = beam__common.path_join(local_archive_parent_dir, d_vid_indexes_info['video_indexes_archive'])
+  local_archive_path = fileio.path_join(local_archive_parent_dir, d_vid_indexes_info['video_indexes_archive'])
   video_ds_path = d_vid_indexes_info['video_ds_path']
 
   print(f"VIDEO-INDEX BOOTSTRAP INFO: {d_vid_indexes_info}")
-  download(
-      remote_archive_path, 
-      local_archive_path, 
-      block_sz=fidscs_globals._1MB
-  )
-  zip_ref = zipfile.ZipFile(local_archive_path, 'r')
-  print(f"unzipping {local_archive_path} to {d_vid_indexes_info['vid_indexes_dir']}...")
-  zip_ref.extractall(local_archive_parent_dir)
+
+  memfile = download_to_memfile(remote_archive_path, block_sz=8192, display=False)
+  zip_ref = zipfile.ZipFile(memfile, 'r')
+  print(f"unzipping {remote_archive_path} in-memory...")
+  # zip_ref.printdir()
+  sel_vid_index_path = d_vid_indexes_info['sel_vid_index_path']
+  sel_vid_index_path_suffix = d_vid_indexes_info['video_indexes_archive'].split('.')[0]+'/'+sel_vid_index_path.split('/')[-1]
+  sel_vid_index_fname = sel_vid_index_path_suffix.split('/')[-1]
+  # print(f"we need to pull {sel_vid_index_path_suffix} out of in-memory extracted archive")
+  bytes_unzipped = zip_ref.read(sel_vid_index_path_suffix)
   zip_ref.close()
-  print(f"\tDONE")
-  print(f"deleting {local_archive_path}...")
-  # os.remove(local_archive_path)
-  beam__common.delete_file(local_archive_path)
+  if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir']):
+    fileio.make_dirs(d_vid_indexes_info['vid_indexes_dir'])
+  with fileio.open_file_write(d_vid_indexes_info['vid_indexes_dir']+'/'+sel_vid_index_fname) as f:
+    f.write(bytes_unzipped)
+    f.close()
   print(f"\tDONE")
   
   return d_vid_indexes_info['sel_vid_index_path']

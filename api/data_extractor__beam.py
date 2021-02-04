@@ -15,11 +15,11 @@ import apache_beam as beam
 import apache_beam.transforms.sql
 import cv2
 # import apache_beam.runners.interactive.interactive_beam as ib
-from apache_beam.io import fileio
+import apache_beam.io.fileio
 from apache_beam.io.filesystems import FileSystems
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from api import beam__common, data_extractor__common, fidscs_globals
+from api import beam__common, data_extractor__common, fidscs_globals, fileio
 from api.signstreamxmlparser_refactored.analysis import signstream as ss
 
 # from tensorflow.keras.preprocessing.image import img_to_array, load_img
@@ -39,9 +39,9 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     }
 
   this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
-    and extracts it to beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])
-    (assuming that has not already been done - i.e. if not os.path.isdir(beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
-      or len(os.listdir(beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
+    and extracts it to fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])
+    (assuming that has not already been done - i.e. if not os.path.isdir(fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
+      or len(os.listdir(fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
     )
 
   if the datasets exist in the storage path then this function does nothing
@@ -57,25 +57,68 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     d_corpus_info['tmp_dir']
   """
   corpus_parent_dir = d_corpus_info['tmp_dir']
-  corpus_dir = beam__common.path_join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
+  corpus_dir = fileio.path_join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
   remote_archive_path = 'http://secrets.rutgers.edu/dai/xml/'+d_corpus_info['corpus_archive']
   local_archive_parent_dir = d_corpus_info['tmp_dir']
-  local_archive_path = beam__common.path_join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
-  data_extractor__common.download(
-    remote_archive_path, 
-    local_archive_path, 
-    block_sz=fidscs_globals._1MB
-  )
-  zip_ref = zipfile.ZipFile(local_archive_path, 'r')
-  print(f"unzipping {local_archive_path} to {corpus_dir}...")
-  zip_ref.extractall(corpus_parent_dir)
+  local_archive_path = fileio.path_join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
+
+  memfile = data_extractor__common.download_to_memfile(remote_archive_path, block_sz=8192, display=False)
+  zip_ref = zipfile.ZipFile(memfile, 'r')
+  print(f"unzipping {remote_archive_path} in-memory...")
+  # zip_ref.printdir()
+  
+  if not fileio.path_exists(corpus_dir):
+    fileio.make_dirs(corpus_dir)
+  doc_file_path_suffixes = [
+    'ncslgr-xml/ncslgr10f.xml',
+    'ncslgr-xml/ncslgr10m.xml',
+    'ncslgr-xml/ncslgr10a.xml',
+    'ncslgr-xml/ncslgr10a.xml',
+    'ncslgr-xml/accident.xml',
+    'ncslgr-xml/ncslgr10r.xml',
+    'ncslgr-xml/DSP Immigrants Story.xml',
+    'ncslgr-xml/ncslgr10i.xml',
+    'ncslgr-xml/DSP Dead Dog Story.xml',
+    'ncslgr-xml/roadtrip2.xml',
+    'ncslgr-xml/ncslgr10h.xml',
+    'ncslgr-xml/football.xml',
+    'ncslgr-xml/biker.xml',
+    'ncslgr-xml/ncslgr10c.xml',
+    'ncslgr-xml/three pigs.xml',
+    'ncslgr-xml/DSP Ski Trip Story.xml',
+    'ncslgr-xml/dorm prank.xml',
+    'ncslgr-xml/ncslgr10p.xml',
+    'ncslgr-xml/siblings.xml',
+    'ncslgr-xml/lapd.xml',
+    'ncslgr-xml/ali.xml',
+    'ncslgr-xml/ncslgr10e.xml',
+    'ncslgr-xml/ncslgr10t.xml',
+    'ncslgr-xml/ncslgr10l.xml',
+    'ncslgr-xml/scarystory.xml',
+    'ncslgr-xml/ncslgr10k.xml',
+    'ncslgr-xml/close call.xml',
+    'ncslgr-xml/speeding.xml',
+    'ncslgr-xml/ncslgr10d.xml',
+    'ncslgr-xml/ncslgr10j.xml',
+    'ncslgr-xml/ncslgr10b.xml',
+    'ncslgr-xml/boston-la.xml',
+    'ncslgr-xml/ncslgr10g.xml',
+    'ncslgr-xml/DSP Intro to a Story.xml',
+    'ncslgr-xml/ncslgr10n.xml',
+    'ncslgr-xml/whitewater.xml',
+    'ncslgr-xml/ncslgr10q.xml',
+    'ncslgr-xml/ncslgr10s.xml',
+    'ncslgr-xml/roadtrip1.xml'
+  ]
+  for doc_file_path_suffix in doc_file_path_suffixes:
+    bytes_unzipped = zip_ref.read(doc_file_path_suffix)
+    with fileio.open_file_write(corpus_parent_dir+'/'+doc_file_path_suffix) as f:
+      f.write(bytes_unzipped)
+      f.close()
   zip_ref.close()
   print(f"\tDONE")
-  print(f"deleting {local_archive_path}...")
-  os.remove(local_archive_path)
-  print(f"\tDONE")
 
-  return [beam__common.path_join(corpus_dir,"*")]
+  return [fileio.path_join(corpus_dir,"*")]
 
 
 
@@ -103,7 +146,7 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
     )
   """
   target_video_fname = vid_index_schemad_pcoll_row.target_video_filename
-  target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
+  target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
   segment_urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
   return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
@@ -114,16 +157,16 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
   """
   segment_url = d_target_vid_seg_download_info['segment_url']
   segment_fname = d_target_vid_seg_download_info['segment_fname']
-  if not beam__common.path_exists(fidscs_globals.VIDEO_DIR):
-    beam__common.make_dirs(fidscs_globals.VIDEO_DIR)
-  local_segment_path = beam__common.path_join(fidscs_globals.VIDEO_DIR, segment_fname)
+  if not fileio.path_exists(fidscs_globals.VIDEO_DIR):
+    fileio.make_dirs(fidscs_globals.VIDEO_DIR)
+  local_segment_path = fileio.path_join(fidscs_globals.VIDEO_DIR, segment_fname)
   n_fail = 0
-  if not beam__common.path_exists(local_segment_path):
+  if not fileio.path_exists(local_segment_path):
     while n_fail < max_fail:
       try:
         memfile = data_extractor__common.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
         memfile.seek(0)
-        with beam__common.open_file_write(local_segment_path) as f:
+        with fileio.open_file_write(local_segment_path) as f:
           f.write(memfile.getvalue())
         print(f"{label+': ' if len(label)>0 else ''}Downloaded {segment_url} to {local_segment_path}")
         break
@@ -158,10 +201,10 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
   target_video_frames_dir = segment_dicts[0]['target_video_frames_dir']
 
   target_stitched_vid_name = target_video_frames_dir.split(os.path.sep)[-1]
-  if not beam__common.path_exists(target_video_frames_dir):
-    beam__common.make_dirs(target_video_frames_dir)
+  if not fileio.path_exists(target_video_frames_dir):
+    fileio.make_dirs(target_video_frames_dir)
 
-  local_vid_segment_paths = [beam__common.path_join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
+  local_vid_segment_paths = [fileio.path_join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
   for segment_dict in segment_dicts:
     segment_dict['n_frames_extracted'] = 0
 
@@ -178,7 +221,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
     # get count of existing stitched frames in target_stitched_vid_frames_dir
     
     # beam.io
-    n_stitched_frames = len(beam__common.list_dir(target_video_frames_dir))
+    n_stitched_frames = len(fileio.list_dir(target_video_frames_dir))
 
     b_restitch = n_stitched_frames < n_frames_expected
     n_stitched_frames = 0 if b_restitch else n_stitched_frames
@@ -196,7 +239,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
         success, frame = seg_vid_cap.read()
         n_frames = 0
         while success:
-          cv2.imwrite(beam__common.path_join(target_video_frames_dir, f"{n_stitched_frames}.jpg"), frame)
+          cv2.imwrite(fileio.path_join(target_video_frames_dir, f"{n_stitched_frames}.jpg"), frame)
           n_frames += 1
           n_stitched_frames += 1
           # nested_tqdm_pb__stitch.update(1)
@@ -226,7 +269,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
     fail = True
 
   for local_vid_segment_path in local_vid_segment_paths:
-    beam__common.delete_file(local_vid_segment_path)
+    fileio.delete_file(local_vid_segment_path)
     if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
       print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
     pass
@@ -272,7 +315,7 @@ class CorpusDocumentFileProcessor(beam.DoFn):
       LEN=len(raw_xml_b64)
     )
     self.next_doc_id += 1
-    beam__common.delete_file(xml_db_path)
+    fileio.delete_file(xml_db_path)
     # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.ERROR:
     print(f"PROCESSED/DELETED corpus document {xml_db_path}") # always show this
     return [row]
@@ -433,7 +476,7 @@ def pl__1__bootstrap_corpus_index(pl):
           }
         ]
       )
-    | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
     | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(
           corpus_docs_dir=str(x)
         )
@@ -446,8 +489,8 @@ def pl__1__bootstrap_corpus_index(pl):
 def pl__1__corpus_document_file_structure_to_corpus_index(pl):
   return (
     pl
-    | "Beam PL: get corpus documents" >> fileio.MatchFiles(beam__common.path_join(beam__common.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
-    | "Beam PL: read corpus documents" >> fileio.ReadMatches() # this results in a pcoll of fileio.ReadableFile objects
+    | "Beam PL: get corpus documents" >> beam.io.fileio.MatchFiles(fileio.path_join(fileio.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+    | "Beam PL: read corpus documents" >> beam.io.fileio.ReadMatches() # this results in a pcoll of fileio.ReadableFile objects
     | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
   ) # corpus_index_schemad_pcoll
 
@@ -669,7 +712,7 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
         [ # one row containing dict of:
             # 1. path to video index that was previously written to storage
           {
-            'vid_index_path': beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
+            'vid_index_path': fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
           }
         ]
       )
@@ -1754,8 +1797,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
+      target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      _n_existing_frame_images = -1 if not fileio.path_exists(target_video_frames_dir) else len(fileio.list_dir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -1782,8 +1825,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
-            frame_path = beam__common.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if beam__common.path_exists(frame_path):
+            frame_path = fileio.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
+            if fileio.path_exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
@@ -1830,13 +1873,13 @@ def get_target_video_frame_paths(document_asl_consultant_target_video_index_sche
       TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
     )
   """
-  target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
-  # _n_existing_frame_images = 0 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
+  target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
+  # _n_existing_frame_images = 0 if not fileio.path_exists(target_video_frames_dir) else len(fileio.list_dir(target_video_frames_dir))
   target_video_frame_paths = []
   # target_video_frames = []
-  if beam__common.path_exists(target_video_frames_dir):
+  if fileio.path_exists(target_video_frames_dir):
     target_video_frame_paths = sorted(
-      [beam__common.path_join(target_video_frames_dir, frame_fname) for frame_fname in beam__common.list_dir(target_video_frames_dir)], 
+      [fileio.path_join(target_video_frames_dir, frame_fname) for frame_fname in fileio.list_dir(target_video_frames_dir)], 
       key=lambda target_video_frame_path: int(target_video_frame_path.split(os.path.sep)[-1].split('.')[0])
     )
     
@@ -1881,7 +1924,7 @@ def target_video_frame_image_to_bytes(document_asl_consultant_target_video_index
   # jpeg_bytes = bytesio.getvalue()
 
   # # now delete corresponding image file
-  # beam__common.delete_file(frame_path)
+  # fileio.delete_file(frame_path)
   # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
   #   print(f"PROCESSED/DELETED target video frame: {frame_path}")
 
@@ -2075,8 +2118,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
+      target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      _n_existing_frame_images = -1 if not fileio.path_exists(target_video_frames_dir) else len(fileio.list_dir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -2103,8 +2146,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
-            frame_path = beam__common.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if beam__common.path_exists(frame_path):
+            frame_path = fileio.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
+            if fileio.path_exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")

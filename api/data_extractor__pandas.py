@@ -14,7 +14,7 @@ import pandas as pd
 import tensorflow as tf
 
 from api import data_extractor__common
-from api import fidscs_globals
+from api import fidscs_globals, fileio
 from api.signstreamxmlparser_refactored.analysis import signstream as ss
 
 
@@ -66,7 +66,7 @@ def load_video_index_dataset(debug=False):
     df_video_index[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]] = df_video_index[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]].map(lambda filename: urllib.parse.quote(filename))
     df_video_index.set_index(fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
     df_video_index.to_csv(path_or_buf=df_video_index_csv_path)
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(df_video_index_csv_path) else 'FAILED to save'} {df_video_index_csv_path}")
 
   df_video_index = pd.read_csv(df_video_index_csv_path)
   df_video_index.set_index(fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0], inplace=True)
@@ -581,21 +581,21 @@ def boostrap_signstream_corpus(d_corpus_info, df_video_index):
           print()
 
     df_corpus.to_csv(path_or_buf=d_corpus_info['corpus_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['corpus_ds_path']) else 'FAILED to save'} {d_corpus_info['corpus_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['corpus_ds_path']) else 'FAILED to save'} {d_corpus_info['corpus_ds_path']}")
     df_asl_consultant.to_csv(path_or_buf=d_corpus_info['asl_consultant_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['asl_consultant_ds_path']) else 'FAILED to save'} {d_corpus_info['asl_consultant_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['asl_consultant_ds_path']) else 'FAILED to save'} {d_corpus_info['asl_consultant_ds_path']}")
     df_document_asl_consultant.to_csv(path_or_buf=d_corpus_info['document_asl_consultant_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['document_asl_consultant_ds_path']) else 'FAILED to save'} {d_corpus_info['document_asl_consultant_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['document_asl_consultant_ds_path']) else 'FAILED to save'} {d_corpus_info['document_asl_consultant_ds_path']}")
     df_video.to_csv(path_or_buf=d_corpus_info['video_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['video_ds_path']) else 'FAILED to save'} {d_corpus_info['video_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['video_ds_path']) else 'FAILED to save'} {d_corpus_info['video_ds_path']}")
     df_utterance.to_csv(path_or_buf=d_corpus_info['utterance_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['utterance_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['utterance_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_ds_path']}")
     df_utterance_video.to_csv(path_or_buf=d_corpus_info['utterance_video_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['utterance_video_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_video_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['utterance_video_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_video_ds_path']}")
     df_vocabulary.to_csv(path_or_buf=d_corpus_info['vocabulary_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['vocabulary_ds_path']) else 'FAILED to save'} {d_corpus_info['vocabulary_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['vocabulary_ds_path']) else 'FAILED to save'} {d_corpus_info['vocabulary_ds_path']}")
     df_utterance_token.to_csv(path_or_buf=d_corpus_info['utterance_token_ds_path'])
-    print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(d_corpus_info['utterance_token_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_token_ds_path']}")
+    print(f"{'SUCCESSFULLY saved' if fileio.path_exists(d_corpus_info['utterance_token_ds_path']) else 'FAILED to save'} {d_corpus_info['utterance_token_ds_path']}")
 
   else:
 
@@ -679,11 +679,11 @@ def load_corpus_datasets(d_corpus_dataset_info, debug=False):
 
 def download_video_segment(segment_url, data_dir):
   # log_results = []
-  if not data_extractor__common.path_exists(data_dir):
-    beam__common.make_dirs(data_dir)
+  if not fileio.path_exists(data_dir):
+    fileio.make_dirs(data_dir)
     
   local_segment_path = os.path.join(data_dir, segment_url.split('/')[-1])
-  if not data_extractor__common.path_exists(local_segment_path):
+  if not fileio.path_exists(local_segment_path):
     memfile = data_extractor__common.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
     memfile.seek(0)
     with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
@@ -698,7 +698,7 @@ def extract_frames(segment_urls, video_fname, frames_dir, videos_dir, df_decompo
 
   target_stitched_vid_frames_dir = frames_dir
   target_stitched_vid_name = target_stitched_vid_frames_dir.split(os.path.sep)[-1]
-  if not data_extractor__common.path_exists(target_stitched_vid_frames_dir):
+  if not fileio.path_exists(target_stitched_vid_frames_dir):
     tf.io.gfile.makedirs(target_stitched_vid_frames_dir)
 
   local_vid_segment_paths = [os.path.join(videos_dir, segment_url.split('/')[-1]) for segment_url in segment_urls]
@@ -841,6 +841,6 @@ def run():
   )
   df_decomposition.to_csv(path_or_buf=os.path.join(fidscs_globals.DATA_ROOT_DIR, 'df_decomposition.csv'))
   df_decomposition_csv_path = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'df_decomposition.csv')
-  print(f"{'SUCCESSFULLY saved' if data_extractor__common.path_exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
+  print(f"{'SUCCESSFULLY saved' if fileio.path_exists(df_decomposition_csv_path) else 'FAILED to save'} {df_decomposition_csv_path}")
 
   return df_video_index, df_decomposition
