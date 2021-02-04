@@ -2,14 +2,93 @@ from __future__ import absolute_import
 
 import csv
 import io
-import os
 import sys
 import urllib
 
 import apache_beam as beam
+import apache_beam.io.filesystem
 import tensorflow as tf
+from apache_beam.io.filesystems import FileSystems
+from apache_beam.io.gcp.gcsfilesystem import GCSFileSystem
+from apache_beam.io.localfilesystem import LocalFileSystem
+from google.cloud.storage.bucket import Bucket
 
 from api import fidscs_globals
+
+
+def dir_path_to_pattern(path):
+  # FileSystems.get_filesystem()
+  if path[-2:] != '/*':
+    if path[-1] == '/':
+      path += '*'
+    else:
+      path += '/*'
+  return path
+
+def gcs_correct_dir_path_form(dir_path, strip_prefix=False):
+  if not dir_path.endswith('/'):
+    dir_path += '/'
+  if strip_prefix and dir_path[0:len(fidscs_globals.WORK_DIR)] == fidscs_globals.WORK_DIR:
+    dir_path = dir_path[len(fidscs_globals.WORK_DIR)+1:]
+  return dir_path
+
+
+def path_join(path, endpoint):
+  return FileSystems.join(path, endpoint)
+
+
+def path_exists(path):
+  return FileSystems.exists(gcs_correct_dir_path_form(path) if type(FileSystems.get_filesystem(fidscs_globals.WORK_DIR))==GCSFileSystem else path)
+
+
+def list_dir(path_path, exclude_subdir=False):
+  fs = FileSystems.get_filesystem(fidscs_globals.WORK_DIR)
+  if type(fs)==GCSFileSystem:
+    gcs_form_dir_path = gcs_correct_dir_path_form(path_path, strip_prefix=True)
+    blobs_in_dir = list(fidscs_globals.GCS_CLIENT.list_blobs(fidscs_globals.GCS_BUCKET.name, prefix=gcs_form_dir_path))
+    # print(f"\nblobs in gcs bucket ({fidscs_globals.GCS_BUCKET.name}) {gcs_form_dir_path}:\n{blobs_in_dir}")
+    if len(blobs_in_dir)==1 and blobs_in_dir[0].name==gcs_form_dir_path:
+      blobs_in_dir = []
+    else:
+      blobs_in_dir = [blob_in_dir.name for blob_in_dir in blobs_in_dir]
+    if gcs_form_dir_path in blobs_in_dir:
+      del blobs_in_dir[blobs_in_dir.index(gcs_form_dir_path)]
+    blob_paths_in_dir = [blob_path_in_dir[len(gcs_form_dir_path):] for blob_path_in_dir in blobs_in_dir]
+    if exclude_subdir:
+      blob_paths_in_dir = list(filter(lambda blob_path_in_dir: not blob_path_in_dir.endswith('/'), blob_paths_in_dir))
+    return blob_paths_in_dir
+  else:
+    return tf.io.gfile.listdir(path_path)
+
+
+def make_dirs(path):
+  fs = FileSystems.get_filesystem(fidscs_globals.WORK_DIR)
+  if type(fs)==GCSFileSystem:
+    gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
+    # print(f"beam__common.make_dirs (debug): making directory {path} (gcs-corrected: {gcs_form_path}) for GCSFileSystem")
+    blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
+    # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}, creating...")
+    blob_path_create_result = blob_path.upload_from_string('', content_type='application/x-www-form-urlencoded;charset=UTF-8')
+    print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}")
+    return blob_path_create_result
+  else:
+    return FileSystems.mkdirs(path)
+
+
+def open_file_read(fpath):
+  return FileSystems.open(fpath)
+
+
+def open_file_write(fpath):
+  return FileSystems.create(fpath)
+
+
+def delete_paths(paths):
+  return FileSystems.delete(paths)
+
+def delete_file(path):
+  return delete_paths([path])
+
 
 
 class PipelinePcollElementProcessor(beam.DoFn):
@@ -64,7 +143,7 @@ def dataset_csv_files_exist(dataset_csv_paths=None):
       fidscs_globals.VOCABULARY_DS_PATH
     ]
   for dataset_csv_path in dataset_csv_paths:
-    if not tf.io.gfile.exists(dataset_csv_path):
+    if not path_exists(dataset_csv_path):
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -83,7 +162,7 @@ def train_val_csv_files_exist(train_val_csv_paths=None):
       fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH
     ]
   for train_val_csv_path in train_val_csv_paths:
-    if not tf.io.gfile.exists(train_val_csv_path):
+    if not path_exists(train_val_csv_path):
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -119,7 +198,7 @@ def _load_csv(sel_csv_readable_file, rows_to_dicts=False, dict_field_names=None,
 
 def load_csv(sel_csv_path, rows_to_dicts=False, dict_field_names=None, max_len=None):
   return _load_csv(
-    beam.io.filesystems.FileSystems.open(sel_csv_path), 
+    open_file_read(sel_csv_path), 
     rows_to_dicts, 
     dict_field_names,
     max_len
@@ -140,10 +219,14 @@ def load_vid_index_csv(sel_csv_path):
 
 def rmdir(path_coll_row):
   path = path_coll_row
-  n_files = len(tf.io.gfile.listdir(path))
+  n_files = len(list_dir(path))
   if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
     print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  tf.io.gfile.rmtree(path)
+  fs = FileSystems.get_filesystem(path)
+  if type(fs)==LocalFileSystem:
+    tf.io.gfile.rmtree(path)
+  else:
+    FileSystems.delete([path])
   return path
 
 def pl__X__rmdir(path, path_label):
@@ -182,7 +265,7 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
   return (
     pcoll
     | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
-        os.path.join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
+        path_join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
         file_name_suffix=".csv", 
         append_trailing_newlines=True,
         shard_name_template="",
@@ -195,7 +278,7 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
 def pl__1__read_target_vid_index_csv(pl):
   return (
     pl
-    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
+    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
           target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!

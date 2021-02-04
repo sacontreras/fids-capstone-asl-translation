@@ -2,7 +2,6 @@ from __future__ import absolute_import
 
 import base64
 import io
-import math
 import os
 import random
 import re
@@ -16,8 +15,8 @@ import apache_beam as beam
 import apache_beam.transforms.sql
 import cv2
 # import apache_beam.runners.interactive.interactive_beam as ib
-import tensorflow as tf
 from apache_beam.io import fileio
+from apache_beam.io.filesystems import FileSystems
 from apache_beam.options.pipeline_options import PipelineOptions
 
 from api import beam__common, data_extractor__common, fidscs_globals, utils
@@ -40,9 +39,9 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     }
 
   this function downloads d_corpus_info['corpus_archive'] from http://secrets.rutgers.edu/dai/xml
-    and extracts it to os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])
-    (assuming that has not already been done - i.e. if not os.path.isdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
-      or len(os.listdir(os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
+    and extracts it to beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])
+    (assuming that has not already been done - i.e. if not os.path.isdir(beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])) 
+      or len(os.listdir(beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'])))==0
     )
 
   if the datasets exist in the storage path then this function does nothing
@@ -58,10 +57,10 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     d_corpus_info['tmp_dir']
   """
   corpus_parent_dir = d_corpus_info['tmp_dir']
-  corpus_dir = os.path.join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
-  remote_archive_path = os.path.join('http://secrets.rutgers.edu/dai/xml', d_corpus_info['corpus_archive'])
+  corpus_dir = beam__common.path_join(corpus_parent_dir, d_corpus_info['corpus_archive'].split('.')[0])
+  remote_archive_path = 'http://secrets.rutgers.edu/dai/xml/'+d_corpus_info['corpus_archive']
   local_archive_parent_dir = d_corpus_info['tmp_dir']
-  local_archive_path = os.path.join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
+  local_archive_path = beam__common.path_join(local_archive_parent_dir, d_corpus_info['corpus_archive'])
   utils.download(
     remote_archive_path, 
     local_archive_path, 
@@ -76,7 +75,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   os.remove(local_archive_path)
   print(f"\tDONE")
 
-  return [os.path.join(corpus_dir,"*")]
+  return [beam__common.path_join(corpus_dir,"*")]
 
 
 
@@ -104,7 +103,7 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
     )
   """
   target_video_fname = vid_index_schemad_pcoll_row.target_video_filename
-  target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
+  target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
   segment_urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
   return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
@@ -115,16 +114,16 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
   """
   segment_url = d_target_vid_seg_download_info['segment_url']
   segment_fname = d_target_vid_seg_download_info['segment_fname']
-  if not tf.io.gfile.exists(fidscs_globals.VIDEO_DIR):
-    tf.io.gfile.makedirs(fidscs_globals.VIDEO_DIR)
-  local_segment_path = os.path.join(fidscs_globals.VIDEO_DIR, segment_fname)
+  if not beam__common.path_exists(fidscs_globals.VIDEO_DIR):
+    beam__common.make_dirs(fidscs_globals.VIDEO_DIR)
+  local_segment_path = beam__common.path_join(fidscs_globals.VIDEO_DIR, segment_fname)
   n_fail = 0
-  if not tf.io.gfile.exists(local_segment_path):
+  if not beam__common.path_exists(local_segment_path):
     while n_fail < max_fail:
       try:
         memfile = utils.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
         memfile.seek(0)
-        with tf.io.gfile.GFile(name=local_segment_path, mode='w') as f:
+        with beam__common.open_file_write(local_segment_path) as f:
           f.write(memfile.getvalue())
         print(f"{label+': ' if len(label)>0 else ''}Downloaded {segment_url} to {local_segment_path}")
         break
@@ -159,10 +158,10 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
   target_video_frames_dir = segment_dicts[0]['target_video_frames_dir']
 
   target_stitched_vid_name = target_video_frames_dir.split(os.path.sep)[-1]
-  if not tf.io.gfile.exists(target_video_frames_dir):
-    tf.io.gfile.makedirs(target_video_frames_dir)
+  if not beam__common.path_exists(target_video_frames_dir):
+    beam__common.make_dirs(target_video_frames_dir)
 
-  local_vid_segment_paths = [os.path.join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
+  local_vid_segment_paths = [beam__common.path_join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
   for segment_dict in segment_dicts:
     segment_dict['n_frames_extracted'] = 0
 
@@ -177,7 +176,9 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
   n_stitched_frames = 0
   if n_frames_expected > 0:
     # get count of existing stitched frames in target_stitched_vid_frames_dir
-    n_stitched_frames = len(tf.io.gfile.listdir(target_video_frames_dir))
+    
+    # beam.io
+    n_stitched_frames = len(beam__common.list_dir(target_video_frames_dir))
 
     b_restitch = n_stitched_frames < n_frames_expected
     n_stitched_frames = 0 if b_restitch else n_stitched_frames
@@ -195,7 +196,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
         success, frame = seg_vid_cap.read()
         n_frames = 0
         while success:
-          cv2.imwrite(os.path.join(target_video_frames_dir, f"{n_stitched_frames}.jpg"), frame)
+          cv2.imwrite(beam__common.path_join(target_video_frames_dir, f"{n_stitched_frames}.jpg"), frame)
           n_frames += 1
           n_stitched_frames += 1
           # nested_tqdm_pb__stitch.update(1)
@@ -225,7 +226,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label=""):
     fail = True
 
   for local_vid_segment_path in local_vid_segment_paths:
-    tf.io.gfile.remove(local_vid_segment_path)
+    beam__common.delete_file(local_vid_segment_path)
     if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
       print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
     pass
@@ -271,7 +272,7 @@ class CorpusDocumentFileProcessor(beam.DoFn):
       LEN=len(raw_xml_b64)
     )
     self.next_doc_id += 1
-    tf.io.gfile.remove(xml_db_path)
+    beam__common.delete_file(xml_db_path)
     # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.ERROR:
     print(f"PROCESSED/DELETED corpus document {xml_db_path}") # always show this
     return [row]
@@ -432,7 +433,7 @@ def pl__1__bootstrap_corpus_index(pl):
           }
         ]
       )
-    | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [os.path.join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [beam__common.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
     | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(
           corpus_docs_dir=str(x)
         )
@@ -445,7 +446,7 @@ def pl__1__bootstrap_corpus_index(pl):
 def pl__1__corpus_document_file_structure_to_corpus_index(pl):
   return (
     pl
-    | "Beam PL: get corpus documents" >> fileio.MatchFiles(os.path.join(os.path.join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+    | "Beam PL: get corpus documents" >> fileio.MatchFiles(beam__common.path_join(beam__common.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
     | "Beam PL: read corpus documents" >> fileio.ReadMatches() # this results in a pcoll of fileio.ReadableFile objects
     | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
   ) # corpus_index_schemad_pcoll
@@ -668,7 +669,7 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
         [ # one row containing dict of:
             # 1. path to video index that was previously written to storage
           {
-            'vid_index_path': os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
+            'vid_index_path': beam__common.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')
           }
         ]
       )
@@ -1753,8 +1754,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
+      target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      _n_existing_frame_images = -1 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -1781,8 +1782,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
-            frame_path = os.path.join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if tf.io.gfile.exists(frame_path):
+            frame_path = beam__common.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
+            if beam__common.path_exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
@@ -1829,13 +1830,13 @@ def get_target_video_frame_paths(document_asl_consultant_target_video_index_sche
       TargetVideoFilename=str(document_asl_consultant_video_index_pcoll_row_tpl[1][2])
     )
   """
-  target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
-  # _n_existing_frame_images = 0 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
+  target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
+  # _n_existing_frame_images = 0 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
   target_video_frame_paths = []
   # target_video_frames = []
-  if tf.io.gfile.exists(target_video_frames_dir):
+  if beam__common.path_exists(target_video_frames_dir):
     target_video_frame_paths = sorted(
-      [os.path.join(target_video_frames_dir, frame_fname) for frame_fname in tf.io.gfile.listdir(target_video_frames_dir)], 
+      [beam__common.path_join(target_video_frames_dir, frame_fname) for frame_fname in beam__common.list_dir(target_video_frames_dir)], 
       key=lambda target_video_frame_path: int(target_video_frame_path.split(os.path.sep)[-1].split('.')[0])
     )
     
@@ -1880,7 +1881,7 @@ def target_video_frame_image_to_bytes(document_asl_consultant_target_video_index
   # jpeg_bytes = bytesio.getvalue()
 
   # # now delete corresponding image file
-  # tf.io.gfile.remove(frame_path)
+  # beam__common.delete_file(frame_path)
   # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
   #   print(f"PROCESSED/DELETED target video frame: {frame_path}")
 
@@ -2074,8 +2075,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname is invalid: {_target_video_fname}")
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
-      target_video_frames_dir = os.path.join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not tf.io.gfile.exists(target_video_frames_dir) else len(tf.io.gfile.listdir(target_video_frames_dir))
+      target_video_frames_dir = beam__common.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
+      _n_existing_frame_images = -1 if not beam__common.path_exists(target_video_frames_dir) else len(beam__common.list_dir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -2102,8 +2103,8 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
 
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
-            frame_path = os.path.join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if tf.io.gfile.exists(frame_path):
+            frame_path = beam__common.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
+            if beam__common.path_exists(frame_path):
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
@@ -3436,8 +3437,13 @@ def run(
   beam_gcp_dataflow_job_name=None,
   beam_gcs_staging_bucket=None,
   beam_gcs_temp_location=None,
-  beam_gcp_setup_file=None
+  beam_gcp_dataflow_setup_file=None
 ):
+
+  if beam_gcp_dataflow_setup_file != './setup.py':
+    print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
+    return
+
   options = None
   if beam_runner != 'DirectRunner':
     options = {
@@ -3445,10 +3451,14 @@ def run(
       'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
       'project': beam_gcp_project,
       'region': beam_gcp_region, 
-      'staging_bucket': beam_gcs_staging_bucket,
+      'staging_location': beam_gcs_staging_bucket,
       'temp_location': beam_gcs_temp_location,
-      'setup_file': beam_gcp_setup_file,
-      'job_name': beam_gcp_dataflow_job_name
+      'setup_file': beam_gcp_dataflow_setup_file,
+      'job_name': beam_gcp_dataflow_job_name,
+      'max_num_workers': 8,
+      'worker_region': beam_gcp_region,
+      'autoscaling_algorithm': 'THROUGHPUT_BASED',
+      'save_main_session': True
     }
   else:
     options = {
@@ -3468,74 +3478,74 @@ def run(
     pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-    filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
-    merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
-    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+  #   filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
+  #   merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
+  #   merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    pl__1__bootstrap_corpus_index(pl)
-  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
-  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
-  #   for reading yet
-  with beam.Pipeline(options=pipeline_options) as pl:
-    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-    pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   pl__1__bootstrap_corpus_index(pl)
+  # # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
+  # #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+  # #   for reading yet
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+  #   pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
 
 
-  with beam.Pipeline(options=pipeline_options) as pl:
-    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-    corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
-    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
-    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+  # with beam.Pipeline(options=pipeline_options) as pl:
+  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+  #   corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
+  #   corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
+  #   ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
 
-    # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
+  #   # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
 
-    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
-    pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+  #   asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
+  #   pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
 
-    document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      corpus_index_schemad_pcoll, 
-      asl_consultant_index_schemad_pcoll
-    )
-    pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
+  #   document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
+  #     ss_parsed_xmldb_pcoll, 
+  #     corpus_index_schemad_pcoll, 
+  #     asl_consultant_index_schemad_pcoll
+  #   )
+  #   pl__6__write_document_asl_consultant_index_csv(document_asl_consultant_index_schemad_pcoll)
 
-    document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll
-    )
-    pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
+  #   document_asl_consultant_utterance_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_index_schemad_pcoll(
+  #     ss_parsed_xmldb_pcoll, 
+  #     document_asl_consultant_index_schemad_pcoll
+  #   )
+  #   pl__7__write_document_asl_consultant_utterance_index_csv(document_asl_consultant_utterance_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll, 
-      full_target_vid_index_schemad_pcoll
-    )
-    pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-    pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
-    pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
+  #   document_asl_consultant_target_video_index_schemad_pcoll, document_target_video_segment_index_schemad_pcoll = pl__6__create_document_asl_consultant_target_video_index_pcolls(
+  #     ss_parsed_xmldb_pcoll, 
+  #     document_asl_consultant_index_schemad_pcoll, 
+  #     full_target_vid_index_schemad_pcoll
+  #   )
+  #   pl__7__write_document_asl_consultant_target_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+  #   pl__7__write_document_asl_consultant_utterance_video_index_csv(document_asl_consultant_target_video_index_schemad_pcoll)
+  #   pl__7__write_document_target_video_segment_index_csv(document_target_video_segment_index_schemad_pcoll)
 
-    vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
-      ss_parsed_xmldb_pcoll, 
-      document_asl_consultant_index_schemad_pcoll
-    )
-    pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
-    pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
+  #   vocabulary_index_pcoll, document_asl_consultant_utterance_token_index_schemad_pcoll = pl__6__create_document_asl_consultant_utterance_token_index_schemad_pcoll(
+  #     ss_parsed_xmldb_pcoll, 
+  #     document_asl_consultant_index_schemad_pcoll
+  #   )
+  #   pl__7__write_vocabulary_index_csv(vocabulary_index_pcoll)
+  #   pl__7__write_document_asl_consultant_utterance_token_index_csv(document_asl_consultant_utterance_token_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
-      document_asl_consultant_target_video_index_schemad_pcoll
-    )
-    pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
+  #   document_asl_consultant_target_video_frame_index_schemad_pcoll = pl__7__create_document_asl_consultant_target_video_frame_index_schemad_pcoll(
+  #     document_asl_consultant_target_video_index_schemad_pcoll
+  #   )
+  #   pl__8__write_document_asl_consultant_target_video_frame_index_schemad_pcoll(document_asl_consultant_target_video_frame_index_schemad_pcoll)
 
-    document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
-      document_asl_consultant_utterance_token_index_schemad_pcoll,
-      document_asl_consultant_target_video_index_schemad_pcoll,
-      document_asl_consultant_target_video_frame_index_schemad_pcoll
-    )
-    pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+  #   document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = pl__8__create_document_asl_consultant_utterance_token_frame_index_schemad_pcoll(
+  #     document_asl_consultant_utterance_token_index_schemad_pcoll,
+  #     document_asl_consultant_target_video_index_schemad_pcoll,
+  #     document_asl_consultant_target_video_frame_index_schemad_pcoll
+  #   )
+  #   pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
 
 
   with beam.Pipeline(options=pipeline_options) as pl:

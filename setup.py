@@ -8,13 +8,11 @@
 # also, this setup.py follows the example given (listed) in the article above,
 #   from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/complete/juliaset/setup.py
 
-from __future__ import absolute_import
-from __future__ import print_function
-
-import subprocess
-from distutils.command.build import build as _build  # type: ignore
+from __future__ import absolute_import, print_function
 
 import setuptools
+import subprocess
+from distutils.command.build import build as _build  # type: ignore
 
 
 # This class handles the pip install mechanism.
@@ -102,7 +100,7 @@ setuptools.setup(
     cmdclass={
         # Command class instantiated and run during pip install scenarios.
         'build': build,
-        'CustomCommands': CustomCommands,
+        # 'CustomCommands': CustomCommands,
     }
     # , include_package_data=True
 )

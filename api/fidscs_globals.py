@@ -260,6 +260,8 @@ SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX = [
 
 # the following globals are set or modified at runtime
 WORK_DIR = None
+GCS_CLIENT = None
+GCS_BUCKET = None
 DATA_ROOT_DIR = None
 TMP_DIR = None
 VIDEO_DIR = None
