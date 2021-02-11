@@ -188,25 +188,20 @@ File system has been successfully mounted.
 ## 15. Run the ETL Apache Beam Pipeline!
 
 **AGAIN, THIS WILL INCUR A COST TO *YOU* (SINCE IT WILL UPLOAD FILES TO YOUR GCS BUCKET), WHICH I TAKE NO RESPONSIBILITY FOR!**
-
 ```
-python ./run_local__etl.py \
-  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 5 \
-  --use-beam 1 \
-  --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region us-west2 \
-  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
-  --beam-gcp-dataflow-setup-file ./setup.py
+MAX_TARGET_VIDEOS=2
+echo $MAX_TARGET_VIDEOS
+GCP_REGION=us-west2
+echo $GCP_REGION
 ```
 
 ```
 python ./run_local__etl.py \
   --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 5 \
+  --max-target-videos $MAX_TARGET_VIDEOS \
   --use-beam 1 \
   --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region us-central1 \
+  --beam-gcp-region $GCP_REGION \
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```
@@ -214,29 +209,9 @@ python ./run_local__etl.py \
 ```
 python ./run_cloud__etl.py \
   --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 5 \
+  --max-target-videos $MAX_TARGET_VIDEOS \
   --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region us-central1\
-  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
-  --beam-gcp-dataflow-setup-file ./setup.py
-```
-
-```
-python ./run_cloud__etl.py \
-  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 5 \
-  --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region us-west2 \
-  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
-  --beam-gcp-dataflow-setup-file ./setup.py
-```
-
-```
-python ./run_cloud__etl.py \
-  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos -1 \
-  --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region us-central1\
+  --beam-gcp-region $GCP_REGION \
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```

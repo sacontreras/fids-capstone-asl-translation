@@ -232,6 +232,7 @@ def pl__X__sort_pcoll(pcoll, pcoll_label):
     | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
   )
 
+
 def index_keyed_tuple_data(keyed_tuple):
   """
   keyed_tuple:
@@ -242,16 +243,23 @@ def index_keyed_tuple_data(keyed_tuple):
   indexed_data_list = [(i, data_item) for i, data_item in enumerate(data_list)]
   return indexed_data_list # now indexed
 
-def pl__X__subset_pcoll(pcoll, pcoll_label, n):
+def pl__X__index_pcoll(pcoll, pcoll_label):
   return (
     pcoll
-    | f"Beam PL: key {pcoll_label} for sort" >> beam.Map(
+    | f"Beam PL: key {pcoll_label} for index" >> beam.Map(
         lambda pcoll_row: (1, pcoll_row)
       )
     | f"Beam PL: 'implode' keyed {pcoll_label} for subset" >> beam.GroupByKey()
     | f"Beam PL: index and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(index_keyed_tuple_data)
-    | f"Beam PL: filter tuples with index val less than {n}" >> beam.Filter(lambda tpl: tpl[0] < n)
-    | f"Beam PL: discard index, leaving only data" >> beam.Map(lambda tpl: tpl[1])
+  )
+
+
+def pl__X__subset_pcoll(pcoll, pcoll_label, n):
+  indexed_pcoll = pl__X__index_pcoll(pcoll, pcoll_label)
+  return (
+    indexed_pcoll
+    | f"Beam PL: filter {pcoll_label} tuples with index val less than {n}" >> beam.Filter(lambda tpl: tpl[0] < n)
+    | f"Beam PL: discard {pcoll_label} index, leaving only data" >> beam.Map(lambda tpl: tpl[1])
   )
 
 
@@ -259,12 +267,12 @@ def beam_row_to_csv_string(row):
   d_row = row.as_dict()
   return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
   
-def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names, d_pl_options=None):
+def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names, d_pl_options):
   return (
     pcoll
     | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
         fileio.path_join(
-          fidscs_globals.DATA_ROOT_DIR if d_pl_options is None else d_pl_options['fidscs_capstone_data_dir'], 
+          d_pl_options[fidscs_globals.OPT_NAME_DATA_DIR],
           csv_fname.split('.')[0]
         ), 
         file_name_suffix=".csv", 
@@ -282,7 +290,7 @@ def pl__1__read_target_vid_index_csv(pl):
     | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create(
         [
           fileio.path_join(
-            pl._options._all_options['fidscs_capstone_data_dir'], 
+            pl._options._all_options[fidscs_globals.OPT_NAME_DATA_DIR], 
             fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv'
           )
         ]
@@ -312,7 +320,7 @@ def load_corpus_index_csv(d_corpus_info):
   }
   """
   return load_csv(
-    d_corpus_info['corpus_index_csv_path'], 
+    d_corpus_info['corpus_index_csv_path'],
     rows_to_dicts=True, 
     dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS,
     max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes due to base-64 encoding
@@ -323,8 +331,8 @@ def pl__1__read_corpus_index_csv(pl):
     pl
     | "Beam PL: create initial pcoll containing info to load the corpus index csv" >> beam.Create(
         [{
-          'corpus_index_csv_path': fidscs_globals.CORPUS_DS_PATH,
-          'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN
+          'corpus_index_csv_path': pl._options._all_options[fidscs_globals.OPT_NAME_CORPUS_DS_PATH],
+          'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN # NOTE! This is likely running in a different pipeline (and likely a different worker altogether in the cloud, thus, we rely on a high enough default setting)
         }]
       )
     | "Beam PL: read corpus index into pcoll" >> beam.FlatMap(load_corpus_index_csv) # outputs another pcoll but with each row as dict (with fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS keys)

@@ -31,7 +31,7 @@ def prepare_output_str(str, label=""):
   return f"{label+': ' if len(label)>0 else ''}{str}"
 
 
-def boostrap_signstream_corpus(d_corpus_info, label=""):
+def boostrap_signstream_corpus(d_corpus_info, d_pl_options, label=""):
   """
   d_corpus_info MUST be a dict as follows:
     {
@@ -68,8 +68,9 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
   print(f"unzipping {remote_archive_path} in-memory...")
   # zip_ref.printdir()
   
-  if not fileio.path_exists(corpus_dir)[0]:
-    fileio.make_dirs(corpus_dir)
+  if not fileio.path_exists(corpus_dir, d_pl_options)[0]:
+    fileio.make_dirs(corpus_dir, d_pl_options)
+
   doc_file_path_suffixes = [
     'ncslgr-xml/ncslgr10f.xml',
     'ncslgr-xml/ncslgr10m.xml',
@@ -111,15 +112,25 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
     'ncslgr-xml/ncslgr10s.xml',
     'ncslgr-xml/roadtrip1.xml'
   ]
+
   for doc_file_path_suffix in doc_file_path_suffixes:
     bytes_unzipped = zip_ref.read(doc_file_path_suffix)
     with fileio.open_file_write(corpus_parent_dir+'/'+doc_file_path_suffix) as f:
       f.write(bytes_unzipped)
       f.close()
   zip_ref.close()
+  memfile.close()
   print(f"\tDONE")
 
   return [fileio.path_join(corpus_dir,"*")]
+
+class SignstreamCorpusBootstrapper(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options, label=""):
+    super(SignstreamCorpusBootstrapper, self).__init__(
+      fn_pcoll_element_processor=boostrap_signstream_corpus,
+      kargs={'d_pl_options':d_pl_options,'label':label},
+      return_result=True
+    )
 
 
 
@@ -410,58 +421,46 @@ class SegmentFrameExtractor(beam__common.PipelinePcollElementProcessor):
     )
 
 
-class CorpusDocumentFileProcessor(beam.DoFn):
-  def __init__(self, label=""):
+def process_corpus_document(corpus_readable_file, d_pl_options, label, ref_CorpusDocumentFileProcessor):
+  xml_db_path = str(corpus_readable_file.metadata.path)
+  xml_db_fname = xml_db_path.split(os.path.sep)[-1].strip()
+  # f = beam.io.filesystems.FileSystems.open(xml_db_path)
+  f = fileio.open_file_read(xml_db_path)
+  if sys.version_info >= (3,0):
+    f = io.TextIOWrapper(f)
+  xml_lines_with_cr = f.readlines()
+  f.close()
+  # encode each row to bytes
+  raw_xml_b64 = base64.b64encode("".join([xml_line.replace('\n','').strip() for xml_line in xml_lines_with_cr]).encode('ascii')) # we end up with a string containing the base-64 encoded "characters"
+  # debug
+  # print(f"length of (base-64 encoded) XML document {xml_db_fname}: {len(raw_xml_b64)}")
+  row = beam.Row(
+    # SCHEMA_COL_NAMES__CORPUS_DS = [
+    #   'DocumentID',
+    #   'Filename',
+    #   'XML_B64',
+    #   'LEN'
+    # ]
+    DocumentID=int(ref_CorpusDocumentFileProcessor.next_doc_id),
+    Filename=xml_db_fname,
+    XML_B64=raw_xml_b64,
+    LEN=len(raw_xml_b64)
+  )
+  ref_CorpusDocumentFileProcessor.next_doc_id += 1
+  fileio.delete_file(xml_db_path, d_pl_options)
+  # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.ERROR:
+  print(f"PROCESSED/DELETED corpus document {xml_db_path}") # always show this
+  return [row]
+
+class CorpusDocumentFileProcessor(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options, label=""):
+    super(CorpusDocumentFileProcessor, self).__init__(
+      fn_pcoll_element_processor=process_corpus_document,
+      kargs={'d_pl_options':d_pl_options,'label':label,'ref_CorpusDocumentFileProcessor':self},
+      return_result=True
+    )
     self.label = label
     self.next_doc_id = 0
-
-  def process(self, corpus_readable_file):
-    xml_db_path = str(corpus_readable_file.metadata.path)
-    xml_db_fname = xml_db_path.split(os.path.sep)[-1].strip()
-    f = beam.io.filesystems.FileSystems.open(xml_db_path)
-    if sys.version_info >= (3,0):
-      f = io.TextIOWrapper(f)
-    xml_lines_with_cr = f.readlines()
-    f.close()
-    # encode each row to bytes
-    raw_xml_b64 = base64.b64encode("".join([xml_line.replace('\n','').strip() for xml_line in xml_lines_with_cr]).encode('ascii')) # we end up with a string containing the base-64 encoded "characters"
-    # debug
-    # print(f"length of (base-64 encoded) XML document {xml_db_fname}: {len(raw_xml_b64)}")
-    row = beam.Row(
-      # SCHEMA_COL_NAMES__CORPUS_DS = [
-      #   'DocumentID',
-      #   'Filename',
-      #   'XML_B64',
-      #   'LEN'
-      # ]
-      DocumentID=int(self.next_doc_id),
-      Filename=xml_db_fname,
-      XML_B64=raw_xml_b64,
-      LEN=len(raw_xml_b64)
-    )
-    self.next_doc_id += 1
-    fileio.delete_file(xml_db_path)
-    # if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.ERROR:
-    print(f"PROCESSED/DELETED corpus document {xml_db_path}") # always show this
-    return [row]
-
-
-# def load_corpus_index_csv(d_corpus_info):
-#   """
-#   this function simply wraps the call to load_csv() to produce a "schema'd" pcoll
-#   so we fix the definition of dict_field_names to fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS
-
-#   d_corpus_info: {
-#     'corpus_index_csv_path': fidscs_globals.CORPUS_DS_PATH,
-#     'max_len': fidscs_globals.MAX_RAW_XML_B64_LEN
-#   }
-#   """
-#   return load_csv(
-#     d_corpus_info['corpus_index_csv_path'], 
-#     rows_to_dicts=True, 
-#     dict_field_names=fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS,
-#     max_len=d_corpus_info['max_len']+4 # note that we need 4 more bytes since due to base-64 encoding
-#   )
   
 
 class RowIndexer(beam.DoFn):
@@ -504,6 +503,14 @@ def decode_XML(corpus_index_schemad_pcoll_row):
       'LEN': len(raw_xml)
     }
   ]
+
+class SSXMLDecoder(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options, label=""):
+    super(SSXMLDecoder, self).__init__(
+      fn_pcoll_element_processor=decode_XML,
+      kargs={'d_pl_options':d_pl_options,'label':label},
+      return_result=True
+    )
 
 
 def assign_to_global__raw_xml_b64_max_len(max_xml_b64_len):
@@ -583,11 +590,11 @@ def pl__1__bootstrap_target_video_index(pl):
             # 4. final path to the selected videx index csv
             #   (note that the dict is not laid out in the above order)
           {
-            'vid_indexes_dir': pl._options._all_options['fidscs_capstone_video_indexes_dir'], 
-            'sel_vid_index_path': pl._options._all_options['fidscs_capstone_selected_video_index_path'], 
+            'vid_indexes_dir': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_INDEXES_DIR], 
+            'sel_vid_index_path': pl._options._all_options[fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH], 
             'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
-            'tmp_dir': pl._options._all_options['fidscs_capstone_tmp_dir'],
-            'video_ds_path': pl._options._all_options['fidscs_capstone_video_ds_path']
+            'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
+            'video_ds_path': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DS_PATH]
           }
         ]
       )
@@ -644,14 +651,10 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, d_pl_
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, d_pl_options):
   max_target_videos = d_pl_options[fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS]
   # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: BEGIN ********************
-  # return (
-  #   full_target_vid_index_schemad_pcoll
-  #   | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(max_target_videos) if max_target_videos is not None and max_target_videos>0 else ''}")
-  # )
   if max_target_videos is not None and max_target_videos>0:
-    return \
-      beam__common.pl__X__subset_pcoll(full_target_vid_index_schemad_pcoll, "full_target_vid_index_schemad_pcoll", max_target_videos) if max_target_videos is not None and max_target_videos>0 \
-        else full_target_vid_index_schemad_pcoll
+    return beam__common.pl__X__subset_pcoll(full_target_vid_index_schemad_pcoll, "full_target_vid_index_schemad_pcoll", max_target_videos)
+  else:
+    return full_target_vid_index_schemad_pcoll
   # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: END ********************
 
 
@@ -662,31 +665,30 @@ def pl__1__bootstrap_corpus_index(pl):
     | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
         [
           {
-            'tmp_dir': fidscs_globals.TMP_DIR,
+            'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
             'corpus_archive': fidscs_globals.CORPUS_ARCHIVE
           }
         ]
       )
-    | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
-    | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(
-          corpus_docs_dir=str(x)
-        )
-      )
+    # | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    | "Beam PL: bootstrap SignStream corpus" >> beam.ParDo(SignstreamCorpusBootstrapper(pl._options._all_options)) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(corpus_docs_dir=str(x)))
   )
   return corpus_documents_dir_path_schemad_pcoll
   # ******************** bootstrap SignStream corpus: END ********************
 
 
 def pl__1__corpus_document_file_structure_to_corpus_index(pl):
+  tmp_dir = pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]
   return (
     pl
-    | "Beam PL: get corpus documents" >> beam.io.fileio.MatchFiles(fileio.path_join(fileio.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
+    | "Beam PL: get corpus documents" >> beam.io.fileio.MatchFiles(fileio.path_join(fileio.path_join(tmp_dir, fidscs_globals.CORPUS_ARCHIVE.split('.')[0]), "*"))
     | "Beam PL: read corpus documents" >> beam.io.fileio.ReadMatches() # this results in a pcoll of fileio.ReadableFile objects
-    | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor())
+    | "Beam PL: create corpus index dataset" >> beam.ParDo(CorpusDocumentFileProcessor(pl._options._all_options))
   ) # corpus_index_schemad_pcoll
 
 
-def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_assigner__raw_xml_b64_max_len):
+def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_assigner__raw_xml_b64_max_len, d_pl_options):
   corpus_index_pcoll = (
     corpus_index_schemad_pcoll
     | "Beam PL: extract (<corpus doc id>, <corpus doc filename>, <xml (base-64)>, <length of xml (base-64)>)" >> beam.Map(
@@ -728,7 +730,8 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
     sorted_corpus_index_csv_rows_pcoll, 
     "CORPUS-INDEX", 
     fidscs_globals.CORPUS_DS_FNAME, 
-    fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS
+    fidscs_globals.SCHEMA_COL_NAMES__CORPUS_DS,
+    d_pl_options
   )
 
   max_xml_b64_len = (
@@ -738,19 +741,21 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
     # debug
     # | "Beam PL: print max (b64-encoded) length corpus doc" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="MAX (b64-encoded) DOC LENGTH"))
   )
-  corpus_index_csv_path_indexed = (
-    corpus_index_csv_path
-    | "Beam PL: apply RowIndex to corpus index csv path" >> beam.ParDo(RowIndexer(var_name_prefix="corpus_index_csv_path_id"))
-    # debug
-    # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
-  )
+  # corpus_index_csv_path_indexed = (
+  #   corpus_index_csv_path
+  #   | "Beam PL: apply RowIndex to corpus index csv path" >> beam.ParDo(RowIndexer(var_name_prefix="corpus_index_csv_path_id"))
+  #   # debug
+  #   # | "Beam PL: print indexed path to corpus index csv" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED CORPUS INDEX CSV PATH"))
+  # )
+  corpus_index_csv_path_indexed = beam__common.pl__X__index_pcoll(corpus_index_csv_path, "corpus_index_csv_path")
   max_xml_b64_len_indexed = (
     max_xml_b64_len
     | "Beam PL: assign to global var (fidscs_globals.MAX_RAW_XML_B64_LEN)" >> beam.ParDo(global_var_value_assigner__raw_xml_b64_max_len) 
-    | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer(var_name_prefix="max_xml_b64_len_id"))
+    # | "Beam PL: apply RowIndex to maxlen" >> beam.ParDo(RowIndexer(var_name_prefix="max_xml_b64_len_id"))
     # debug
     # | "Beam PL: print indexed max (b64-encoded) length corpus doc" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="INDEXED MAX (b64-encoded) DOC LENGTH"))
   )
+  max_xml_b64_len_indexed = beam__common.pl__X__index_pcoll(max_xml_b64_len_indexed, "max_xml_b64_len_indexed")
   combined_corpus_index_csv_path_and_max_xml_b64_len_indexed = (
     ({
       'corpus_index_csv_path': corpus_index_csv_path_indexed,
@@ -764,7 +769,7 @@ def pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, global_var_value_a
   return combined_corpus_index_csv_path_and_max_xml_b64_len_indexed
 
 
-def pl__2__decode_XML(corpus_index_schemad_pcoll):
+def pl__2__decode_XML(corpus_index_schemad_pcoll, d_pl_options):
   # each row is of the form {'DocumentID': '37', 'Filename': ' biker.xml', 'XML_B64', 'LEN'}
   """
   corpus_index_schemad_pcoll:
@@ -912,7 +917,7 @@ def pl__5__load_full_vid_index(corpus_index_decoded_XML_pcoll):
   )
 
 
-def pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll):
+def pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll, d_pl_options):
   return (
     corpus_index_decoded_XML_pcoll
     | "Beam PL: parse signstream corpus document" >> beam.Map(parse_signstream_database)
@@ -3798,19 +3803,24 @@ def run(
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
   job_suffix = 'boostrap-vid-index'
+  job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  print(f"****************************** Starting pipeline job: {job_name} ******************************")
   options.update({
-    'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+    'job_name': job_name
   })
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
   print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   with beam.Pipeline(options=pipeline_options) as pl:
     full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
     pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, pl._options._all_options)
+  print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
 
   job_suffix = 'download-videos-extract-frames'
+  job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
   options.update({
-    'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+    'job_name': job_name
   })
   pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
   print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
@@ -3819,46 +3829,57 @@ def run(
     filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, pl._options._all_options)
     merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, pl._options._all_options, n_partitions)
     merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, pl._options._all_options, n_partitions)
+  print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
 
-  # job_suffix = 'bootstrap-corpus-index'
-  # options.update({
-  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
-  # })
-  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
-  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   pl__1__bootstrap_corpus_index(pl)
-  # # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
-  # #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
-  # #   for reading yet
-  # job_suffix = 'transform-corpus-documents-to-index'
-  # options.update({
-  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
-  # })
-  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
-  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
-  #   pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
+  job_suffix = 'bootstrap-corpus-index'
+  job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
+  options.update({
+    'job_name': job_name
+  })
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+  with beam.Pipeline(options=pipeline_options) as pl:
+    pl__1__bootstrap_corpus_index(pl)
+  print(f"****************************** Finished pipeline job: {job_name} ******************************")
+  # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
+  #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
+  #   for reading yet
+  job_suffix = 'transform-corpus-documents-to-index'
+  job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
+  options.update({
+    'job_name': job_name
+  })
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+  with beam.Pipeline(options=pipeline_options) as pl:
+    corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
+    pl__2__write_corpus_index_csv(
+      corpus_index_schemad_pcoll, 
+      beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len),
+      pl._options._all_options
+    )
+  print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
 
-  # job_suffix = 'transform-ss-xml-to-datasets'
-  # options.update({
-  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
-  # })
-  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
-  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-  #   corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
-  #   corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll)
-  #   ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll)
+  job_suffix = 'transform-ss-xml-to-datasets'
+  job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
+  options.update({
+    'job_name': job_name
+  })
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
+    corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll, pl._options._all_options)
+    ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll, pl._options._all_options)
 
-  #   # pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll)
-
-  #   asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll)
-  #   pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll)
+    # asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll, pl._options._all_options)
+    # pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll, pl._options._all_options)
 
   #   document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
   #     ss_parsed_xmldb_pcoll, 
@@ -3900,6 +3921,7 @@ def run(
   #     document_asl_consultant_target_video_frame_index_schemad_pcoll
   #   )
   #   pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
+  print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
 
   # job_suffix = 'remove-intermediate-files'
