@@ -989,8 +989,8 @@ def validate_preprocess_participant_to_asl_consultant_id(tpl_participant_info_gr
       return [tpl_participant_info_grouped_by_name] # passthrough
       
 
-def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
-  return (
+def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll, d_pl_options):
+  validated_mapping = (
     ss_parsed_xmldb_pcoll
     | "Beam PL: extract/transform participant records list" >> beam.Map(
       lambda d_ss_parsed_xmldb_entry: [
@@ -1010,9 +1010,10 @@ def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
     # the above produces tuples of the form:
     #   (<participant name>, [(<participant age (as string)>, participant_gender)])
     | "Beam PL: validate/preprocess participant_to_asl_consultant_id mapping" >> beam.FlatMap(validate_preprocess_participant_to_asl_consultant_id) # outputs (<participant name>, <participant age (most recent)>, <participant gender>)
-    | "Beam PL: apply RowIndex to validated participant-name-to-participant-object mapping" >> beam.ParDo(RowIndexer(var_name_prefix="asl_consultant_id")) 
-    # the above produces tuples of the form:
-    #   (<asl consultant id (unique)>, (participant name>, <participant age (most recent)>, <participant gender>))
+  )
+  indexed_validated_mapping = beam__common.pl__X__index_pcoll(validated_mapping, "validated_mapping")
+  return (
+    indexed_validated_mapping
     | "Beam PL: apply schema to particpant_list pcoll" >> beam.Map(lambda tpl_asl_consultant_id_validated_participant_info: beam.Row(
         # SCHEMA_COL_NAMES__ASL_CONSULTANT_DS = [
         #   'ASLConsultantID',
@@ -1028,10 +1029,50 @@ def pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll):
     )
     # debug
     # | "Beam PL: print asl_consultant_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="asl_consultant_index_schemad_pcoll entry"))
-  )
+  ) # asl_consultant_index_schemad_pcoll
+
+  # return (
+  #   ss_parsed_xmldb_pcoll
+  #   | "Beam PL: extract/transform participant records list" >> beam.Map(
+  #     lambda d_ss_parsed_xmldb_entry: [
+  #       (
+  #         d_participant['PARTICIPANT_NAME'],
+  #         (
+  #           d_participant['PARTICIPANT_AGE'],
+  #           d_participant['PARTICIPANT_GENDER']
+  #         )
+  #       ) for d_participant in d_ss_parsed_xmldb_entry['PARTICIPANT_SEQUENCE']
+  #     ]
+  #   )
+  #   | "Beam PL: 'explode' participant list into pcoll of individual participant records, keyed by name" >> beam.FlatMap(lambda participant_tpl: participant_tpl)
+  #   # debug
+  #   # | "Beam PL: print participant record for document" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="participant record"))
+  #   | "Beam PL: group participants keyed by named" >> beam.GroupByKey()
+  #   # the above produces tuples of the form:
+  #   #   (<participant name>, [(<participant age (as string)>, participant_gender)])
+  #   | "Beam PL: validate/preprocess participant_to_asl_consultant_id mapping" >> beam.FlatMap(validate_preprocess_participant_to_asl_consultant_id) # outputs (<participant name>, <participant age (most recent)>, <participant gender>)
+  #   | "Beam PL: apply RowIndex to validated participant-name-to-participant-object mapping" >> beam.ParDo(RowIndexer(var_name_prefix="asl_consultant_id")) 
+  #   # the above produces tuples of the form:
+  #   #   (<asl consultant id (unique)>, (participant name>, <participant age (most recent)>, <participant gender>))
+  #   | "Beam PL: apply schema to particpant_list pcoll" >> beam.Map(lambda tpl_asl_consultant_id_validated_participant_info: beam.Row(
+  #       # SCHEMA_COL_NAMES__ASL_CONSULTANT_DS = [
+  #       #   'ASLConsultantID',
+  #       #   'Name',
+  #       #   'Age',
+  #       #   'Gender'
+  #       # ]
+  #       ASLConsultantID=int(tpl_asl_consultant_id_validated_participant_info[0]),
+  #       Name=str(tpl_asl_consultant_id_validated_participant_info[1][0]),
+  #       Age=int(tpl_asl_consultant_id_validated_participant_info[1][1]),                  
+  #       Gender=str(tpl_asl_consultant_id_validated_participant_info[1][2])
+  #     )
+  #   )
+  #   # debug
+  #   # | "Beam PL: print asl_consultant_index_schemad_pcoll" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="asl_consultant_index_schemad_pcoll entry"))
+  # )
 
 
-def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
+def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll, d_pl_options):
   sorted_asl_consultant_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(asl_consultant_index_schemad_pcoll, pcoll_label="asl_consultant_index")
   sorted_asl_consultant_index_csv_rows_pcoll = (
     sorted_asl_consultant_index_schemad_pcoll
@@ -1047,8 +1088,9 @@ def pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll):
   return beam__common.pl__X__write_pcoll_to_csv(
     sorted_asl_consultant_index_csv_rows_pcoll, 
     "ASLCONSULTANT-INDEX", 
-    fidscs_globals.ASL_CONSULTANT_DS_FNAME, 
-    fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS
+    fidscs_globals.ASL_CONSULTANT_DS_FNAME,
+    fidscs_globals.SCHEMA_COL_NAMES__ASL_CONSULTANT_DS,
+    d_pl_options
   ) # asl_consultant_index_csv_path
 
 
@@ -3804,7 +3846,7 @@ def run(
 
   job_suffix = 'boostrap-vid-index'
   job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
-  print(f"****************************** Starting pipeline job: {job_name} ******************************")
+  print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
   options.update({
     'job_name': job_name
   })
@@ -3878,8 +3920,8 @@ def run(
     corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll, pl._options._all_options)
     ss_parsed_xmldb_pcoll = pl__3__parse_signstream_database(corpus_index_decoded_XML_pcoll, pl._options._all_options)
 
-    # asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll, pl._options._all_options)
-    # pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll, pl._options._all_options)
+    asl_consultant_index_schemad_pcoll = pl__4__create_asl_consultant_index_schemad_pcoll(ss_parsed_xmldb_pcoll, pl._options._all_options)
+    pl__5__write_asl_consultant_index_csv(asl_consultant_index_schemad_pcoll, pl._options._all_options)
 
   #   document_asl_consultant_index_schemad_pcoll = pl__5__create_document_asl_consultant_index_schemad_pcoll(
   #     ss_parsed_xmldb_pcoll, 
