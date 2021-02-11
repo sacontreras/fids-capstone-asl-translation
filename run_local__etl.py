@@ -56,6 +56,30 @@ if __name__ == '__main__':
     help=""
   )
 
+  parser.add_argument(
+    '--beam-gcp-project',
+    default=None,
+    help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
+  )
+
+  parser.add_argument(
+    '--beam-gcp-region',
+    default=None,
+    help='The GCP region of the bucket.'
+  )
+
+  parser.add_argument(
+    '--beam-gcp-dataflow-job-name',
+    default=None,
+    help='The name of the GCP Dataflow job to create.'
+  )
+
+  parser.add_argument(
+    '--beam-gcp-dataflow-setup-file',
+    default=None,
+    help='The path to the setup.py file (used by Apache Beam worker nodes).'
+  )
+
   args = parser.parse_args()
   print(f"args: {args}")
 
@@ -63,5 +87,9 @@ if __name__ == '__main__':
     max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
     work_dir=args.work_dir,
     use_beam=args.use_beam,
-    beam_runner='DirectRunner'
+    beam_runner='DirectRunner',
+    beam_gcp_project=args.beam_gcp_project,
+    beam_gcp_region=args.beam_gcp_region,
+    beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,
+    beam_gcp_dataflow_setup_file=args.beam_gcp_dataflow_setup_file
   )

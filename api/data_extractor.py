@@ -18,6 +18,7 @@ import os
 
 import tensorflow as tf
 from apache_beam.io.gcp import gcsio
+from apache_beam.io.gcp.internal.clients import storage
 
 from api import beam__common, fidscs_globals, fileio
 
@@ -43,6 +44,10 @@ def run(
 
   fidscs_globals.WORK_DIR = work_dir
   print(f"fidscs_globals.WORK_DIR: {fidscs_globals.WORK_DIR}")
+  # test
+  ENV_VAR_NAME__WORK_DIR = 'FIDS_CAPSTONE__WORK_DIR'
+  # test
+  os.environ[fidscs_globals.ENV_VAR_NAME__WORK_DIR] = work_dir
 
   if work_dir[0:5]=='gs://':
     data_path_segments = work_dir[5:].split('/')
@@ -54,20 +59,23 @@ def run(
     fidscs_globals.GCS_CLIENT = gcs.Client.from_service_account_json(gcp_auth_key_path)
     fidscs_globals.GCS_BUCKET = gcs.Bucket(fidscs_globals.GCS_CLIENT, name=gcs_bucket, user_project=beam_gcp_project)
     print(f"fidscs_globals.GCS_BUCKET: {fidscs_globals.GCS_BUCKET}")
-    fidscs_globals.GCS_IO = gcsio.GcsIO(storage_client=fidscs_globals.GCS_CLIENT)
+    # fidscs_globals.GCS_IO = gcsio.GcsIO(storage_client=fidscs_globals.GCS_CLIENT) # CANNOT USE gcs.Client, MUST BE apache_beam.io.gcp.internal.clients.storage
+    fidscs_globals.GCS_IO = gcsio.GcsIO() # will retrieve creds implicitly but must be previously authenticated via Google Cloud SDK (via shell/bash)
     print(f"fidscs_globals.GCS_IO: {fidscs_globals.GCS_IO}")
 
     beam_gcs_staging_bucket = fileio.path_join(fidscs_globals.WORK_DIR, 'dataflow/staging')
     beam_gcs_temp_location = fileio.path_join(fidscs_globals.WORK_DIR, 'dataflow/tmp')
   
   fidscs_globals.DATA_ROOT_DIR = fileio.path_join(work_dir, 'data')
+  # test
+  os.environ[fidscs_globals.ENV_VAR_NAME__DATA_ROOT_DIR] = fidscs_globals.DATA_ROOT_DIR
   print(f"fidscs_globals.DATA_ROOT_DIR: {fidscs_globals.DATA_ROOT_DIR}")
-  if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR):
+  if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR)[0]:
     fileio.make_dirs(fidscs_globals.DATA_ROOT_DIR)
 
   fidscs_globals.TMP_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'tmp')
   print(f"fidscs_globals.TMP_DIR: {fidscs_globals.TMP_DIR}")
-  if not fileio.path_exists(fidscs_globals.TMP_DIR):
+  if not fileio.path_exists(fidscs_globals.TMP_DIR)[0]:
     fileio.make_dirs(fidscs_globals.TMP_DIR)
 
   fidscs_globals.CORPUS_DIR = fileio.path_join(fidscs_globals.TMP_DIR, fidscs_globals.CORPUS_BASE)
@@ -104,12 +112,12 @@ def run(
   if not beam__common.dataset_csv_files_exist():
     fidscs_globals.VIDEO_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'videos')
     print(f"fidscs_globals.VIDEO_DIR: {fidscs_globals.VIDEO_DIR}")
-    if not fileio.path_exists(fidscs_globals.VIDEO_DIR):
+    if not fileio.path_exists(fidscs_globals.VIDEO_DIR)[0]:
       fileio.make_dirs(fidscs_globals.VIDEO_DIR)
 
     fidscs_globals.STICHED_VIDEO_FRAMES_DIR = fileio.path_join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
     print(f"fidscs_globals.STICHED_VIDEO_FRAMES_DIR: {fidscs_globals.STICHED_VIDEO_FRAMES_DIR}")
-    if not fileio.path_exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR):
+    if not fileio.path_exists(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)[0]:
       fileio.make_dirs(fidscs_globals.STICHED_VIDEO_FRAMES_DIR)
 
 
@@ -169,6 +177,7 @@ def run(
     if use_beam:
       from api import data_extractor__beam
       data_extractor__beam.run(
+        work_dir=work_dir,
         beam_runner=beam_runner, 
         beam_gcp_project=beam_gcp_project,
         beam_gcp_region=beam_gcp_region,

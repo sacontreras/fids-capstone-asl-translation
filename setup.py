@@ -26,27 +26,8 @@ class build(_build):  # pylint: disable=invalid-name
   sub_commands = _build.sub_commands + [('CustomCommands', None)]
 
 
-s_cmd_1 = "echo 'deb http://packages.cloud.google.com/apt gcsfuse-bionic main' > /etc/apt/sources.list.d/gcsfuse.list"
-s_cmd_2 = "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -"
-s_cmd_3 = "apt -qq update"
-s_cmd_4 = "apt -qq install gcsfuse"
-
 CUSTOM_COMMANDS = [
-    ['echo', f'\nrunning command: "{s_cmd_1}"...'],
-    ['sudo', 'echo', '"deb http://packages.cloud.google.com/apt gcsfuse-bionic main"', '>', '/etc/apt/sources.list.d/gcsfuse.list'],
-    ['echo', '\tDONE!\n'],
-
-    ['echo', f'\nrunning command: "{s_cmd_2}"...'],
-    ['sudo', 'curl', 'https://packages.cloud.google.com/apt/doc/apt-key.gpg', '|', 'apt-key', 'add', '-'],
-    ['echo', '\tDONE!\n'],
-
-    ['echo', f'\nrunning command: "{s_cmd_3}"...'],
-    ['sudo', 'apt', '-qq', 'update'],
-    ['echo', '\tDONE!\n'],
-
-    ['echo', f'\nrunning command: "{s_cmd_4}"...'],
-    ['sudo', 'apt', '-qq', 'install', 'gcsfuse'],
-    ['echo', '\tDONE!\n']
+    ['echo', 'no custom commands to execute']
 ]
 class CustomCommands(setuptools.Command):
   """A setuptools Command class able to run arbitrary commands."""
@@ -77,17 +58,19 @@ class CustomCommands(setuptools.Command):
 
 
 REQUIRED_PACKAGES = [
-    'google-auth==1.21.1',
-    'apache-beam[gcp]==2.25.*',
-    'apache-beam[interactive]==2.25.*',
-    'tensorflow-transform==0.26.0',
-    'tensorflow==2.3.0',
-    'avro-python3==1.8.1',
-    'opencv-python==4.4.0.46',
-    'protobuf==3.13.0',
-    'absl-py==0.10.0',
-    'numpy==1.18.5',
-    'tqdm==4.56.0'
+    'google-auth',
+    'google-cloud-storage',
+    'apache-beam[gcp]',
+    'apache-beam[interactive]',
+    'tensorflow-transform',
+    'tensorflow',
+    'avro-python3',
+    # 'opencv-python',
+    'opencv-python-headless', # per stackflow post https://stackoverflow.com/a/63978454
+    'protobuf',
+    'absl-py',
+    'numpy',
+    'tqdm'
 ]
 
 setuptools.setup(
@@ -100,7 +83,7 @@ setuptools.setup(
     cmdclass={
         # Command class instantiated and run during pip install scenarios.
         'build': build,
-        # 'CustomCommands': CustomCommands,
+        'CustomCommands': CustomCommands,
     }
-    # , include_package_data=True
+    , include_package_data=True
 )

@@ -22,9 +22,8 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
     print()
 
   f = None
+  memfile = BytesIO()
   try:
-    memfile = BytesIO()
-
     file_size_dl = 0
     fblocks = range(0, file_size, block_sz)
     if nested_tqdm_pb is None:
@@ -45,12 +44,12 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
 
     memfile.seek(0)
     with fileio.open_file_write(local_fname) as f:
-      f.write(memfile.getvalue())
+      f.write(memfile.getbuffer())
   finally:
     if f is not None:
       f.close()
+    memfile.close()
 
-  # file_size_local = os.path.getsize(f.name)
   file_size_local = fileio.get_file_size(local_fname)
   if file_size_local != file_size:
       raise ValueError(f"URL file {url} is {file_size} bytes but we only downloaded {file_size_local} bytes to local file {local_fname}.")
@@ -61,7 +60,6 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
   return nested_tqdm_pb
 
 
-# def download_to_memfile(url, block_sz=8192, display=False, nested_tqdm_pb=None):
 def download_to_memfile(url, block_sz=8192, display=False):
   http_file = urllib.request.urlopen(url)
   if http_file.getcode() != 200:
@@ -78,13 +76,6 @@ def download_to_memfile(url, block_sz=8192, display=False):
 
   file_size_dl = 0
   fblocks = range(0, file_size, block_sz)
-  # if nested_tqdm_pb is None:
-  #   tqdm_pb = tqdm(fblocks, disable=not display)
-  # else:
-  #   tqdm_pb = nested_tqdm_pb
-  #   tqdm_pb.leave = True
-  # tqdm_pb.reset(total=file_size)
-  # tqdm_pb.refresh(nolock=False)
   for fblock in fblocks: 
       buffer = http_file.read(block_sz)
       if not buffer:
@@ -92,7 +83,6 @@ def download_to_memfile(url, block_sz=8192, display=False):
       n_bytes = len(buffer)
       file_size_dl += n_bytes
       memfile.write(buffer)
-      # tqdm_pb.update(n_bytes)
 
   memfile.seek(0)
 
@@ -102,7 +92,6 @@ def download_to_memfile(url, block_sz=8192, display=False):
     if display:
       print(f"Successfully downloaded {file_size_dl}/{file_size} bytes from URL file {url}!")
   
-  # return memfile, nested_tqdm_pb
   return memfile
 
 
@@ -141,11 +130,14 @@ def boostrap_target_video_index(d_vid_indexes_info):
   # print(f"we need to pull {sel_vid_index_path_suffix} out of in-memory extracted archive")
   bytes_unzipped = zip_ref.read(sel_vid_index_path_suffix)
   zip_ref.close()
-  if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir']):
+  if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir'])[0]:
+    print()
     fileio.make_dirs(d_vid_indexes_info['vid_indexes_dir'])
   with fileio.open_file_write(d_vid_indexes_info['vid_indexes_dir']+'/'+sel_vid_index_fname) as f:
     f.write(bytes_unzipped)
     f.close()
+  memfile.close()
+
   print(f"\tDONE")
   
   return d_vid_indexes_info['sel_vid_index_path']

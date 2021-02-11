@@ -10,7 +10,7 @@ import apache_beam.transforms.sql
 import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from api import beam__common, fidscs_globals
+from api import beam__common, fidscs_globals, fileio
 
 
 def pl__2__get_keys__train_val_split_candidates(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):
@@ -1028,7 +1028,7 @@ def pl__6__write_complete_utterances_from_train_val_tokens(complete_utterances__
 
 def run(data_dir):
     fidscs_globals.DATA_ROOT_DIR = data_dir
-    if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR) or len(fileio.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
+    if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR)[0] or len(fileio.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
         return
     fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')

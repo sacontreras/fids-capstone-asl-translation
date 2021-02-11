@@ -12,113 +12,6 @@ from tensorflow.python.lib.io.file_io import FileIO
 
 from api import fidscs_globals, fileio
 
-# def dir_path_to_pattern(path):
-#   if path[-2:] != '/*':
-#     if path[-1] == '/':
-#       path += '*'
-#     else:
-#       path += '/*'
-#   return path
-
-# def gcs_correct_dir_path_form(dir_path, strip_prefix=False):
-#   if not dir_path.endswith('/'):
-#     dir_path += '/'
-#   if strip_prefix and dir_path[0:len(fidscs_globals.WORK_DIR)] == fidscs_globals.WORK_DIR:
-#     dir_path = dir_path[len(fidscs_globals.WORK_DIR)+1:]
-#   return dir_path
-
-
-# def path_join(path, endpoint):
-#   return FileSystems.join(path, endpoint)
-
-# def path_exists(path):
-#   return FileSystems.exists(gcs_correct_dir_path_form(path) if fidscs_globals.GCS_CLIENT is not None else path)
-
-
-# def list_dir(dir_path, exclude_subdir=False):
-#   if fidscs_globals.GCS_CLIENT is not None:
-#     gcs_form_dir_path = gcs_correct_dir_path_form(dir_path, strip_prefix=True)
-#     blobs_in_dir = list(fidscs_globals.GCS_CLIENT.list_blobs(fidscs_globals.GCS_BUCKET.name, prefix=gcs_form_dir_path))
-#     if len(blobs_in_dir)==1 and blobs_in_dir[0].name==gcs_form_dir_path:
-#       blobs_in_dir = []
-#     else:
-#       blobs_in_dir = [blob_in_dir.name for blob_in_dir in blobs_in_dir]
-#     if gcs_form_dir_path in blobs_in_dir:
-#       del blobs_in_dir[blobs_in_dir.index(gcs_form_dir_path)]
-#     blob_paths_in_dir = [blob_path_in_dir[len(gcs_form_dir_path):] for blob_path_in_dir in blobs_in_dir]
-#     if exclude_subdir:
-#       blob_paths_in_dir = list(filter(lambda blob_path_in_dir: not blob_path_in_dir.endswith('/'), blob_paths_in_dir))
-#     return blob_paths_in_dir
-#   else:
-#     return tf.io.gfile.listdir(dir_path)
-
-
-# def make_dirs(path):
-#   if fidscs_globals.GCS_CLIENT:
-#     gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
-#     blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
-#     blob_path_create_result = blob_path.upload_from_string('', content_type='application/x-www-form-urlencoded;charset=UTF-8')
-#     # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)}")
-#     return blob_path_create_result
-#   else:
-#     return FileSystems.mkdirs(path)
-
-
-# def open_file_read(fpath):
-#   if fidscs_globals.GCS_CLIENT:
-#     gcs_form_path = gcs_correct_dir_path_form(fpath, strip_prefix=True)
-#     return fidscs_globals.GCS_IO.open(gcs_form_path)
-#   else:
-#     return FileSystems.open(fpath)
-
-
-# def open_file_write(fpath):
-#   if fidscs_globals.GCS_CLIENT:
-#     # gcs_form_path = gcs_correct_dir_path_form(fpath, strip_prefix=True)
-#     return fidscs_globals.GCS_IO.open(fpath, mode='w')
-#   else:
-#     return FileSystems.create(fpath)
-
-
-# def delete_paths(paths):
-#   return FileSystems.delete(paths)
-
-
-# def delete_file(path, recursive=False):
-#   if fidscs_globals.GCS_CLIENT:
-#     # print(f"delete_file (debug): path: {path}, recursive: {recursive}")
-#     if recursive:
-#       child_paths = list_dir(path, exclude_subdir=False)
-#       for child_path in child_paths:
-#         child_path = gcs_correct_dir_path_form(path, strip_prefix=True)+child_path
-#         delete_file(child_path, recursive=True)
-#     blob_path = fidscs_globals.GCS_BUCKET.blob(path)
-#     exists = blob_path.exists(fidscs_globals.GCS_CLIENT)
-#     if exists:
-#       # print(f"\n{path}: {blob_path}, exists: True (before delete attempt)")
-#       blob_path_delete_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
-#       # print(f"\n{path}: {blob_path}, exists: {blob_path.exists(fidscs_globals.GCS_CLIENT)} (before delete attempt)\n")
-#       return blob_path_delete_result
-#     else:
-#       gcs_form_path = gcs_correct_dir_path_form(path, strip_prefix=True)
-#       blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
-#       exists = blob_path.exists(fidscs_globals.GCS_CLIENT)
-#       if exists:
-#         blob_path_delete_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
-#         return blob_path_delete_result
-#       else:
-#         return True
-#   else:
-#     return delete_paths([path])
-
-
-# def get_file_size(fpath):
-#   if fidscs_globals.GCS_CLIENT:
-#     return fidscs_globals.GCS_IO.size(fpath)
-#   else:
-#     return FileIO(fpath, "rb").size()
-
-
 
 class PipelinePcollElementProcessor(beam.DoFn):
   def __init__(self, fn_pcoll_element_processor, kargs=None, return_result=False):
@@ -128,7 +21,8 @@ class PipelinePcollElementProcessor(beam.DoFn):
 
   def process(self, pcoll_element):
     result = self.fn_pcoll_element_processor(pcoll_element, **self.kargs) if self.kargs is not None else self.fn_pcoll_element_processor(pcoll_element)
-    return result if self.return_result else [pcoll_element]
+    ret_val = result if self.return_result else [pcoll_element]
+    return ret_val
 
 
 def print_element(pcoll_element, label="", msg=""):
@@ -172,7 +66,7 @@ def dataset_csv_files_exist(dataset_csv_paths=None):
       fidscs_globals.VOCABULARY_DS_PATH
     ]
   for dataset_csv_path in dataset_csv_paths:
-    if not fileio.path_exists(dataset_csv_path):
+    if not fileio.path_exists(dataset_csv_path)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -191,7 +85,7 @@ def train_val_csv_files_exist(train_val_csv_paths=None):
       fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH
     ]
   for train_val_csv_path in train_val_csv_paths:
-    if not fileio.path_exists(train_val_csv_path):
+    if not fileio.path_exists(train_val_csv_path)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -267,12 +161,17 @@ def pl__X__rmdir(path, path_label):
   )
 
 
+def pl__0__init_globals(pl):
+  pass
+
+
 def sort_keyed_tuple_data(keyed_tuple):
   """
   keyed_tuple:
     (<key>, <data to be sorted (must be a list)>)
   """
-  (key, data_list) = keyed_tuple
+  key = keyed_tuple[0]
+  data_list = list(keyed_tuple[1])
   data_list.sort() # in-place
   return data_list # now sorted
 
@@ -291,11 +190,14 @@ def beam_row_to_csv_string(row):
   d_row = row.as_dict()
   return ", ". join([str(d_row[k]).replace(',','') for k in d_row.keys()])
   
-def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
+def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names, d_pl_options=None):
   return (
     pcoll
     | f"Beam PL: write {pcoll_label} to storage as csv" >> beam.io.WriteToText(
-        fileio.path_join(fidscs_globals.DATA_ROOT_DIR, csv_fname.split('.')[0]), 
+        fileio.path_join(
+          fidscs_globals.DATA_ROOT_DIR if d_pl_options is None else d_pl_options['fidscs_capstone_data_dir'], 
+          csv_fname.split('.')[0]
+        ), 
         file_name_suffix=".csv", 
         append_trailing_newlines=True,
         shard_name_template="",
@@ -308,7 +210,15 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names):
 def pl__1__read_target_vid_index_csv(pl):
   return (
     pl
-    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create([fileio.path_join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv')])
+    | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create(
+        [
+          fileio.path_join(
+            # fidscs_globals.DATA_ROOT_DIR,
+            pl._options._all_options['fidscs_capstone_data_dir'], 
+            fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv'
+          )
+        ]
+      )
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(load_vid_index_csv) # outputs another pcoll but with each row as dict
     | "Beam PL: apply schema to video index pcoll" >> beam.Map(lambda x: beam.Row(
           target_video_filename=str(urllib.parse.quote(x[fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX[0]])),  # We MUST URL encode filenames since some of them sloppily contain spaces!

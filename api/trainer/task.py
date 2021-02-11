@@ -8,8 +8,7 @@ import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
 import tensorflow_transform as tft
 
-import beam__common
-import fidscs_globals
+from api import beam__common, fidscs_globals, fileo
 
 options = {
     'project': 'my-project', # change
@@ -23,7 +22,7 @@ print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
 
 def run(data_dir):
     fidscs_globals.DATA_ROOT_DIR = data_dir
-    if not data_extractor__common.path_exists(fidscs_globals.DATA_ROOT_DIR) or len(beam__common.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
+    if not fileo.path_exists(fidscs_globals.DATA_ROOT_DIR)[0] or len(beam__common.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
         print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
         return
     fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
