@@ -8,7 +8,6 @@ import re
 import sys
 import time
 import urllib
-from urllib.request import parse_http_list
 import zipfile
 
 import apache_beam as beam
@@ -18,6 +17,7 @@ import apache_beam.io.fileio
 import apache_beam.transforms.sql
 import cv2
 import numpy as np
+from apache_beam.io.filesystems import FileSystems, GCSFileSystem
 from apache_beam.options.pipeline_options import PipelineOptions
 
 from api import beam__common, data_extractor__common, fidscs_globals, fileio
@@ -123,7 +123,7 @@ def boostrap_signstream_corpus(d_corpus_info, label=""):
 
 
 
-def get_video_segment_download_info(vid_index_schemad_pcoll_row):
+def get_video_segment_download_info(vid_index_schemad_pcoll_row, d_pl_options):
   """
   vid_index_schemad_pcoll_row:
     beam.Row(
@@ -147,28 +147,35 @@ def get_video_segment_download_info(vid_index_schemad_pcoll_row):
     )
   """
   target_video_fname = vid_index_schemad_pcoll_row.target_video_filename
-  target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, target_video_fname.split('.')[0])
+  target_video_frames_dir = fileio.path_join(d_pl_options[fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR], target_video_fname.split('.')[0])
   segment_urls = vid_index_schemad_pcoll_row.compressed_mov_url.split(';') # this can be a list, separated by ';'
   return [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]} for url in segment_urls]
 
+class VideoSegmentInfoGatherer(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options):
+    super(VideoSegmentInfoGatherer, self).__init__(
+      fn_pcoll_element_processor=get_video_segment_download_info,
+      kargs={'d_pl_options':d_pl_options},
+      return_result=True
+    )
 
-def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=fidscs_globals.DOWNLOAD_MAX_FAIL_COUNT, label=""):
+def beam_download_target_video_segment(d_target_vid_seg_download_info, d_pl_options, max_fail=fidscs_globals.DOWNLOAD_MAX_FAIL_COUNT, label=""):
   """
   expects d_target_vid_seg_download_info: {'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': url, 'segment_fname': url.split('/')[-1]}
   """
   segment_url = d_target_vid_seg_download_info['segment_url']
   segment_fname = d_target_vid_seg_download_info['segment_fname']
-  if not fileio.path_exists(fidscs_globals.VIDEO_DIR)[0]:
-    fileio.make_dirs(fidscs_globals.VIDEO_DIR)
-  local_segment_path = fileio.path_join(fidscs_globals.VIDEO_DIR, segment_fname)
+  video_dir = d_pl_options[fidscs_globals.OPT_NAME_VIDEO_DIR]  
+  if not fileio.path_exists(video_dir, d_pl_options)[0]:
+    fileio.make_dirs(video_dir, d_pl_options)
+  local_segment_path = fileio.path_join(video_dir, segment_fname)
   n_fail = 0
-  if not fileio.path_exists(local_segment_path)[0]:
+  if not fileio.path_exists(local_segment_path, d_pl_options)[0]:
     while n_fail < max_fail:
       try:
         memfile = data_extractor__common.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
         memfile.seek(0)
         with fileio.open_file_write(local_segment_path) as f:
-          # f.write(memfile.getvalue())
           f.write(memfile.getbuffer())
           f.close()
         print(f"{label+': ' if len(label)>0 else ''}Downloaded {segment_url} to {local_segment_path}")
@@ -185,36 +192,22 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, max_fail=
     print(f"{label+': ' if len(label)>0 else ''}Found target video ({d_target_vid_seg_download_info['target_video_fname']}) segment {local_segment_path} (downloaded from {segment_url})".format(local_segment_path, segment_url))
   return [d_target_vid_seg_download_info] # passthrough
 
+class VideoSegmentDownloader(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options, label=""):
+    super(VideoSegmentDownloader, self).__init__(
+      fn_pcoll_element_processor=beam_download_target_video_segment,
+      kargs={'d_pl_options':d_pl_options,'label':label},
+      return_result=True
+    )
 
-class VideoSegmentDownloader(beam.DoFn):
-  def __init__(self, label=""):
-    self.label = label
 
-  def process(self, d_target_vid_seg_download_info):
-    return beam_download_target_video_segment(d_target_vid_seg_download_info, label=self.label)
-
-
-def capture_segment_video(vid_segment_path, truly_local_vid_dir, debug=False):
+def capture_segment_video(vid_segment_path, truly_local_vid_dir, d_pl_options, debug=False):
   video_fname = vid_segment_path.split('/')[-1]
 
   truly_local_target_video_frames_dir = None
 
-  if fidscs_globals.GCS_CLIENT:
-    # # then we need to save the video locally - this is especially import (required) for GCP DataFlow workers
-    # truly_local_vid_dir = '~/tmp'+'/'.join(fidscs_globals.VIDEO_DIR.split('/')[1:])
-    # if debug: print(f"\nGCS storage detected! Using truly_local_vid_dir: {truly_local_vid_dir}")
-    # if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, is_dir=True)}")
-
-    # if not fileio.path_exists(truly_local_vid_dir, is_dir=True)[0]:
-    #   if debug: print(f"\tcreating {truly_local_vid_dir}...")
-    #   truly_local_vid_dir_path_segs = truly_local_vid_dir.split('/')
-    #   if debug: print(f"\t\ttruly_local_vid_dir_path_segs: {truly_local_vid_dir_path_segs}")
-    #   s_cum_path = '~'
-    #   for i, truly_local_vid_dir_path_seg in enumerate(truly_local_vid_dir_path_segs[1:]):
-    #     s_cum_path += '/'+truly_local_vid_dir_path_seg
-    #     fileio.make_dirs(s_cum_path)
-    #   if debug: print(f"\t\t{s_cum_path} exists: {fileio.path_exists(s_cum_path, is_dir=True)}")
-
+  fs = FileSystems.get_filesystem(vid_segment_path)
+  if type(fs) == GCSFileSystem:
     if debug: print(f"\n\n\tattempting to open video {vid_segment_path} for reading...")
     with fileio.open_file_read(vid_segment_path) as f:
       if debug: print(f"\t\tSUCCESS")
@@ -226,18 +219,18 @@ def capture_segment_video(vid_segment_path, truly_local_vid_dir, debug=False):
       with fileio.open_file_write(truly_local_vid_segment_path) as f_local:
         f_local.write(buffer)
         f_local.close()
-        print(f"\t\t\tSUCCESS")
+        if debug: print(f"\t\t\tSUCCESS")
       f.close()
 
       vid_segment_path = truly_local_vid_segment_path
 
       # (truly local) dir for saving frames
-      truly_local_target_video_frames_dir = truly_local_vid_dir+'/'+fidscs_globals.STICHED_VIDEO_FRAMES_DIR_BASE+'/'+video_fname.split('.')[0]
+      truly_local_target_video_frames_dir = truly_local_vid_dir+'/'+fidscs_globals.STICHED_VIDEO_FRAMES_DIR_NAME+'/'+video_fname.split('.')[0]
       if debug: print(f"\t\t\tattempting to create directory {truly_local_target_video_frames_dir} (truly_local_target_video_frames_dir) for frames extracted from (truly local) video {truly_local_vid_segment_path}...")
-      if not fileio.path_exists(truly_local_target_video_frames_dir, is_dir=True)[0]:
+      if not fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)[0]:
         if debug: print(f"\t\t\t\tcreating {truly_local_target_video_frames_dir}...")
-        fileio.make_dirs(truly_local_target_video_frames_dir)
-      truly_local_target_video_frames_dir_exists = fileio.path_exists(truly_local_target_video_frames_dir, is_dir=True)[0]
+        fileio.make_dirs(truly_local_target_video_frames_dir, d_pl_options)
+      truly_local_target_video_frames_dir_exists = fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)[0]
       if debug: print(f"\t\t\t\t\t{truly_local_target_video_frames_dir} exists: {truly_local_target_video_frames_dir_exists}")
       if not truly_local_target_video_frames_dir_exists:
         raise Exception(f"required directory truly_local_target_video_frames_dir {truly_local_target_video_frames_dir_exists} does not exist")
@@ -275,7 +268,7 @@ def write_frame_to_file(frame, index, target_video_frames_dir, truly_local_targe
     if debug: print(f"\t\t\t\t\t\t\t\t\t\tSUCCESS")
 
 
-def beam_extract_frames(tpl_target_video_extraction_info, label="", debug=False):
+def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label="", debug=False):
   """
   expects tpl_target_video_extraction_info: (video_fname, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}))
   """
@@ -286,149 +279,33 @@ def beam_extract_frames(tpl_target_video_extraction_info, label="", debug=False)
   target_video_frames_dir = segment_dicts[0]['target_video_frames_dir']
 
   target_stitched_vid_name = target_video_frames_dir.split(os.path.sep)[-1]
-  if not fileio.path_exists(target_video_frames_dir)[0]:
-    fileio.make_dirs(target_video_frames_dir)
+  if not fileio.path_exists(target_video_frames_dir, d_pl_options)[0]:
+    fileio.make_dirs(target_video_frames_dir, d_pl_options)
 
-  local_vid_segment_paths = [fileio.path_join(fidscs_globals.VIDEO_DIR, segment_dict['segment_fname']) for segment_dict in segment_dicts]
+  video_dir = d_pl_options[fidscs_globals.OPT_NAME_VIDEO_DIR]
+  local_vid_segment_paths = [fileio.path_join(video_dir, segment_dict['segment_fname']) for segment_dict in segment_dicts]
   for segment_dict in segment_dicts:
     segment_dict['n_frames_extracted'] = 0
 
-  # # failed_target_videos = []
-
-  # # truly_local_vid_dir = None
-  # # if fidscs_globals.GCS_CLIENT:
-  # #   truly_local_vid_dir = '~/tmp'+'/'.join(fidscs_globals.VIDEO_DIR.split('/')[1:])
-  # #   if debug: print(f"\nGCS storage detected! Using truly_local_vid_dir: {truly_local_vid_dir}")
-  # #   if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, is_dir=True)}")
-
-  # #   if not fileio.path_exists(truly_local_vid_dir, is_dir=True)[0]:
-  # #     if debug: print(f"\tcreating {truly_local_vid_dir}...")
-  # #     truly_local_vid_dir_path_segs = truly_local_vid_dir.split('/')
-  # #     if debug: print(f"\t\ttruly_local_vid_dir_path_segs: {truly_local_vid_dir_path_segs}")
-  # #     s_cum_path = '~'
-  # #     for i, truly_local_vid_dir_path_seg in enumerate(truly_local_vid_dir_path_segs[1:]):
-  # #       s_cum_path += '/'+truly_local_vid_dir_path_seg
-  # #       fileio.make_dirs(s_cum_path)
-  # #     if debug: print(f"\t\t{s_cum_path} exists: {fileio.path_exists(s_cum_path, is_dir=True)}")
-
-  # for local_vid_segment_path in local_vid_segment_paths:
-  #   # video_fname = local_vid_segment_path.split('/')[-1]
-
-  #   # truly_local_vid_segment_path = None
-  #   # truly_local_target_video_frames_dir = None
-
-  #   # if fidscs_globals.GCS_CLIENT:
-  #   #   # then we need to save the video locally - this is especially import (required) for GCP DataFlow workers
-  #   #   if debug: print(f"\n\n\tattempting to open video {local_vid_segment_path} for reading...")
-  #   #   with fileio.open_file_read(local_vid_segment_path) as f:
-  #   #     # print(f"\t\tSUCCESS")
-  #   #     buffer = f.read()
-  #   #     truly_local_vid_segment_path = truly_local_vid_dir+'/'+video_fname
-  #   #     if debug: print(f"\t\tattempting to write {truly_local_vid_segment_path} (truly) locally...")
-  #   #     with fileio.open_file_write(truly_local_vid_segment_path) as f_local:
-  #   #       f_local.write(buffer)
-  #   #       f_local.close()
-  #   #       print(f"\t\t\tSUCCESS")
-  #   #     f.close()
-  #   #     local_vid_segment_path = truly_local_vid_segment_path
-  #   #     truly_local_target_video_frames_dir = truly_local_vid_dir+'/'+fidscs_globals.STICHED_VIDEO_FRAMES_DIR_BASE+'/'+video_fname.split('.')[0]
-  #   #     if debug: print(f"\t\t\tattempting to create directory {truly_local_target_video_frames_dir} (truly_local_target_video_frames_dir) for frames extracted from video {local_vid_segment_path}...")
-  #   #     if not fileio.path_exists(truly_local_target_video_frames_dir, is_dir=True)[0]:
-  #   #       if debug: print(f"\t\t\t\tcreating {truly_local_target_video_frames_dir}...")
-  #   #       fileio.make_dirs(truly_local_target_video_frames_dir)
-  #   #     truly_local_target_video_frames_dir_exists = fileio.path_exists(truly_local_target_video_frames_dir, is_dir=True)[0]
-  #   #     if debug: print(f"\t\t\t\t\t{truly_local_target_video_frames_dir} exists: {truly_local_target_video_frames_dir_exists}")
-  #   #     if not truly_local_target_video_frames_dir_exists:
-  #   #       raise Exception(f"required directory truly_local_target_video_frames_dir {truly_local_target_video_frames_dir_exists} does not exist")
-
-  #   # if debug: print(f"\t\t\tattempting to capture (cv2.VideoCapture) video {local_vid_segment_path})...")
-  #   # vid_cap = cv2.VideoCapture(local_vid_segment_path)
-  #   vid_cap = capture_segment_video(local_vid_segment_path, debug=False)
-
-  #   vid_cap.set(cv2.CAP_PROP_FPS, fidscs_globals.FPS)
-  #   if debug: print(f"\t\t\t\tSUCCESS")
-
-  #   frame_count = int(vid_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-  #   if debug: print(f"\t\t\t\tvideo {local_vid_segment_path} has {frame_count} frames")
-
-  #   target_video_frames_dir = fidscs_globals.STICHED_VIDEO_FRAMES_DIR+'/'+video_fname.split('.')[0]
-  #   if debug: print(f"\t\t\t\tattempting to create directory {target_video_frames_dir} (target_video_frames_dir) for frames extracted from video {local_vid_segment_path}...")
-  #   fileio.make_dirs(target_video_frames_dir)
-  #   target_video_frames_dir_exists = fileio.path_exists(target_video_frames_dir, is_dir=True)[0]
-  #   if debug: print(f"\t\t\t\t\t{target_video_frames_dir} exists: {target_video_frames_dir_exists}")
-  #   if not target_video_frames_dir_exists:
-  #     raise Exception(f"required directory target_video_frames_dir {target_video_frames_dir} does not exist")
-
-  #   n_stitched_frames = 0
-
-  #   success, frame = vid_cap.read()
-  #   n_frames_extracted = 0
-  #   while success:
-  #     # local_frame_path = fileio.path_join(target_video_frames_dir, f"{n_stitched_frames}.jpg") # this is the final frame path
-
-  #     # if truly_local_target_video_frames_dir is not None:
-  #     #   # write truly local frame file
-  #     #   truly_local_frame_path = truly_local_target_video_frames_dir+'/'+f"{n_stitched_frames}.jpg"
-  #     #   if debug: print(f"\t\t\t\t\t\tattempting to write {truly_local_frame_path} frame from video {local_vid_segment_path}...")
-  #     #   cv2.imwrite(truly_local_frame_path, frame)
-  #     #   if debug: print(f"\t\t\t\t\t\t\tSUCCESS")
-  #     #   if debug: print(f"\t\t\t\t\t\t\tattempting to open {truly_local_frame_path} for read...")
-  #     #   with fileio.open_file_read(truly_local_frame_path) as f_truly_local_frame:
-  #     #     buffer = f_truly_local_frame.read()
-  #     #     if debug: print(f"\t\t\t\t\t\t\t\tSUCCESS")
-  #     #     if debug: print(f"\t\t\t\t\t\t\t\t\tattempting to open {local_frame_path} for final write...")
-  #     #     with fileio.open_file_write(local_frame_path) as f_frame_final:
-  #     #       f_frame_final.write(buffer)
-  #     #       f_frame_final.close()
-  #     #       if debug: print(f"\t\t\t\t\t\t\t\t\t\tSUCCESS")
-  #     #     buffer = None
-  #     #     f_truly_local_frame.close()
-
-  #     # else:
-  #     #   if debug: print(f"\t\t\t\t\t\t\t\t\tattempting to open {local_frame_path} for final write...")
-  #     #   cv2.imwrite(local_frame_path, frame)
-  #     #   if debug: print(f"\t\t\t\t\t\t\t\t\t\tSUCCESS")
-  #     write_frame_to_file(frame, n_stitched_frames, target_video_frames_dir, truly_local_target_video_frames_dir, debug=False)
-
-  #     n_frames_extracted += 1
-  #     n_stitched_frames += 1
-  #     success, frame = vid_cap.read()
-
-  #   if n_frames_extracted != frame_count:
-  #     # if debug: print(f"\t\t\t\t\t{local_vid_segment_path} has {frame_count} but we only extracted/wrote {n_frames_extracted} frames!")
-  #     print(f"{label+': ' if len(label)>0 else ''}{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} Cannot stitch together target video {target_video_fname} since {frame_count} frames were expected from segment {seg_fname} ({seg_path}) but only {n_frames} were successfully extracted")
-  #     failed_target_videos.append(target_video_fname)
-  #     fail = True
-  #     break
-  #   else:
-  #     # if debug: print(f"\t\t\t\t\tsuccessfully extracted all {frame_count} from {frame_count} from {local_vid_segment_path} to ")
-  #     print(f"{label+': ' if len(label)>0 else ''}Added {n_stitched_frames} frames from segment {seg_fname} for target video {target_video_fname} (stitched-frames dir {target_video_frames_dir})")
-
-  # if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, is_dir=True)[0]:
-  #   if debug: print(f"\n\n\tdeleting {truly_local_vid_dir}...")
-  #   fileio.delete_file(truly_local_vid_dir, recursive=True)
-  #   if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, is_dir=True)}")
-
-
-
 
   truly_local_vid_dir = None
-  if fidscs_globals.GCS_CLIENT:
-    truly_local_vid_dir = '~/tmp'+'/'.join(fidscs_globals.VIDEO_DIR.split('/')[1:])
+  fs = FileSystems.get_filesystem(video_dir)
+  if type(fs) == GCSFileSystem:
+    truly_local_vid_dir = '/tmp'+'/'.join(video_dir.split('/')[1:])
     if debug: print(f"\nGCS storage detected! Using truly_local_vid_dir: {truly_local_vid_dir}")
-    if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, is_dir=True)}")
+    if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)}")
 
-    if not fileio.path_exists(truly_local_vid_dir, is_dir=True)[0]:
+    if not fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
       if debug: print(f"\tcreating {truly_local_vid_dir}...")
       truly_local_vid_dir_path_segs = truly_local_vid_dir.split('/')
       if debug: print(f"\t\ttruly_local_vid_dir_path_segs: {truly_local_vid_dir_path_segs}")
-      s_cum_path = '~'
+      s_cum_path = ''
       for i, truly_local_vid_dir_path_seg in enumerate(truly_local_vid_dir_path_segs[1:]):
         s_cum_path += '/'+truly_local_vid_dir_path_seg
-        fileio.make_dirs(s_cum_path)
-      if debug: print(f"\t\t{s_cum_path} exists: {fileio.path_exists(s_cum_path, is_dir=True)}")
+        fileio.make_dirs(s_cum_path, d_pl_options)
+      if debug: print(f"\t\t{s_cum_path} exists: {fileio.path_exists(s_cum_path, d_pl_options, is_dir=True)}")
 
-  vc_results = [capture_segment_video(local_vid_segment_path, truly_local_vid_dir, debug=debug) for local_vid_segment_path in local_vid_segment_paths]
+  vc_results = [capture_segment_video(local_vid_segment_path, truly_local_vid_dir, d_pl_options, debug=debug) for local_vid_segment_path in local_vid_segment_paths]
   vid_caps = [vc_result[0] for vc_result in vc_results]
   truly_local_target_video_frames_dirs = [vc_result[1] for vc_result in vc_results]
 
@@ -442,7 +319,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, label="", debug=False)
   n_stitched_frames = 0
   if n_frames_expected > 0:
     # get count of existing stitched frames in target_stitched_vid_frames_dir
-    n_stitched_frames = len(fileio.list_dir(target_video_frames_dir))
+    n_stitched_frames = len(fileio.list_dir(target_video_frames_dir, d_pl_options))
 
     b_restitch = n_stitched_frames < n_frames_expected
     n_stitched_frames = 0 if b_restitch else n_stitched_frames
@@ -455,7 +332,6 @@ def beam_extract_frames(tpl_target_video_extraction_info, label="", debug=False)
         success, frame = seg_vid_cap.read()
         n_frames = 0
         while success:
-          # cv2.imwrite(fileio.path_join(target_video_frames_dir, f"{n_stitched_frames}.jpg"), frame)
           write_frame_to_file(
             frame, 
             n_stitched_frames, 
@@ -491,31 +367,47 @@ def beam_extract_frames(tpl_target_video_extraction_info, label="", debug=False)
     fail = True
 
   for local_vid_segment_path in local_vid_segment_paths:
-    fileio.delete_file(local_vid_segment_path)
+    fileio.delete_file(local_vid_segment_path, d_pl_options)
     if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
       print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
     pass
 
-  existing_truly_local_target_video_frames_dirs = list(filter(lambda truly_local_target_video_frames_dir: truly_local_target_video_frames_dir is not None, truly_local_target_video_frames_dirs))
-  for truly_local_target_video_frames_dir in existing_truly_local_target_video_frames_dirs:
-    if debug: print(f"\n\n\tdeleting {truly_local_target_video_frames_dir}...")
-    fileio.delete_file(fileio.delete_file(truly_local_target_video_frames_dir, recursive=True), recursive=True)
-    if debug: print(f"\t\t{truly_local_target_video_frames_dir} exists: {fileio.path_exists(truly_local_target_video_frames_dir, is_dir=True)}")
+  # existing_truly_local_target_video_frames_dirs = list(filter(lambda truly_local_target_video_frames_dir: truly_local_target_video_frames_dir is not None, truly_local_target_video_frames_dirs))
+  # for truly_local_target_video_frames_dir in existing_truly_local_target_video_frames_dirs:
+  #   if debug: print(f"\n\n\tdeleting {truly_local_target_video_frames_dir}...")
+  #   try:
+  #     fileio.delete_file(truly_local_target_video_frames_dir, d_pl_options, recursive=True)
+  #   except Exception as e:
+  #     print(e)
+  #   if debug: print(f"\t\t{truly_local_target_video_frames_dir} exists: {fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)}")
 
-  if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, is_dir=True)[0]:
-    if debug: print(f"\n\n\tdeleting {truly_local_vid_dir}...")
-    fileio.delete_file(truly_local_vid_dir, recursive=True)
-    if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, is_dir=True)}")
+  # if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
+  #   if debug: print(f"\n\n\tdeleting {truly_local_vid_dir}...")
+  #   try:
+  #     fileio.delete_file(truly_local_vid_dir, d_pl_options, recursive=True)
+  #   except Exception as e:
+  #     print(e)
+  #   if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)}")
+  #   path_segs = truly_local_vid_dir.split('/')[1:]
+  #   while len(path_segs) > 0:
+  #     dir_path = '/tmp'+'/'.join(path_segs)
+  #     print(f"deleting truly_local_vid_dir leaf: {dir_path}")
+  #     try:
+  #       fileio.delete_file(dir_path, d_pl_options, recursive=False)
+  #     except Exception as e:
+  #       print(e)
+  #     path_segs = path_segs[:-1] if len(path_segs)>1 else []
+
 
   return [(tpl_target_video_extraction_info[0], n_stitched_frames, segment_dicts)]
 
-
-class SegmentFrameExtractor(beam.DoFn):
-  def __init__(self, label=""):
-    self.label = label
-
-  def process(self, tpl_target_video_extraction_info):
-    return beam_extract_frames(tpl_target_video_extraction_info, self.label, debug=True)
+class SegmentFrameExtractor(beam__common.PipelinePcollElementProcessor):
+  def __init__(self, d_pl_options, label="", debug=False):
+    super(SegmentFrameExtractor, self).__init__(
+      fn_pcoll_element_processor=beam_extract_frames,
+      kargs={'d_pl_options':d_pl_options,'label':label,'debug':debug},
+      return_result=True
+    )
 
 
 class CorpusDocumentFileProcessor(beam.DoFn):
@@ -749,12 +641,17 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, d_pl_
   )
 
 
-def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll):
+def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, d_pl_options):
+  max_target_videos = d_pl_options[fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS]
   # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: BEGIN ********************
-  return (
-    full_target_vid_index_schemad_pcoll
-    | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(fidscs_globals.MAX_TARGET_VIDEOS) if fidscs_globals.MAX_TARGET_VIDEOS is not None and fidscs_globals.MAX_TARGET_VIDEOS>0 else ''}")
-  )
+  # return (
+  #   full_target_vid_index_schemad_pcoll
+  #   | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(max_target_videos) if max_target_videos is not None and max_target_videos>0 else ''}")
+  # )
+  if max_target_videos is not None and max_target_videos>0:
+    return \
+      beam__common.pl__X__subset_pcoll(full_target_vid_index_schemad_pcoll, "full_target_vid_index_schemad_pcoll", max_target_videos) if max_target_videos is not None and max_target_videos>0 \
+        else full_target_vid_index_schemad_pcoll
   # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: END ********************
 
 
@@ -3626,7 +3523,7 @@ def pl__4__debug_print_signstream_db(ss_parsed_xmldb_pcoll):
   )
 
 
-def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
+def pl__3__parallel_download_videos(vid_index_schemad_pcoll, d_pl_options, n_partitions=8):
   # ******************** DOWNLOAD VIDEOS IN PARALLEL: BEGIN ********************
   # this is just for debugging - comment out for production
   # (
@@ -3666,9 +3563,8 @@ def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
 
     p_dl_results = (
       vid_index_schemad_pcoll_partition
-      # | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer()) # get_video_segment_download_info(schemad_pcoll_element)
-      | f"Beam PL: {p_label} get download info for video segments" >> beam.FlatMap(get_video_segment_download_info)
-      | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(f"{p_label_indented}")) # outputs a pcoll with each row as [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}]
+      | f"Beam PL: {p_label} gather download info for video segments" >> beam.ParDo(VideoSegmentInfoGatherer(d_pl_options)) # get_video_segment_download_info(schemad_pcoll_element)
+      | f"Beam PL: {p_label} download video segments" >> beam.ParDo(VideoSegmentDownloader(d_pl_options, f"{p_label_indented}")) # outputs a pcoll with each row as [{'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1]}]
     )
     partition_download_results[i] = p_dl_results
 
@@ -3689,7 +3585,7 @@ def pl__3__parallel_download_videos(vid_index_schemad_pcoll, n_partitions=8):
   # ******************** DOWNLOAD VIDEOS IN PARALLEL: END ********************
 
 
-def pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions=8):
+def pl__4__parallel_extract_target_video_frames(merged_download_results, d_pl_options, n_partitions=8):
   # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: BEGIN ********************
   #   NOTE! THIS IS A CRUCIAL PIECE SO PAY ATTENTION TO THE FOLLOWING!!
   #   ********** --> IMPORTANT VIDEO-FRAME EXTRACTION PROCESSING INFORMATION<-- (BEGIN) **********
@@ -3736,7 +3632,7 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, n_parti
 
     p_extraction_results = (
       p
-      | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(f"{p_label_indented}")) # passthrough: pcoll of rows as (target_video_fname, n_stitched_frames, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
+      | f"Beam PL: {p_label} extract frames of each segment per target video" >> beam.ParDo(SegmentFrameExtractor(d_pl_options, f"{p_label_indented}", debug=False)) # passthrough: pcoll of rows as (target_video_fname, n_stitched_frames, list({'target_video_fname': target_video_fname, 'target_video_frames_dir': target_video_frames_dir, 'segment_url': str(url), 'segment_fname': str(url).split('/')[-1], 'n_frames_extracted': n_frames_extracted}))
     )
     partition_extraction_results[i] = p_extraction_results
 
@@ -3771,43 +3667,89 @@ class FIDSCapstonePipelineOptions(PipelineOptions):
   @classmethod
   def _add_argparse_args(cls, parser):
     parser.add_argument(
+      '--fidscs-capstone-max-target-videos',
+      default=None
+    )
+    parser.add_argument(
       '--fidscs-capstone-work-dir',
       default=None,
-      help=('Full path to the working directory.')
     )
-
     parser.add_argument(
       '--fidscs-capstone-data-dir',
       default=None,
-      help=('Full path to the data directory.')
     )
-
     parser.add_argument(
       '--fidscs-capstone-tmp-dir',
       default=None,
-      help=('Full path to the temp directory (for storing intermediate results).')
     )
-
+    parser.add_argument(
+      '--fidscs-capstone-videos-dir',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-stitched-video-frames-dir',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-corpus-dir',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-corpus-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-document-asl-cconsultant-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-asl-consultant-ds-path',
+      default=None,
+    )
     parser.add_argument(
       '--fidscs-capstone-video-indexes-dir',
       default=None,
-      help=('Full path to the video indexes dir.')
     )
-
     parser.add_argument(
       '--fidscs-capstone-selected-video-index-path',
       default=None,
-      help=('Full path to the selected video index csv.')
     )
-
     parser.add_argument(
       '--fidscs-capstone-video-ds-path',
       default=None,
-      help=('Full path to the video dataset csv.')
+    )
+    parser.add_argument(
+      '--fidscs-capstone-video-segment-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-video-frame-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-utterance-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-utterance-video-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-utterance-token-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-utterance-token-frame-ds-path',
+      default=None,
+    )
+    parser.add_argument(
+      '--fidscs-capstone-vocabulary-ds-path',
+      default=None,
     )
 
 
 def run(
+  max_target_videos,
   work_dir,
   beam_runner='DirectRunner', 
   beam_gcp_project=None,
@@ -3819,13 +3761,6 @@ def run(
 ):
   options = None
 
-  WORK_DIR = work_dir
-  DATA_DIR = fileio.path_join(WORK_DIR, 'data')
-  TMP_DIR = fileio.path_join(DATA_DIR, 'tmp')
-  VIDEO_INDEXES_DIR = fileio.path_join(TMP_DIR, fidscs_globals.VIDEO_INDEX_BASE)
-  SELECTED_VIDEO_INDEX_PATH = fileio.path_join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
-  VIDEO_DS_PATH = fileio.path_join(DATA_DIR, fidscs_globals.VIDEO_DS_FNAME)
-
   if beam_runner != 'DirectRunner':
     if beam_gcp_dataflow_setup_file != './setup.py':
       print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
@@ -3836,7 +3771,9 @@ def run(
       'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
       'max_num_workers': 8,
       'autoscaling_algorithm': 'THROUGHPUT_BASED',
+      'num_workers': 4,
       'save_main_session': True,
+      'enable_streaming_engine': False,
 
       # GCP options
       'project': beam_gcp_project,
@@ -3856,46 +3793,62 @@ def run(
       'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub),
     }
 
-  # fids-capstone specific options
-  d_fids_capstone_options = {
-    'fidscs_capstone_work_dir': WORK_DIR,
-    'fidscs_capstone_data_dir': DATA_DIR,
-    'fidscs_capstone_tmp_dir': TMP_DIR,
-
-    'fidscs_capstone_video_indexes_dir': VIDEO_INDEXES_DIR,
-    'fidscs_capstone_selected_video_index_path': SELECTED_VIDEO_INDEX_PATH,
-    'fidscs_capstone_video_ds_path': VIDEO_DS_PATH
-  }
-  options.update(d_fids_capstone_options)
-
-  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
-  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+  options.update(beam__common.make_fids_options_dict(work_dir, max_target_videos=max_target_videos, beam_gcp_project=beam_gcp_project))
 
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
-
+  job_suffix = 'boostrap-vid-index'
+  options.update({
+    'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  })
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   with beam.Pipeline(options=pipeline_options) as pl:
     full_target_vid_index_schemad_pcoll = pl__1__bootstrap_target_video_index(pl)
     pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, pl._options._all_options)
 
 
-  # with beam.Pipeline(options=pipeline_options) as pl:
-  #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-  #   filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll)
-  #   merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, n_partitions)
-  #   merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, n_partitions)
+  job_suffix = 'download-videos-extract-frames'
+  options.update({
+    'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  })
+  pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
+  with beam.Pipeline(options=pipeline_options) as pl:
+    full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
+    filtered_target_vid_index_schemad_pcoll = pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, pl._options._all_options)
+    merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, pl._options._all_options, n_partitions)
+    merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, pl._options._all_options, n_partitions)
 
 
+  # job_suffix = 'bootstrap-corpus-index'
+  # options.update({
+  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  # })
+  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   pl__1__bootstrap_corpus_index(pl)
   # # writing the corpus index needs to be in a separate pipeline, which will execute sequentially after the download completes
   # #   note that if we don't do it this way, it is HIGHLY probable that file structure will not be ready
   # #   for reading yet
+  # job_suffix = 'transform-corpus-documents-to-index'
+  # options.update({
+  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  # })
+  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   corpus_index_schemad_pcoll = pl__1__corpus_document_file_structure_to_corpus_index(pl)
   #   pl__2__write_corpus_index_csv(corpus_index_schemad_pcoll, beam__common.GlobalVarValueAssigner(fn_assign_to_global=assign_to_global__raw_xml_b64_max_len))
 
 
+  # job_suffix = 'transform-ss-xml-to-datasets'
+  # options.update({
+  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  # })
+  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
   #   corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl)
@@ -3949,6 +3902,12 @@ def run(
   #   pl__9__write_document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll)
 
 
+  # job_suffix = 'remove-intermediate-files'
+  # options.update({
+  #   'job_name': f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+  # })
+  # pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
+  # print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
   # with beam.Pipeline(options=pipeline_options) as pl:
   #   tmp_dir_path_pcoll = (
   #     pl

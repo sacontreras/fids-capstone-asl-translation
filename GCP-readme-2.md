@@ -191,23 +191,30 @@ File system has been successfully mounted.
 
 ```
 python ./run_local__etl.py \
-  --work-dir /tmp/fids-capstone-data \
-  --max-target-videos -1 \
-  --use-beam 1
-```
-
-```
-python ./run_local__etl.py \
-  --work-dir /tmp/fids-capstone-data \
-  --max-target-videos 10 \
-  --use-beam 1
+  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
+  --max-target-videos 5 \
+  --use-beam 1 \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region us-west2 \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
 ```
 python ./run_local__etl.py \
   --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 10 \
+  --max-target-videos 5 \
   --use-beam 1 \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region us-central1 \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
+```
+
+```
+python ./run_cloud__etl.py \
+  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
+  --max-target-videos 5 \
   --beam-gcp-project $BEAM_GCP_PROJECT \
   --beam-gcp-region us-central1\
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
@@ -217,7 +224,17 @@ python ./run_local__etl.py \
 ```
 python ./run_cloud__etl.py \
   --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos 10 \
+  --max-target-videos 5 \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region us-west2 \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
+```
+
+```
+python ./run_cloud__etl.py \
+  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
+  --max-target-videos -1 \
   --beam-gcp-project $BEAM_GCP_PROJECT \
   --beam-gcp-region us-central1\
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \

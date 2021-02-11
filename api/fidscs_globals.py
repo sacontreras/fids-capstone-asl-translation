@@ -1,7 +1,5 @@
 from __future__ import absolute_import
 
-import os
-
 # **************************************** global variables: BEGIN ****************************************
 _1KB = 1024
 _1MB = _1KB**2
@@ -10,6 +8,7 @@ FPS = 30
 FRAME_IMG_INPUT_SHAPE = (150,150)
 MAX_CAMERA_PERSPECTIVES = 4
 VALIDATION_SIZE_RATIO = .10
+MAX_RAW_XML_B64_LEN = 1000000 # default
 
 DOWNLOAD_MAX_FAIL_COUNT = 10
 DOWNLOAD_FAIL_SLEEP_TIME = 1  # seconds
@@ -27,22 +26,20 @@ OUTPUT_INFO_LEVEL = OUTPUT_INFO_LEVEL__WARNING
 # Good for debugging beam pipelines
 FORCE_DISABLE_MULTIPROCESSING = False
 
+GCP_PROJECT = 'sc-fids-capstone'
 
-# TMP_DIR = '/tmp'
-ENV_VAR_NAME__WORK_DIR = 'FIDS_CAPSTONE__WORK_DIR'
-ENV_VAR_NAME__DATA_ROOT_DIR = 'FIDS_CAPSTONE__DATA_ROOT_DIR'
+DATA_DIR_NAME = 'data'
+TMP_DIR_NAME = 'tmp'
+VIDEO_DIR_NAME = 'videos'
+STICHED_VIDEO_FRAMES_DIR_NAME = 'stitched_video_frames'
 
 CORPUS_BASE = 'ncslgr-xml'
 CORPUS_ARCHIVE = CORPUS_BASE+'.zip'
-# CORPUS_DIR = os.path.join(TMP_DIR, CORPUS_BASE)
 CORPUS_DS_FNAME = 'ncslgr-corpus-index.csv'
 
 VIDEO_INDEX_BASE = 'video_index-20120129'
 VIDEO_INDEXES_ARCHIVE = VIDEO_INDEX_BASE+'.zip'
-# VIDEO_INDEXES_DIR = os.path.join(TMP_DIR, VIDEO_INDEX_BASE)
-# SELECTED_VIDEO_INDEX_PATH = os.path.join(VIDEO_INDEXES_DIR, 'files_by_video_name.csv')
-
-STICHED_VIDEO_FRAMES_DIR_BASE = 'stitched_video_frames'
+SELECTED_VIDEO_INDEX = 'files_by_video_name.csv'
 
 DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-consultant-index.csv'
 ASL_CONSULTANT_DS_FNAME = 'consultant-index.csv'
@@ -66,6 +63,30 @@ TRAIN_FRAME_SEQ_DS_FNAME = 'train.csv'
 COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME = 'complete-utterances-train-assoc.csv'
 COMPLETE_UTTERANCES_VAL_DS_FNAME = 'complete-utterances-val.csv'
 COMPLETE_UTTERANCES_TRAIN_DS_FNAME = 'complete-utterances-train.csv'
+
+
+OPT_NAME_PROJECT = 'project'
+OPT_NAME_MAX_TARGET_VIDEOS = 'fidscs_capstone_max_target_videos'
+OPT_NAME_WORK_DIR = 'fidscs_capstone_work_dir'
+OPT_NAME_DATA_DIR = 'fidscs_capstone_data_dir'
+OPT_NAME_TMP_DIR = 'fidscs_capstone_tmp_dir'
+OPT_NAME_VIDEO_DIR = 'fidscs_capstone_videos_dir'
+OPT_NAME_STITCHED_VIDEO_FRAMES_DIR = 'fidscs_capstone_stitched_video_frames_dir'
+OPT_NAME_CORPUS_DIR = 'fidscs_capstone_corpus_dir'
+OPT_NAME_CORPUS_DS_PATH ='fidscs_capstone_corpus_ds_path'
+OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH = 'fidscs_capstone_document_asl_cconsultant_ds_path'
+OPT_NAME_ASL_CONSULTANT_DS_PATH = 'fidscs_capstone_asl_consultant_ds_path'
+OPT_NAME_VIDEO_INDEXES_DIR = 'fidscs_capstone_video_indexes_dir'
+OPT_NAME_SELECTED_VIDEO_INDEX_PATH = 'fidscs_capstone_selected_video_index_path'
+OPT_NAME_VIDEO_DS_PATH = 'fidscs_capstone_video_ds_path'
+OPT_NAME_VIDEO_SEGMENT_DS_PATH = 'fidscs_capstone_video_segment_ds_path'
+OPT_NAME_VIDEO_FRAME_DS_PATH = 'fidscs_capstone_video_frame_ds_path'
+OPT_NAME_UTTERANCE_DS_PATH = 'fidscs_capstone_utterance_ds_path'
+OPT_NAME_UTTERANCE_VIDEO_DS_PATH = 'fidscs_capstone_utterance_video_ds_path'
+OPT_NAME_UTTERANCE_TOKEN_DS_PATH = 'fidscs_capstone_utterance_token_ds_path'
+OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH = 'fidscs_capstone_utterance_token_frame_ds_path'
+OPT_NAME_VOCABULARY_DS_PATH = 'fidscs_capstone_vocabulary_ds_path'
+  
 
 
 
@@ -261,36 +282,6 @@ SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX = [
 ]
 # ********** SCHEMA-related (FIXED) globals: END **********
 
-
-# the following globals are set or modified at runtime
-WORK_DIR = None
-GCS_CLIENT = None
-GCS_BUCKET = None
-GCS_IO = None
-DATA_ROOT_DIR = None
-TMP_DIR = None
-VIDEO_DIR = None
-STICHED_VIDEO_FRAMES_DIR = None
-CORPUS_DS_PATH = None
-MAX_RAW_XML_B64_LEN = 1000000 # default
-ASL_CONSULTANT_DS_PATH = None
-VIDEO_DS_PATH = None
-UTTERANCE_DS_PATH = None
-UTTERANCE_VIDEO_DS_PATH = None
-UTTERANCE_TOKEN_DS_PATH = None
-CORPUS_DS_PATH = None
-DOCUMENT_ASL_CONSULTANT_DS_PATH = None
-VIDEO_SEGMENT_DS_PATH = None
-VIDEO_FRAME_DS_PATH = None
-UTTERANCE_TOKEN_FRAME_DS_PATH = None
-VOCABULARY_DS_PATH = None
-TRAIN_ASSOC_DS_PATH = None
-VAL_DS_PATH = None
-TRAIN_DS_PATH = None
-COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH = None
-COMPLETE_UTTERANCES_VAL_DS_PATH = None
-COMPLETE_UTTERANCES_TRAIN_DS_PATH = None
-MAX_TARGET_VIDEOS = None
 
 D_IN_MEMORY_VARS = dict()
 # **************************************** global variables: END ****************************************

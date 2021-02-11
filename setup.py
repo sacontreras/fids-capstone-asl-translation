@@ -58,18 +58,34 @@ class CustomCommands(setuptools.Command):
 
 
 REQUIRED_PACKAGES = [
-    'google-auth',
+    # 'google-auth',
+    # 'google-cloud-storage',
+    # 'apache-beam==2.26.*',
+    # 'tensorflow',
+    # 'avro-python3',
+    # # 'opencv-python',
+    # 'opencv-python-headless', # per stackflow post https://stackoverflow.com/a/63978454
+    # 'protobuf',
+    # 'absl-py',
+    # 'numpy',
+    # 'tqdm' 
+
+    # The following version combination works
+    # pip install apache-beam==2.25
+    # pip install tensorflow-transform==0.25
+    # # pip install tensorflow  # not need with the above?
+    # pip install google-cloud-storage
+    # pip install google-auth
+    # pip install absl-py
+    # pip install opencv-python-headless
+    # pip install tqdm
+
+    'apache-beam==2.25',
+    'tensorflow-transform==0.25',
     'google-cloud-storage',
-    'apache-beam[gcp]',
-    'apache-beam[interactive]',
-    'tensorflow-transform',
-    'tensorflow',
-    'avro-python3',
-    # 'opencv-python',
-    'opencv-python-headless', # per stackflow post https://stackoverflow.com/a/63978454
-    'protobuf',
+    'google-auth',
     'absl-py',
-    'numpy',
+    'opencv-python-headless',
     'tqdm'
 ]
 

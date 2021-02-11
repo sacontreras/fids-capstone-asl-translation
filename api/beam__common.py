@@ -7,7 +7,7 @@ import urllib
 
 import apache_beam as beam
 import tensorflow as tf
-from apache_beam.io.filesystems import FileSystems
+from apache_beam.io.filesystems import FileSystems, GCSFileSystem
 from tensorflow.python.lib.io.file_io import FileIO
 
 from api import fidscs_globals, fileio
@@ -52,21 +52,65 @@ class GlobalVarValueAssigner(PipelinePcollElementProcessor):
     )
 
 
-def dataset_csv_files_exist(dataset_csv_paths=None):
+def make_fids_options_dict(work_dir, max_target_videos=-1, beam_gcp_project=fidscs_globals.GCP_PROJECT):
+  data_dir = fileio.path_join(work_dir, fidscs_globals.DATA_DIR_NAME)
+  tmp_dir = fileio.path_join(data_dir, fidscs_globals.TMP_DIR_NAME)
+  videos_dir = fileio.path_join(data_dir, fidscs_globals.VIDEO_DIR_NAME)
+  stitched_video_frames_dir = fileio.path_join(data_dir, fidscs_globals.STICHED_VIDEO_FRAMES_DIR_NAME)
+  corpus_dir = fileio.path_join(tmp_dir, fidscs_globals.CORPUS_BASE)
+  corpus_ds_path = fileio.path_join(data_dir, fidscs_globals.CORPUS_DS_FNAME)
+  document_asl_cconsultant_ds_path = fileio.path_join(data_dir, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
+  asl_consultant_ds_path = fileio.path_join(data_dir, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
+  video_indexes_dir = fileio.path_join(tmp_dir, fidscs_globals.VIDEO_INDEX_BASE)
+  selected_video_index_path = fileio.path_join(video_indexes_dir, fidscs_globals.SELECTED_VIDEO_INDEX)
+  video_ds_path = fileio.path_join(data_dir, fidscs_globals.VIDEO_DS_FNAME)
+  video_segment_ds_path = fileio.path_join(data_dir, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
+  video_frame_ds_path = fileio.path_join(data_dir, fidscs_globals.VIDEO_FRAME_DS_FNAME)
+  utterance_ds_path = fileio.path_join(data_dir, fidscs_globals.UTTERANCE_DS_FNAME)
+  utterance_video_ds_path = fileio.path_join(data_dir, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
+  utterance_token_ds_path = fileio.path_join(data_dir, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
+  utterance_token_frame_ds_path = fileio.path_join(data_dir, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
+  vocabulary_ds_path = fileio.path_join(data_dir, fidscs_globals.VOCABULARY_DS_FNAME)
+  return {
+    fidscs_globals.OPT_NAME_PROJECT:                          beam_gcp_project,
+    fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS:                max_target_videos,
+    fidscs_globals.OPT_NAME_WORK_DIR:                         work_dir,
+    fidscs_globals.OPT_NAME_DATA_DIR:                         data_dir,
+    fidscs_globals.OPT_NAME_TMP_DIR:                          tmp_dir,
+    fidscs_globals.OPT_NAME_VIDEO_DIR:                        videos_dir,
+    fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR:        stitched_video_frames_dir,
+    fidscs_globals.OPT_NAME_CORPUS_DIR:                       corpus_dir,
+    fidscs_globals.OPT_NAME_CORPUS_DS_PATH:                   corpus_ds_path,
+    fidscs_globals.OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH:  document_asl_cconsultant_ds_path,
+    fidscs_globals.OPT_NAME_ASL_CONSULTANT_DS_PATH:           asl_consultant_ds_path,
+    fidscs_globals.OPT_NAME_VIDEO_INDEXES_DIR:                video_indexes_dir,
+    fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH:        selected_video_index_path,
+    fidscs_globals.OPT_NAME_VIDEO_DS_PATH:                    video_ds_path,
+    fidscs_globals.OPT_NAME_VIDEO_SEGMENT_DS_PATH:            video_segment_ds_path,
+    fidscs_globals.OPT_NAME_VIDEO_FRAME_DS_PATH:              video_frame_ds_path,
+    fidscs_globals.OPT_NAME_UTTERANCE_DS_PATH:                utterance_ds_path,
+    fidscs_globals.OPT_NAME_UTTERANCE_VIDEO_DS_PATH:          utterance_video_ds_path,
+    fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_DS_PATH:          utterance_token_ds_path,
+    fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH:    utterance_token_frame_ds_path,
+    fidscs_globals.OPT_NAME_VOCABULARY_DS_PATH:               vocabulary_ds_path
+  }
+
+
+def dataset_csv_files_exist(d_pl_options, dataset_csv_paths=None):
   if dataset_csv_paths is None or len(dataset_csv_paths)==0:
     dataset_csv_paths = [
-      fidscs_globals.ASL_CONSULTANT_DS_PATH,
-      fidscs_globals.VIDEO_DS_PATH,
-      fidscs_globals.UTTERANCE_DS_PATH,
-      fidscs_globals.UTTERANCE_VIDEO_DS_PATH,
-      fidscs_globals.UTTERANCE_TOKEN_DS_PATH,
-      fidscs_globals.CORPUS_DS_PATH,
-      fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH,
-      fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH,
-      fidscs_globals.VOCABULARY_DS_PATH
+      d_pl_options[fidscs_globals.OPT_NAME_ASL_CONSULTANT_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_VIDEO_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_UTTERANCE_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_UTTERANCE_VIDEO_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_CORPUS_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_VOCABULARY_DS_PATH]
     ]
   for dataset_csv_path in dataset_csv_paths:
-    if not fileio.path_exists(dataset_csv_path)[0]:
+    if not fileio.path_exists(dataset_csv_path, d_pl_options)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -145,12 +189,15 @@ def rmdir(path_coll_row):
   n_files = len(fileio.list_dir(path))
   if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
     print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  if fidscs_globals.GCS_CLIENT:
+
+  fs = FileSystems.get_filesystem(path)
+  if type(fs) == GCSFileSystem:
     gcs_form_path = fileio.gcs_correct_dir_path_form(path, strip_prefix=True)
     blob_path = fidscs_globals.GCS_BUCKET.blob(gcs_form_path)
     blob_path_create_result = blob_path.delete(fidscs_globals.GCS_CLIENT)
   else:
     fileio.delete_paths([path])
+
   return path
 
 def pl__X__rmdir(path, path_label):
@@ -185,6 +232,28 @@ def pl__X__sort_pcoll(pcoll, pcoll_label):
     | f"Beam PL: sort and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(sort_keyed_tuple_data)
   )
 
+def index_keyed_tuple_data(keyed_tuple):
+  """
+  keyed_tuple:
+    (<key>, <data to be indexed (must be a list)>)
+  """
+  key = keyed_tuple[0]
+  data_list = list(keyed_tuple[1])
+  indexed_data_list = [(i, data_item) for i, data_item in enumerate(data_list)]
+  return indexed_data_list # now indexed
+
+def pl__X__subset_pcoll(pcoll, pcoll_label, n):
+  return (
+    pcoll
+    | f"Beam PL: key {pcoll_label} for sort" >> beam.Map(
+        lambda pcoll_row: (1, pcoll_row)
+      )
+    | f"Beam PL: 'implode' keyed {pcoll_label} for subset" >> beam.GroupByKey()
+    | f"Beam PL: index and 'explode' the 'imploded' keyed {pcoll_label}" >> beam.FlatMap(index_keyed_tuple_data)
+    | f"Beam PL: filter tuples with index val less than {n}" >> beam.Filter(lambda tpl: tpl[0] < n)
+    | f"Beam PL: discard index, leaving only data" >> beam.Map(lambda tpl: tpl[1])
+  )
+
 
 def beam_row_to_csv_string(row):
   d_row = row.as_dict()
@@ -213,7 +282,6 @@ def pl__1__read_target_vid_index_csv(pl):
     | "Beam PL: create initial pcoll containing path to load the video index csv" >> beam.Create(
         [
           fileio.path_join(
-            # fidscs_globals.DATA_ROOT_DIR,
             pl._options._all_options['fidscs_capstone_data_dir'], 
             fidscs_globals.VIDEO_INDEXES_ARCHIVE.split('.')[0]+'.csv'
           )
