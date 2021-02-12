@@ -45,6 +45,7 @@ DOCUMENT_ASL_CONSULTANT_DS_FNAME = 'document-consultant-index.csv'
 ASL_CONSULTANT_DS_FNAME = 'consultant-index.csv'
 
 VIDEO_DS_FNAME = 'document-consultant-targetvideo-index.csv'
+VIDEO_UTTERANCE_DS_FNAME = 'document-consultant-targetvideo-utterance-index.csv'
 UTTERANCE_DS_FNAME = 'document-consultant-utterance-index.csv'
 
 UTTERANCE_VIDEO_DS_FNAME = 'document-consultant-utterance-targetvideo-index.csv'
@@ -101,7 +102,9 @@ SCHEMA_PK__CORPUS_DS = [SCHEMA_COL_NAMES__CORPUS_DS[0]]
 
 SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS = [
   'DocumentID',
-  'ASLConsultantID'
+  'ASLConsultantID',
+  'Filename',
+  'ParticipantName'
 ]
 SCHEMA_PK__DOCUMENT_ASL_CONSULTANT_DS = [
   SCHEMA_COL_NAMES__DOCUMENT_ASL_CONSULTANT_DS[0], 
@@ -152,6 +155,7 @@ SCHEMA_COL_NAMES__VIDEO_FRAME_DS = [
   'TargetVideoFilename',
   'FrameSequence',
   'FramePath',
+  'UtteranceSequence'
   # 'JPEGBytes'
 ]
 SCHEMA_PK__VIDEO_FRAME_DS = [

@@ -216,6 +216,17 @@ python ./run_cloud__etl.py \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
+```
+python ./run_local__etl.py \
+  --work-dir /tmp \
+  --max-target-videos $MAX_TARGET_VIDEOS \
+  --use-beam 1 \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
+```
+
 Note that because there is some latency incurred in order to upload files to your GCS bucket (via `gcsfuse`), this takes a bit longer than if you were simply storing files locally.  But altogether there is more than 17 Gigs of data when all said and done.  Still, because the ETL pipeline does its processing in parallel, via Apache Beam, it should only take about 30 minutes to run.
 
 ### 16. Dismount GCS Bucket `sc-fids-capstone-bucket-\$BEAM_GCP_PROJECT` from `/tmp/fids-capstone-data` in your Local File System
