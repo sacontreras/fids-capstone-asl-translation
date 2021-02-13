@@ -45,18 +45,18 @@ def run(
     beam_gcs_staging_bucket = fileio.path_join(work_dir, 'dataflow/staging')
     beam_gcs_temp_location = fileio.path_join(work_dir, 'dataflow/tmp')
   
-  if not fileio.path_exists(d_tmp_options[fidscs_globals.OPT_NAME_DATA_DIR], d_tmp_options)[0]:
+  if not fileio.dir_path_exists(d_tmp_options[fidscs_globals.OPT_NAME_DATA_DIR], d_tmp_options)[0]:
     fileio.make_dirs(d_tmp_options[fidscs_globals.OPT_NAME_DATA_DIR], d_tmp_options)
 
-  if not fileio.path_exists(d_tmp_options[fidscs_globals.OPT_NAME_TMP_DIR], d_tmp_options)[0]:
+  if not fileio.dir_path_exists(d_tmp_options[fidscs_globals.OPT_NAME_TMP_DIR], d_tmp_options)[0]:
     fileio.make_dirs(d_tmp_options[fidscs_globals.OPT_NAME_TMP_DIR], d_tmp_options)
 
 
   if not beam__common.dataset_csv_files_exist(d_tmp_options):
-    if not fileio.path_exists(d_tmp_options[fidscs_globals.OPT_NAME_VIDEO_DIR], d_tmp_options)[0]:
+    if not fileio.dir_path_exists(d_tmp_options[fidscs_globals.OPT_NAME_VIDEO_DIR], d_tmp_options)[0]:
       fileio.make_dirs(d_tmp_options[fidscs_globals.OPT_NAME_VIDEO_DIR], d_tmp_options)
 
-    if not fileio.path_exists(d_tmp_options[fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR], d_tmp_options)[0]:
+    if not fileio.dir_path_exists(d_tmp_options[fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR], d_tmp_options)[0]:
       fileio.make_dirs(d_tmp_options[fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR], d_tmp_options)
 
 

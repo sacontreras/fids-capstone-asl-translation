@@ -111,7 +111,7 @@ def dataset_csv_files_exist(d_pl_options, dataset_csv_paths=None):
       d_pl_options[fidscs_globals.OPT_NAME_VOCABULARY_DS_PATH]
     ]
   for dataset_csv_path in dataset_csv_paths:
-    if not fileio.path_exists(dataset_csv_path, d_pl_options)[0]:
+    if not fileio.file_path_exists(dataset_csv_path, d_pl_options)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -130,7 +130,7 @@ def train_val_csv_files_exist(train_val_csv_paths=None):
       fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH
     ]
   for train_val_csv_path in train_val_csv_paths:
-    if not fileio.path_exists(train_val_csv_path)[0]:
+    if not fileio.file_path_exists(train_val_csv_path)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -281,7 +281,7 @@ def pl__X__write_pcoll_to_csv(pcoll, pcoll_label, csv_fname, schema_col_names, d
         header=",".join(schema_col_names)
       )
     | f"Beam PL: print path to {pcoll_label} csv" >> beam.ParDo(PipelinePcollPrinter(msg=f"{pcoll_label} CSV WRITTEN TO STORAGE"))
-  )
+  ) # returns pcoll with single entry, the full path to the file written
 
 
 def pl__1__read_target_vid_index_csv(pl):

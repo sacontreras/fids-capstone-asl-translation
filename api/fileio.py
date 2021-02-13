@@ -48,12 +48,18 @@ def gcs_correct_dir_path_form(dir_path, d_pl_options, strip_prefix=False):
 def path_join(path, endpoint):
   return FileSystems.join(path, endpoint)
 
-def path_exists(path, d_pl_options, is_dir=True):
+def path_exists(path, d_pl_options, is_dir):
   dir_path = path
   fs = FileSystems.get_filesystem(dir_path)
   if type(fs) == GCSFileSystem:
     dir_path = gcs_correct_dir_path_form(dir_path, d_pl_options, strip_prefix=False) if is_dir else path
   return FileSystems.exists(dir_path), dir_path
+
+def dir_path_exists(path, d_pl_options):
+  return path_exists(path, d_pl_options, is_dir=True)
+
+def file_path_exists(path, d_pl_options):
+  return path_exists(path, d_pl_options, is_dir=False)
 
 
 def list_dir(dir_path, d_pl_options, exclude_subdir=False):
@@ -98,10 +104,6 @@ def open_file_write(fpath):
     return FileSystems.create(fpath)
 
 
-def delete_paths(paths):
-  return FileSystems.delete(paths)
-
-
 def delete_file(path, d_pl_options, recursive=False, r_level=0, debug=False):
   fs = FileSystems.get_filesystem(path)
   if type(fs) == GCSFileSystem:
@@ -110,58 +112,54 @@ def delete_file(path, d_pl_options, recursive=False, r_level=0, debug=False):
     if recursive:
       child_paths = list_dir(path, d_pl_options, exclude_subdir=False)
       for child_path in child_paths:
-        child_path_gcs_corrected = gcs_correct_dir_path_form(path, d_pl_options, strip_prefix=False)+child_path
-        if debug: print(f"{'-'*(r_level+1)} delete_file (debug): path {path} has child: {child_path} (gcs-corrected: {child_path_gcs_corrected})")
-        delete_file(child_path_gcs_corrected, d_pl_options, recursive=True, r_level=r_level+1)
+        if child_path != path:
+          if debug: print(f"{'-'*(r_level+1)} delete_file (debug): path {path} has child: {child_path}")
+          delete_file(child_path, d_pl_options, recursive=True, r_level=r_level+1)  # don't need to recurse (return, since gcsio deletes all leaves from the root)
 
     # not stripped, not corrrected case
     blob_path = get_gcs_bucket(d_pl_options).blob(path)
     path_not_stripped_not_gcs_corrected_exists = blob_path.exists(gcs_client)
-    if debug: print(f"{'-'*(r_level+1)} {path} (not stripped, not gcs corrected): {blob_path}, exists: {path_not_stripped_not_gcs_corrected_exists}")
+    if debug: print(f"{'-'*(r_level)} {path} (not stripped, not gcs corrected): {blob_path}, exists: {path_not_stripped_not_gcs_corrected_exists}")
     if path_not_stripped_not_gcs_corrected_exists:
-      if debug: print(f"{'-'*(r_level+1)} {path} (not stripped, not gcs corrected): {blob_path}, exists: True (before delete attempt)")
       blob_path_delete_result = blob_path.delete(gcs_client)
-      if debug: print(f"{'-'*(r_level+1)} {path} (not stripped, not gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
+      if debug: print(f"{'-'*(r_level)} {path} (not stripped, not gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
       return blob_path_delete_result
     else:
       # not stripped, gcs corrected case
       path_not_stripped_gcs_corrected = gcs_correct_dir_path_form(path, d_pl_options, strip_prefix=False)
       blob_path = get_gcs_bucket(d_pl_options).blob(path_not_stripped_gcs_corrected)
       path_not_stripped_gcs_corrected_exists = blob_path.exists(gcs_client)
-      if debug: print(f"{'-'*(r_level+1)} {path_not_stripped_gcs_corrected} (not stripped, gcs corrected): {blob_path}, exists: {path_not_stripped_gcs_corrected_exists}")
+      if debug: print(f"{'-'*(r_level)} {path_not_stripped_gcs_corrected} (not stripped, gcs corrected): {blob_path}, exists: {path_not_stripped_gcs_corrected_exists}")
       if path_not_stripped_gcs_corrected_exists:
-        if debug: print(f"{'-'*(r_level+1)} {path_not_stripped_gcs_corrected} (not stripped, gcs corrected): {blob_path}, exists: True (before delete attempt)")
         blob_path_delete_result = blob_path.delete(gcs_client)
-        if debug: print(f"{'-'*(r_level+1)} {path_not_stripped_gcs_corrected} (not stripped, gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
+        if debug: print(f"{'-'*(r_level)} {path_not_stripped_gcs_corrected} (not stripped, gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
         return blob_path_delete_result
       else:
         # stripped, not gcs corrected case
         path_stripped_not_gcs_corrected = gcs_path_strip_prefix(path, d_pl_options)
         blob_path = get_gcs_bucket(d_pl_options).blob(path_stripped_not_gcs_corrected)
         path_stripped_not_gcs_corrected_exists = blob_path.exists(gcs_client)
-        if debug: print(f"{'-'*(r_level+1)} {path_stripped_not_gcs_corrected} (stripped, not gcs corrected): {blob_path}, exists: {path_stripped_not_gcs_corrected_exists}")
+        if debug: print(f"{'-'*(r_level)} {path_stripped_not_gcs_corrected} (stripped, not gcs corrected): {blob_path}, exists: {path_stripped_not_gcs_corrected_exists}")
         if path_stripped_not_gcs_corrected_exists:
-          if debug: print(f"{'-'*(r_level+1)} {path_stripped_not_gcs_corrected} (stripped, not gcs corrected): {blob_path}, exists: True (before delete attempt)")
           blob_path_delete_result = blob_path.delete(gcs_client)
-          if debug: print(f"{'-'*(r_level+1)} {path_stripped_not_gcs_corrected} (stripped, not gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
+          if debug: print(f"{'-'*(r_level)} {path_stripped_not_gcs_corrected} (stripped, not gcs corrected): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
           return blob_path_delete_result
         else:
           # stripped, gcs corrected case
           path_stripped_gcs_corrected = gcs_correct_dir_path_form(path, d_pl_options, strip_prefix=True)
           blob_path = get_gcs_bucket(d_pl_options).blob(path_stripped_gcs_corrected)
           path_stripped_gcs_corrected_exists = blob_path.exists(gcs_client)
-          if debug: print(f"{'-'*(r_level+1)} {path_stripped_gcs_corrected} (stripped, gcs corrected): {blob_path}, exists: {path_stripped_gcs_corrected_exists}")
+          if debug: print(f"{'-'*(r_level)} {path_stripped_gcs_corrected} (stripped, gcs corrected): {blob_path}, exists: {path_stripped_gcs_corrected_exists}")
           if path_stripped_gcs_corrected_exists:
-            if debug: print(f"{'-'*(r_level+1)} {path_stripped_gcs_corrected} (stripped, gcs corrected): {blob_path}, exists: True (before delete attempt)")
             blob_path_delete_result = blob_path.delete(gcs_client)
-            if debug: print(f"{'-'*(r_level+1)} {path_stripped_gcs_corrected} (stripped, gcs corrected)): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
+            if debug: print(f"{'-'*(r_level)} {path_stripped_gcs_corrected} (stripped, gcs corrected)): {blob_path}, exists: {blob_path.exists(gcs_client)} (after delete attempt)")
             return blob_path_delete_result
           else:
-            if debug: print(f"{'-'*(r_level+1)} out of options trying to delete base path {path}!")
+            if debug: print(f"{'-'*(r_level)} out of options trying to delete base path {path}!")
             return False
 
   else:
-    return delete_paths([path])
+    return FileSystems.delete([path])
 
 
 def get_file_size(fpath):

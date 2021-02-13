@@ -35,6 +35,47 @@ STICHED_VIDEO_FRAMES_DIR_NAME = 'stitched_video_frames'
 
 CORPUS_BASE = 'ncslgr-xml'
 CORPUS_ARCHIVE = CORPUS_BASE+'.zip'
+CORPUS_DOC_FILE_PATH_SUFFIXES = [
+  'ncslgr-xml/ncslgr10f.xml',
+  'ncslgr-xml/ncslgr10m.xml',
+  'ncslgr-xml/ncslgr10a.xml',
+  'ncslgr-xml/ncslgr10a.xml',
+  'ncslgr-xml/accident.xml',
+  'ncslgr-xml/ncslgr10r.xml',
+  'ncslgr-xml/DSP Immigrants Story.xml',
+  'ncslgr-xml/ncslgr10i.xml',
+  'ncslgr-xml/DSP Dead Dog Story.xml',
+  'ncslgr-xml/roadtrip2.xml',
+  'ncslgr-xml/ncslgr10h.xml',
+  'ncslgr-xml/football.xml',
+  'ncslgr-xml/biker.xml',
+  'ncslgr-xml/ncslgr10c.xml',
+  'ncslgr-xml/three pigs.xml',
+  'ncslgr-xml/DSP Ski Trip Story.xml',
+  'ncslgr-xml/dorm prank.xml',
+  'ncslgr-xml/ncslgr10p.xml',
+  'ncslgr-xml/siblings.xml',
+  'ncslgr-xml/lapd.xml',
+  'ncslgr-xml/ali.xml',
+  'ncslgr-xml/ncslgr10e.xml',
+  'ncslgr-xml/ncslgr10t.xml',
+  'ncslgr-xml/ncslgr10l.xml',
+  'ncslgr-xml/scarystory.xml',
+  'ncslgr-xml/ncslgr10k.xml',
+  'ncslgr-xml/close call.xml',
+  'ncslgr-xml/speeding.xml',
+  'ncslgr-xml/ncslgr10d.xml',
+  'ncslgr-xml/ncslgr10j.xml',
+  'ncslgr-xml/ncslgr10b.xml',
+  'ncslgr-xml/boston-la.xml',
+  'ncslgr-xml/ncslgr10g.xml',
+  'ncslgr-xml/DSP Intro to a Story.xml',
+  'ncslgr-xml/ncslgr10n.xml',
+  'ncslgr-xml/whitewater.xml',
+  'ncslgr-xml/ncslgr10q.xml',
+  'ncslgr-xml/ncslgr10s.xml',
+  'ncslgr-xml/roadtrip1.xml'
+]
 CORPUS_DS_FNAME = 'ncslgr-corpus-index.csv'
 
 VIDEO_INDEX_BASE = 'video_index-20120129'

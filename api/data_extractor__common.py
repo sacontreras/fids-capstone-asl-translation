@@ -129,7 +129,7 @@ def boostrap_target_video_index(d_vid_indexes_info):
   # print(f"we need to pull {sel_vid_index_path_suffix} out of in-memory extracted archive")
   bytes_unzipped = zip_ref.read(sel_vid_index_path_suffix)
   zip_ref.close()
-  if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir'])[0]:
+  if not fileio.dir_path_exists(d_vid_indexes_info['vid_indexes_dir'])[0]:
     fileio.make_dirs(d_vid_indexes_info['vid_indexes_dir'])
   with fileio.open_file_write(d_vid_indexes_info['vid_indexes_dir']+'/'+sel_vid_index_fname) as f:
     f.write(bytes_unzipped)

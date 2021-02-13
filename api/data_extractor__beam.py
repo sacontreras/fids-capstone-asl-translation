@@ -69,52 +69,10 @@ def boostrap_signstream_corpus(d_corpus_info, d_pl_options, label=""):
   print(f"unzipping {remote_archive_path} in-memory...")
   # zip_ref.printdir()
   
-  if not fileio.path_exists(corpus_dir, d_pl_options)[0]:
+  if not fileio.dir_path_exists(corpus_dir, d_pl_options)[0]:
     fileio.make_dirs(corpus_dir, d_pl_options)
 
-  doc_file_path_suffixes = [
-    'ncslgr-xml/ncslgr10f.xml',
-    'ncslgr-xml/ncslgr10m.xml',
-    'ncslgr-xml/ncslgr10a.xml',
-    'ncslgr-xml/ncslgr10a.xml',
-    'ncslgr-xml/accident.xml',
-    'ncslgr-xml/ncslgr10r.xml',
-    'ncslgr-xml/DSP Immigrants Story.xml',
-    'ncslgr-xml/ncslgr10i.xml',
-    'ncslgr-xml/DSP Dead Dog Story.xml',
-    'ncslgr-xml/roadtrip2.xml',
-    'ncslgr-xml/ncslgr10h.xml',
-    'ncslgr-xml/football.xml',
-    'ncslgr-xml/biker.xml',
-    'ncslgr-xml/ncslgr10c.xml',
-    'ncslgr-xml/three pigs.xml',
-    'ncslgr-xml/DSP Ski Trip Story.xml',
-    'ncslgr-xml/dorm prank.xml',
-    'ncslgr-xml/ncslgr10p.xml',
-    'ncslgr-xml/siblings.xml',
-    'ncslgr-xml/lapd.xml',
-    'ncslgr-xml/ali.xml',
-    'ncslgr-xml/ncslgr10e.xml',
-    'ncslgr-xml/ncslgr10t.xml',
-    'ncslgr-xml/ncslgr10l.xml',
-    'ncslgr-xml/scarystory.xml',
-    'ncslgr-xml/ncslgr10k.xml',
-    'ncslgr-xml/close call.xml',
-    'ncslgr-xml/speeding.xml',
-    'ncslgr-xml/ncslgr10d.xml',
-    'ncslgr-xml/ncslgr10j.xml',
-    'ncslgr-xml/ncslgr10b.xml',
-    'ncslgr-xml/boston-la.xml',
-    'ncslgr-xml/ncslgr10g.xml',
-    'ncslgr-xml/DSP Intro to a Story.xml',
-    'ncslgr-xml/ncslgr10n.xml',
-    'ncslgr-xml/whitewater.xml',
-    'ncslgr-xml/ncslgr10q.xml',
-    'ncslgr-xml/ncslgr10s.xml',
-    'ncslgr-xml/roadtrip1.xml'
-  ]
-
-  for doc_file_path_suffix in doc_file_path_suffixes:
+  for doc_file_path_suffix in fidscs_globals.CORPUS_DOC_FILE_PATH_SUFFIXES:
     bytes_unzipped = zip_ref.read(doc_file_path_suffix)
     with fileio.open_file_write(corpus_parent_dir+'/'+doc_file_path_suffix) as f:
       f.write(bytes_unzipped)
@@ -178,11 +136,11 @@ def beam_download_target_video_segment(d_target_vid_seg_download_info, d_pl_opti
   segment_url = d_target_vid_seg_download_info['segment_url']
   segment_fname = d_target_vid_seg_download_info['segment_fname']
   video_dir = d_pl_options[fidscs_globals.OPT_NAME_VIDEO_DIR]  
-  if not fileio.path_exists(video_dir, d_pl_options)[0]:
+  if not fileio.dir_path_exists(video_dir, d_pl_options)[0]:
     fileio.make_dirs(video_dir, d_pl_options)
   local_segment_path = fileio.path_join(video_dir, segment_fname)
   n_fail = 0
-  if not fileio.path_exists(local_segment_path, d_pl_options)[0]:
+  if not fileio.file_path_exists(local_segment_path, d_pl_options)[0]:
     while n_fail < max_fail:
       try:
         memfile = data_extractor__common.download_to_memfile(segment_url, block_sz=fidscs_globals._1MB, display=False) # returns with memfile.seek(0)
@@ -239,10 +197,10 @@ def capture_segment_video(vid_segment_path, truly_local_vid_dir, d_pl_options, d
       # (truly local) dir for saving frames
       truly_local_target_video_frames_dir = truly_local_vid_dir+'/'+fidscs_globals.STICHED_VIDEO_FRAMES_DIR_NAME+'/'+video_fname.split('.')[0]
       if debug: print(f"\t\t\tattempting to create directory {truly_local_target_video_frames_dir} (truly_local_target_video_frames_dir) for frames extracted from (truly local) video {truly_local_vid_segment_path}...")
-      if not fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)[0]:
+      if not fileio.dir_path_exists(truly_local_target_video_frames_dir, d_pl_options)[0]:
         if debug: print(f"\t\t\t\tcreating {truly_local_target_video_frames_dir}...")
         fileio.make_dirs(truly_local_target_video_frames_dir, d_pl_options)
-      truly_local_target_video_frames_dir_exists = fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)[0]
+      truly_local_target_video_frames_dir_exists = fileio.dir_path_exists(truly_local_target_video_frames_dir, d_pl_options)[0]
       if debug: print(f"\t\t\t\t\t{truly_local_target_video_frames_dir} exists: {truly_local_target_video_frames_dir_exists}")
       if not truly_local_target_video_frames_dir_exists:
         raise Exception(f"required directory truly_local_target_video_frames_dir {truly_local_target_video_frames_dir_exists} does not exist")
@@ -291,7 +249,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
   target_video_frames_dir = segment_dicts[0]['target_video_frames_dir']
 
   target_stitched_vid_name = target_video_frames_dir.split(os.path.sep)[-1]
-  if not fileio.path_exists(target_video_frames_dir, d_pl_options)[0]:
+  if not fileio.dir_path_exists(target_video_frames_dir, d_pl_options)[0]:
     fileio.make_dirs(target_video_frames_dir, d_pl_options)
 
   video_dir = d_pl_options[fidscs_globals.OPT_NAME_VIDEO_DIR]
@@ -299,19 +257,16 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
   for segment_dict in segment_dicts:
     segment_dict['n_frames_extracted'] = 0
 
-
+  # create local dir for extraction (since OpenCV works only with local file system currently) if we have GCS filesystem
   truly_local_vid_dir = None
   truly_local_vid_dir_suffix = None
-  truly_local_vid_dir_root = None
   fs = FileSystems.get_filesystem(video_dir)
   if type(fs) == GCSFileSystem:
     truly_local_vid_dir_suffix = '/'.join(video_dir.split('/')[1:])
-    truly_local_vid_dir_root = '/tmp/'+truly_local_vid_dir_suffix.split('/')[1]
     truly_local_vid_dir = '/tmp'+truly_local_vid_dir_suffix
-    print(f"\t\tGCS storage detected! Extracting frames to truly_local_vid_dir {truly_local_vid_dir} (and will then upload to GCS after that)...")
-    if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)}")
-
-    if not fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
+    # print(f"\t\tGCS storage detected! Extracting frames to truly_local_vid_dir {truly_local_vid_dir} (and will then upload to GCS after that)...")
+    if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.dir_path_exists(truly_local_vid_dir, d_pl_options)}")
+    if not fileio.dir_path_exists(truly_local_vid_dir, d_pl_options)[0]:
       if debug: print(f"\tcreating {truly_local_vid_dir}...")
       truly_local_vid_dir_path_segs = truly_local_vid_dir.split('/')
       if debug: print(f"\t\ttruly_local_vid_dir_path_segs: {truly_local_vid_dir_path_segs}")
@@ -319,7 +274,7 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
       for i, truly_local_vid_dir_path_seg in enumerate(truly_local_vid_dir_path_segs[1:]):
         s_cum_path += '/'+truly_local_vid_dir_path_seg
         fileio.make_dirs(s_cum_path, d_pl_options)
-      if debug: print(f"\t\t{s_cum_path} exists: {fileio.path_exists(s_cum_path, d_pl_options, is_dir=True)}")
+      if debug: print(f"\t\t{s_cum_path} exists: {fileio.dir_path_exists(s_cum_path, d_pl_options)}")
 
   vc_results = [capture_segment_video(local_vid_segment_path, truly_local_vid_dir, d_pl_options, debug=debug) for local_vid_segment_path in local_vid_segment_paths]
   vid_caps = [vc_result[0] for vc_result in vc_results]
@@ -381,15 +336,6 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
       print(f"\t{fidscs_globals.VALIDATION_WARNING_TEXT} Cannot stitch together target video {target_video_fname} since cv2.CAP_PROP_FRAME_COUNT reports segments have zero frames")
     failed_target_videos.append(target_video_fname)
     fail = True
-
-  for local_vid_segment_path in local_vid_segment_paths:
-    fileio.delete_file(local_vid_segment_path, d_pl_options)
-    if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
-      print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
-
-  if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
-    print(f"\t\tdeleting intermediate frame extraction directory {truly_local_vid_dir_root} (used for upload to GCS)...")
-    fileio.delete_file(truly_local_vid_dir_root, d_pl_options)
 
   return [(tpl_target_video_extraction_info[0], n_stitched_frames, segment_dicts)]
 
@@ -539,8 +485,7 @@ def boostrap_target_video_index(d_vid_indexes_info, d_pl_options):
   # print(f"we need to pull {sel_vid_index_path_suffix} out of in-memory extracted archive")
   bytes_unzipped = zip_ref.read(sel_vid_index_path_suffix)
   zip_ref.close()
-  if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir'], d_pl_options=d_pl_options)[0]:
-    print()
+  if not fileio.dir_path_exists(d_vid_indexes_info['vid_indexes_dir'], d_pl_options=d_pl_options)[0]:
     fileio.make_dirs(d_vid_indexes_info['vid_indexes_dir'], d_pl_options=d_pl_options)
   with fileio.open_file_write(d_vid_indexes_info['vid_indexes_dir']+'/'+sel_vid_index_fname) as f:
     f.write(bytes_unzipped)
@@ -561,26 +506,36 @@ class TargetVideoIndexBootstrapper(beam__common.PipelinePcollElementProcessor):
 
 def pl__1__bootstrap_target_video_index(pl):
   # ******************** start the pipeline, bootstrap video index, read it, apply schema: BEGIN ********************
+  if not fileio.file_path_exists(pl._options._all_options[fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH], pl._options._all_options)[0]:
+    sel_vid_index_path = (
+      pl
+      | "Beam PL: create initial pcoll containing information for boostrap_target_video_index" >> beam.Create(
+          [ # one row containing dict of:
+              # 1. url of video indexes archive
+              # 2. local destination (path) for the downloaded archive
+              # 3. local destination (path) which will receive the extracted archive csv files (there are more than one)
+              # 4. final path to the selected videx index csv
+              #   (note that the dict is not laid out in the above order)
+            {
+              'vid_indexes_dir': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_INDEXES_DIR], 
+              'sel_vid_index_path': pl._options._all_options[fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH], 
+              'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+              'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
+              'video_ds_path': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DS_PATH]
+            }
+          ]
+        )
+      # | "Beam PL: bootstrap target video index" >> beam.Map(boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+      | "Beam PL: bootstrap target video index" >> beam.ParDo(TargetVideoIndexBootstrapper(pl._options._all_options)) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+    )
+  else:
+    sel_vid_index_path = (
+      pl
+      | "Beam PL: create initial pcoll containing path to existing sel_vid_index" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH]])
+      | "Beam PL: print path to existing sel_vid_index" >> beam.ParDo(beam__common.PipelinePcollPrinter(msg="FOUND EXISTING SEL VID INDEX"))
+    )
   return (
-    pl
-    | "Beam PL: create initial pcoll containing information for boostrap_target_video_index" >> beam.Create(
-        [ # one row containing dict of:
-            # 1. url of video indexes archive
-            # 2. local destination (path) for the downloaded archive
-            # 3. local destination (path) which will receive the extracted archive csv files (there are more than one)
-            # 4. final path to the selected videx index csv
-            #   (note that the dict is not laid out in the above order)
-          {
-            'vid_indexes_dir': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_INDEXES_DIR], 
-            'sel_vid_index_path': pl._options._all_options[fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH], 
-            'video_indexes_archive': fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
-            'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
-            'video_ds_path': pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DS_PATH]
-          }
-        ]
-      )
-    # | "Beam PL: bootstrap target video index" >> beam.Map(boostrap_target_video_index) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
-    | "Beam PL: bootstrap target video index" >> beam.ParDo(TargetVideoIndexBootstrapper(pl._options._all_options)) # boostrap_target_video_index outputs SELECTED_VIDEO_INDEX_PATH but beam.Map() wraps this in a pcoll and is fed to...
+    sel_vid_index_path
     | "Beam PL: read video index into pcoll" >> beam.FlatMap(beam__common.load_vid_index_csv) # outputs another pcoll but with each row as dict
     # note that we want rows as dicts since dicts help us apply a schema to the pcoll, which is what we want in the end
 
@@ -602,31 +557,33 @@ def pl__1__bootstrap_target_video_index(pl):
 
 
 def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, d_pl_options):
-  if d_pl_options is None or not isinstance(d_pl_options, dict):
-    raise ValueError(f"require d_pl_options as dict but got {type(d_pl_options)}")
-
-  sorted_full_target_vid_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(full_target_vid_index_schemad_pcoll, pcoll_label="full_target_vid_index")
-  sorted_corpus_index_csv_rows_pcoll = (
-    sorted_full_target_vid_index_schemad_pcoll
-    | "Beam PL: re-apply schema to sorted_full_target_vid_index" >> beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam.Row(
-          target_video_filename=sorted_full_target_vid_index_schemad_pcoll_row.target_video_filename,
-          video_seq_id=sorted_full_target_vid_index_schemad_pcoll_row.video_seq_id,                            
-          perspective_cam_id=sorted_full_target_vid_index_schemad_pcoll_row.perspective_cam_id,                  
-          compressed_mov_url=sorted_full_target_vid_index_schemad_pcoll_row.compressed_mov_url,            
-          uncompressed_avi_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_url,                     
-          uncompressed_avi_mirror_1_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url,   
-          uncompressed_avi_mirror_2_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url
+  vid_index_path = fileio.path_join(d_pl_options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.VIDEO_INDEX_BASE+'.csv')
+  if not fileio.file_path_exists(vid_index_path, d_pl_options)[0]:
+    sorted_full_target_vid_index_schemad_pcoll = beam__common.pl__X__sort_pcoll(full_target_vid_index_schemad_pcoll, pcoll_label="full_target_vid_index")
+    sorted_corpus_index_csv_rows_pcoll = (
+      sorted_full_target_vid_index_schemad_pcoll
+      | "Beam PL: re-apply schema to sorted_full_target_vid_index" >> beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam.Row(
+            target_video_filename=sorted_full_target_vid_index_schemad_pcoll_row.target_video_filename,
+            video_seq_id=sorted_full_target_vid_index_schemad_pcoll_row.video_seq_id,                            
+            perspective_cam_id=sorted_full_target_vid_index_schemad_pcoll_row.perspective_cam_id,                  
+            compressed_mov_url=sorted_full_target_vid_index_schemad_pcoll_row.compressed_mov_url,            
+            uncompressed_avi_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_url,                     
+            uncompressed_avi_mirror_1_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_1_url,   
+            uncompressed_avi_mirror_2_url=sorted_full_target_vid_index_schemad_pcoll_row.uncompressed_avi_mirror_2_url
+          )
         )
-      )
-    | beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_full_target_vid_index_schemad_pcoll_row))
-  )
-  return beam__common.pl__X__write_pcoll_to_csv(
-    sorted_corpus_index_csv_rows_pcoll, 
-    "TARGET-VIDEO-INDEX", 
-    fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
-    fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX,
-    d_pl_options
-  )
+      | beam.Map(lambda sorted_full_target_vid_index_schemad_pcoll_row: beam__common.beam_row_to_csv_string(sorted_full_target_vid_index_schemad_pcoll_row))
+    )
+    return beam__common.pl__X__write_pcoll_to_csv(
+      sorted_corpus_index_csv_rows_pcoll, 
+      "TARGET-VIDEO-INDEX", 
+      fidscs_globals.VIDEO_INDEXES_ARCHIVE, 
+      fidscs_globals.SCHEMA_COL_NAMES__VIDEO_INDEX,
+      d_pl_options
+    )
+  else:
+    print(f"FOUND EXISTING VID INDEX: {vid_index_path}")
+    return [vid_index_path]
 
 
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, d_pl_options):
@@ -641,21 +598,52 @@ def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, d_pl_opt
 
 def pl__1__bootstrap_corpus_index(pl):
   # ******************** bootstrap SignStream corpus: BEGIN ********************
-  corpus_documents_dir_path_schemad_pcoll = (
-    pl
-    | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
-        [
-          {
-            'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
-            'corpus_archive': fidscs_globals.CORPUS_ARCHIVE
-          }
-        ]
-      )
-    # | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
-    | "Beam PL: bootstrap SignStream corpus" >> beam.ParDo(SignstreamCorpusBootstrapper(pl._options._all_options)) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+  not_all_exist = False
+  for doc_file_suffix in fidscs_globals.CORPUS_DOC_FILE_PATH_SUFFIXES:
+    doc_file_path = fileio.path_join(pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR], doc_file_suffix)
+    if not fileio.file_path_exists(doc_file_path, pl._options._all_options)[0]:
+      not_all_exist = True
+      print(f"MISSING A CORPUS DOC ({doc_file_path}) - DOWNLOADING AND EXTRACTING ALL FROM ARCHIVE")
+      break
+    else:
+      print(f"FOUND EXISTING CORPUS DOC: {doc_file_path}")
+
+  corpus_docs_path_pcoll = None
+  if not_all_exist:
+    corpus_docs_path_pcoll = (
+      pl
+      | "Beam PL: create initial pcoll containing information for boostrap_signstream_corpus" >> beam.Create(
+          [
+            {
+              'tmp_dir': pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
+              'corpus_archive': fidscs_globals.CORPUS_ARCHIVE
+            }
+          ]
+        )
+      # | "Beam PL: bootstrap SignStream corpus" >> beam.FlatMap(boostrap_signstream_corpus) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+      | "Beam PL: bootstrap SignStream corpus" >> beam.ParDo(SignstreamCorpusBootstrapper(pl._options._all_options)) # boostrap_signstream_corpus outputs [fileio.path_join(d_corpus_info['tmp_dir'], d_corpus_info['corpus_archive'].split('.')[0])] if datasets do not yet exist, otherwise []
+    )
+  else:
+    corpus_docs_path_pcoll = (
+      pl
+      | "Beam PL: create initial pcoll contain path to corpus docs" >> beam.Create(
+          [
+            fileio.path_join(
+              fileio.path_join(
+                pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR], 
+                fidscs_globals.CORPUS_ARCHIVE.split('.')[0]
+              ),
+              "*"
+            )
+          ]
+        )
+      | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(corpus_docs_dir=str(x)))
+    )
+  
+  return (
+    corpus_docs_path_pcoll
     | "Beam PL: apply schema to corpus document files path pcoll" >> beam.Map(lambda x: beam.Row(corpus_docs_dir=str(x)))
   )
-  return corpus_documents_dir_path_schemad_pcoll
   # ******************** bootstrap SignStream corpus: END ********************
 
 
@@ -1988,7 +1976,7 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
       target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not fileio.path_exists(target_video_frames_dir, d_pl_options)[0] else len(fileio.list_dir(target_video_frames_dir, d_pl_options))
+      _n_existing_frame_images = -1 if not fileio.dir_path_exists(target_video_frames_dir, d_pl_options)[0] else len(fileio.list_dir(target_video_frames_dir, d_pl_options))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -2016,7 +2004,7 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
             frame_path = fileio.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if fileio.path_exists(frame_path)[0]:
+            if fileio.file_path_exists(frame_path)[0]:
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
@@ -2066,7 +2054,7 @@ def get_target_video_frame_paths(document_asl_consultant_target_video_index_sche
   stitched_video_frames_dir = d_pl_options[fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR]
   target_video_frames_dir = fileio.path_join(stitched_video_frames_dir, document_asl_consultant_target_video_index_schemad_pcoll_row.TargetVideoFilename.split('.')[0])
   target_video_frame_paths = []
-  if fileio.path_exists(target_video_frames_dir, d_pl_options)[0]:
+  if fileio.dir_path_exists(target_video_frames_dir, d_pl_options)[0]:
     fs = FileSystems.get_filesystem(target_video_frames_dir)
     if type(fs) == GCSFileSystem:
       target_video_frame_paths = list(filter(lambda candidate_path: candidate_path.endswith(".jpg"), fileio.list_dir(target_video_frames_dir, d_pl_options, exclude_subdir=True)))
@@ -2325,7 +2313,7 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         return document_asl_consultant__to__target_video_utterance_token_map_tpl
 
       target_video_frames_dir = fileio.path_join(fidscs_globals.STICHED_VIDEO_FRAMES_DIR, _target_video_fname.split('.')[0])
-      _n_existing_frame_images = -1 if not fileio.path_exists(target_video_frames_dir)[0] else len(fileio.list_dir(target_video_frames_dir))
+      _n_existing_frame_images = -1 if not fileio.dir_path_exists(target_video_frames_dir)[0] else len(fileio.list_dir(target_video_frames_dir))
       # if _n_existing_frame_images == -1:
       #   print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} document_asl_consultant__to__target_video_utterance_token_map_tpl utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname} frames dir ({target_video_frames_dir}) does not exist!")
       _token_end_frame = _token_start_frame = -1
@@ -2353,7 +2341,7 @@ def validate_preprocess_document_asl_consultant__to__target_video_utterance_toke
         if _token_start_frame <= last_frame_idx and _token_end_frame <= last_frame_idx:
           for frame_idx in range(_token_start_frame, _token_end_frame+1):
             frame_path = fileio.path_join(target_video_frames_dir, f"{frame_idx}.jpg")
-            if fileio.path_exists(frame_path)[0]:
+            if fileio.file_path_exists(frame_path)[0]:
               frame_seq_paths.append(frame_path)
             else:
               print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} utterance_token_map[{i}] target_video_map_instance[{j}] target_video_fname {_target_video_fname}: failed to reconcile invalid requested frame bounds {(_token_start_frame, _token_end_frame)} (valid bounds are: {(0, last_frame_idx)})")
@@ -4037,22 +4025,28 @@ def run(
   with beam.Pipeline(options=pipeline_options) as pl:
     tmp_dir_path_pcoll = (
       pl
-      | f"Beam PL: create {pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]} pcoll for cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]])
+      | f"Beam PL: create pcoll for {pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]} cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]])
     )
     beam__common.pl__X__rmdir(
       tmp_dir_path_pcoll, 
       pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
       pl._options._all_options
     )
-    videos_dir_path_pcoll = (
-      pl
-      | f"Beam PL: create {pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR]} pcoll for cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR]])
-    )
-    beam__common.pl__X__rmdir(
-      videos_dir_path_pcoll, 
-      pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR],
-      pl._options._all_options
-    )
+
+    video_dir = pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR]
+    fs = FileSystems.get_filesystem(video_dir) 
+    if type(fs) == GCSFileSystem:
+      truly_local_vid_dir_suffix = '/'.join(video_dir.split('/')[1:])
+      truly_local_vid_dir_root = '/tmp/'+truly_local_vid_dir_suffix.split('/')[1]
+      truly_local_vid_dir_path_pcoll = (
+        pl
+        | f"Beam PL: create pcoll for {truly_local_vid_dir_root} cleanup" >> beam.Create([truly_local_vid_dir_root])
+      )
+      beam__common.pl__X__rmdir(
+        truly_local_vid_dir_path_pcoll, 
+        truly_local_vid_dir_root,
+        pl._options._all_options
+      )
   print(f"****************************** Finished pipeline job: {job_name} ******************************")
   
 
