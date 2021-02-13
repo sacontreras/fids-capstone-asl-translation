@@ -3828,8 +3828,6 @@ def run(
     merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, pl._options._all_options, n_partitions)
   print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
-  return
-
 
   job_suffix = 'bootstrap-corpus-index'
   job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
