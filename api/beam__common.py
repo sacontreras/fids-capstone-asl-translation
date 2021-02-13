@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import csv
 import io
+import logging
 import sys
 import urllib
 
@@ -189,7 +190,10 @@ def rmdir(path_coll_row, d_pl_options):
   n_files = len(fileio.list_dir(path, d_pl_options))
   if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
     print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  fileio.delete_file(path, d_pl_options)
+  fs = FileSystems.get_filesystem(path)
+  if type(fs) == GCSFileSystem:
+    path = fileio.gcs_correct_dir_path_form(path, d_pl_options)
+  fileio.delete_file(path, d_pl_options, recursive=True)
   return [path]
 
 class DirectoryDeleter(PipelinePcollElementProcessor):
@@ -201,20 +205,11 @@ class DirectoryDeleter(PipelinePcollElementProcessor):
     )
 
 def pl__X__rmdir(path, path_label, d_pl_options):
-  # return (
-  #   path
-  #   | f"Beam PL: remove {path_label}" >> beam.Map(rmdir)
-  #   | f"Beam PL: print {path_label} deleted message" >> beam.ParDo(PipelinePcollPrinter(msg=f"DIRECTORY DELETED"))
-  # )
   return (
     path
     | f"Beam PL: remove {path_label}" >> beam.ParDo(DirectoryDeleter(d_pl_options))
     | f"Beam PL: print {path_label} deleted message" >> beam.ParDo(PipelinePcollPrinter(msg=f"DIRECTORY DELETED"))
   )
-
-
-def pl__0__init_globals(pl):
-  pass
 
 
 def sort_keyed_tuple_data(keyed_tuple):
@@ -510,13 +505,6 @@ def pl__1__read_document_asl_consultant_target_video_index_csv(pl):
   ) # document_asl_consultant_target_video_index_schemad_pcoll
 
 
-# beam__common.pl__X__write_pcoll_to_csv(
-#   sorted_distinct_document_asl_consultant_target_video_utterance_index_schemad_pcoll, 
-#   "DOCUMENT-ASLCONSULTANT-VIDEO-UTTERANCE-INDEX", 
-#   fidscs_globals.VIDEO_UTTERANCE_DS_FNAME, 
-#   ['DocumentID', 'DocumentFileName', 'ASLConsultantID', 'ParticipantName', 'UtteranceSequence', 'CameraPerspective', 'TargetVideoFilename'], 
-#   d_pl_options
-# )
 def load_document_asl_consultant_target_video_utterance_index_csv(d_document_asl_consultant_target_video_utterance_index_info):
   return load_csv(
     d_document_asl_consultant_target_video_utterance_index_info['document_asl_consultant_target_video_utterance_index_csv_path'], 

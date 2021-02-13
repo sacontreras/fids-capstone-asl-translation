@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import base64
 import io
+import logging
 import os
 import random
 import re
@@ -300,10 +301,14 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
 
 
   truly_local_vid_dir = None
+  truly_local_vid_dir_suffix = None
+  truly_local_vid_dir_root = None
   fs = FileSystems.get_filesystem(video_dir)
   if type(fs) == GCSFileSystem:
-    truly_local_vid_dir = '/tmp'+'/'.join(video_dir.split('/')[1:])
-    if debug: print(f"\nGCS storage detected! Using truly_local_vid_dir: {truly_local_vid_dir}")
+    truly_local_vid_dir_suffix = '/'.join(video_dir.split('/')[1:])
+    truly_local_vid_dir_root = '/tmp/'+truly_local_vid_dir_suffix.split('/')[1]
+    truly_local_vid_dir = '/tmp'+truly_local_vid_dir_suffix
+    print(f"\t\tGCS storage detected! Extracting frames to truly_local_vid_dir {truly_local_vid_dir} (and will then upload to GCS after that)...")
     if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)}")
 
     if not fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
@@ -381,34 +386,10 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
     fileio.delete_file(local_vid_segment_path, d_pl_options)
     if fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__DEBUG:
       print(f"PROCESSED(FRAME-EXTRACTION)/DELETED taget video ({target_video_fname}) segment: {local_vid_segment_path}")
-    pass
 
-  # existing_truly_local_target_video_frames_dirs = list(filter(lambda truly_local_target_video_frames_dir: truly_local_target_video_frames_dir is not None, truly_local_target_video_frames_dirs))
-  # for truly_local_target_video_frames_dir in existing_truly_local_target_video_frames_dirs:
-  #   if debug: print(f"\n\n\tdeleting {truly_local_target_video_frames_dir}...")
-  #   try:
-  #     fileio.delete_file(truly_local_target_video_frames_dir, d_pl_options, recursive=True)
-  #   except Exception as e:
-  #     print(e)
-  #   if debug: print(f"\t\t{truly_local_target_video_frames_dir} exists: {fileio.path_exists(truly_local_target_video_frames_dir, d_pl_options, is_dir=True)}")
-
-  # if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
-  #   if debug: print(f"\n\n\tdeleting {truly_local_vid_dir}...")
-  #   try:
-  #     fileio.delete_file(truly_local_vid_dir, d_pl_options, recursive=True)
-  #   except Exception as e:
-  #     print(e)
-  #   if debug: print(f"\t\t{truly_local_vid_dir} exists: {fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)}")
-  #   path_segs = truly_local_vid_dir.split('/')[1:]
-  #   while len(path_segs) > 0:
-  #     dir_path = '/tmp'+'/'.join(path_segs)
-  #     print(f"deleting truly_local_vid_dir leaf: {dir_path}")
-  #     try:
-  #       fileio.delete_file(dir_path, d_pl_options, recursive=False)
-  #     except Exception as e:
-  #       print(e)
-  #     path_segs = path_segs[:-1] if len(path_segs)>1 else []
-
+  if truly_local_vid_dir is not None and fileio.path_exists(truly_local_vid_dir, d_pl_options, is_dir=True)[0]:
+    print(f"\t\tdeleting intermediate frame extraction directory {truly_local_vid_dir_root} (used for upload to GCS)...")
+    fileio.delete_file(truly_local_vid_dir_root, d_pl_options)
 
   return [(tpl_target_video_extraction_info[0], n_stitched_frames, segment_dicts)]
 
@@ -949,7 +930,7 @@ def validate_preprocess_participant_to_asl_consultant_id(tpl_participant_info_gr
       tpl_participant_info_grouped_by_name: (<participant name>, [(<participant age (as string)>, participant_gender)])
     """
     participant_name = tpl_participant_info_grouped_by_name[0]
-    particpant_info_tpl_list = tpl_participant_info_grouped_by_name[1]
+    particpant_info_tpl_list = list(tpl_participant_info_grouped_by_name[1])
     if len(particpant_info_tpl_list) > 0:
       age = -1
       multiple_ages = []
@@ -3791,6 +3772,8 @@ def run(
       print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
       return
 
+    logging.getLogger().setLevel(logging.INFO) # enable logging only for DataflowRunner
+
     options = {
       'runner': beam_runner,
       'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
@@ -3813,8 +3796,9 @@ def run(
   else:
     options = {
       'runner': 'DirectRunner',
+      'environment_type': 'DOCKER',
       'direct_num_workers': 0, # 0 is use all available cores
-      'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+      'direct_running_mode': 'multi_processing', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
       'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub),
     }
 
@@ -4058,6 +4042,15 @@ def run(
     beam__common.pl__X__rmdir(
       tmp_dir_path_pcoll, 
       pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
+      pl._options._all_options
+    )
+    videos_dir_path_pcoll = (
+      pl
+      | f"Beam PL: create {pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR]} pcoll for cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR]])
+    )
+    beam__common.pl__X__rmdir(
+      videos_dir_path_pcoll, 
+      pl._options._all_options[fidscs_globals.OPT_NAME_VIDEO_DIR],
       pl._options._all_options
     )
   print(f"****************************** Finished pipeline job: {job_name} ******************************")

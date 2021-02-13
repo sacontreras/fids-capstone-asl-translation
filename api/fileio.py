@@ -1,3 +1,4 @@
+import logging
 import os
 
 import google.cloud.storage as gcs
@@ -107,11 +108,11 @@ def delete_file(path, d_pl_options, recursive=False, r_level=0, debug=False):
     gcs_client = get_gcs_client()
     if debug: print(f"{'-'*(r_level)} delete_file (debug): path: {path}, recursive: {recursive}")
     if recursive:
-      child_paths = list_dir(path, exclude_subdir=False)
+      child_paths = list_dir(path, d_pl_options, exclude_subdir=False)
       for child_path in child_paths:
         child_path_gcs_corrected = gcs_correct_dir_path_form(path, d_pl_options, strip_prefix=False)+child_path
         if debug: print(f"{'-'*(r_level+1)} delete_file (debug): path {path} has child: {child_path} (gcs-corrected: {child_path_gcs_corrected})")
-        delete_file(child_path_gcs_corrected, recursive=True, r_level=r_level+1)
+        delete_file(child_path_gcs_corrected, d_pl_options, recursive=True, r_level=r_level+1)
 
     # not stripped, not corrrected case
     blob_path = get_gcs_bucket(d_pl_options).blob(path)

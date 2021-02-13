@@ -189,40 +189,49 @@ File system has been successfully mounted.
 
 **AGAIN, THIS WILL INCUR A COST TO *YOU* (SINCE IT WILL UPLOAD FILES TO YOUR GCS BUCKET), WHICH I TAKE NO RESPONSIBILITY FOR!**
 ```
-MAX_TARGET_VIDEOS=2
-echo $MAX_TARGET_VIDEOS
-GCP_REGION=us-west2
-echo $GCP_REGION
+FIDS_CAPSTONE_WRK_DIR=/tmp
+echo $FIDS_CAPSTONE_WRK_DIR
+
+FIDS_CAPSTONE_MAX_TARGET_VIDEOS=-1
+echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
+
+FIDS_CAPSTONE_GCP_REGION=us-west2
+echo $FIDS_CAPSTONE_GCP_REGION
 ```
+
+OR
+
+```
+FIDS_CAPSTONE_WRK_DIR=gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT
+echo $FIDS_CAPSTONE_WRK_DIR
+
+FIDS_CAPSTONE_MAX_TARGET_VIDEOS=-1
+echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
+
+FIDS_CAPSTONE_GCP_REGION=us-west2
+echo $FIDS_CAPSTONE_GCP_REGION
+```
+
+
+
 
 ```
 python ./run_local__etl.py \
-  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos $MAX_TARGET_VIDEOS \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
   --use-beam 1 \
   --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region $GCP_REGION \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
 ```
 python ./run_cloud__etl.py \
-  --work-dir gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT \
-  --max-target-videos $MAX_TARGET_VIDEOS \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
   --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region $GCP_REGION \
-  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
-  --beam-gcp-dataflow-setup-file ./setup.py
-```
-
-```
-python ./run_local__etl.py \
-  --work-dir /tmp \
-  --max-target-videos $MAX_TARGET_VIDEOS \
-  --use-beam 1 \
-  --beam-gcp-project $BEAM_GCP_PROJECT \
-  --beam-gcp-region $GCP_REGION \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
   --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```

@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import logging
 import urllib
 import urllib.request
 import zipfile
@@ -19,7 +20,6 @@ def download(url, local_fname, block_sz=8192, display=True, nested_tqdm_pb=None)
   file_size = int(meta['Content-Length'])
   if nested_tqdm_pb is None and display:
     print(f"Downloading {url} (filesize: {file_size} bytes) to {local_fname}...")
-    print()
 
   f = None
   memfile = BytesIO()
@@ -70,7 +70,6 @@ def download_to_memfile(url, block_sz=8192, display=False):
   # if nested_tqdm_pb is None and display:
   if display:
     print(f"Downloading {url} (filesize: {file_size} bytes)...")
-    print()
     
   memfile = BytesIO()
 
@@ -131,7 +130,6 @@ def boostrap_target_video_index(d_vid_indexes_info):
   bytes_unzipped = zip_ref.read(sel_vid_index_path_suffix)
   zip_ref.close()
   if not fileio.path_exists(d_vid_indexes_info['vid_indexes_dir'])[0]:
-    print()
     fileio.make_dirs(d_vid_indexes_info['vid_indexes_dir'])
   with fileio.open_file_write(d_vid_indexes_info['vid_indexes_dir']+'/'+sel_vid_index_fname) as f:
     f.write(bytes_unzipped)

@@ -14,6 +14,7 @@
 from __future__ import absolute_import
 
 import argparse
+import logging
 import os
 
 import tensorflow as tf
@@ -33,7 +34,6 @@ def run(
   beam_gcp_dataflow_job_name=None,
   beam_gcp_dataflow_setup_file=None
 ):
-
   print(f"use_beam: {use_beam}")
 
   beam_gcs_staging_bucket = None

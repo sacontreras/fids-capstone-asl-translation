@@ -58,48 +58,26 @@ class CustomCommands(setuptools.Command):
 
 
 REQUIRED_PACKAGES = [
-    # 'google-auth',
-    # 'google-cloud-storage',
-    # 'apache-beam==2.26.*',
-    # 'tensorflow',
-    # 'avro-python3',
-    # # 'opencv-python',
-    # 'opencv-python-headless', # per stackflow post https://stackoverflow.com/a/63978454
-    # 'protobuf',
-    # 'absl-py',
-    # 'numpy',
-    # 'tqdm' 
-
-    # The following version combination works
-    # pip install apache-beam==2.25
-    # pip install tensorflow-transform==0.25
-    # # pip install tensorflow  # not need with the above?
-    # pip install google-cloud-storage
-    # pip install google-auth
-    # pip install absl-py
-    # pip install opencv-python-headless
-    # pip install tqdm
-
-    'apache-beam==2.25',
-    'tensorflow-transform==0.25',
-    'google-cloud-storage',
-    'google-auth',
-    'absl-py',
-    'opencv-python-headless',
-    'tqdm'
+  'apache-beam',
+  'tensorflow-transform',
+  'google-cloud-storage',
+  'google-auth',
+  'absl-py',
+  'opencv-python-headless',
+  'tqdm'
 ]
 
 setuptools.setup(
-    name='sac-fids-capstone-asl-translation',
-    version='0.0.1',
-    description='Steven Contreras FIDS Capston Project: Deep ASL',
+  name='sac-fids-capstone-asl-translation',
+  version='0.0.1',
+  description='Steven Contreras FIDS Capston Project: Deep ASL',
 
-    install_requires=REQUIRED_PACKAGES,
-    packages=setuptools.find_packages(),
-    cmdclass={
-        # Command class instantiated and run during pip install scenarios.
-        'build': build,
-        'CustomCommands': CustomCommands,
-    }
-    , include_package_data=True
+  install_requires=REQUIRED_PACKAGES,
+  packages=setuptools.find_packages(),
+  cmdclass={
+      # Command class instantiated and run during pip install scenarios.
+      'build': build,
+      'CustomCommands': CustomCommands,
+  }
+  , include_package_data=True
 )
