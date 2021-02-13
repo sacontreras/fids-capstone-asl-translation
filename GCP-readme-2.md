@@ -88,6 +88,8 @@ This should output the ID of the GCP Project you created.
 gcloud config set project <GCP PROJECT ID>
 ```
 
+gcloud config set project sc-fids-capstone
+
 #### b. ... and, again, set `BEAM_GCP_PROJECT` Environment Variable:
 
 ```

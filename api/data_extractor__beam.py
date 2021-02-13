@@ -337,6 +337,10 @@ def beam_extract_frames(tpl_target_video_extraction_info, d_pl_options, label=""
     failed_target_videos.append(target_video_fname)
     fail = True
 
+  if truly_local_vid_dir is not None:
+    for truly_local_target_video_frames_dir in truly_local_target_video_frames_dirs:
+      fileio.delete_file(truly_local_target_video_frames_dir, d_pl_options, recursive=True, debug=True)
+
   return [(tpl_target_video_extraction_info[0], n_stitched_frames, segment_dicts)]
 
 class SegmentFrameExtractor(beam__common.PipelinePcollElementProcessor):
@@ -3768,6 +3772,7 @@ def run(
       'max_num_workers': 8,
       'autoscaling_algorithm': 'THROUGHPUT_BASED',
       'num_workers': 4,
+      'disk_size_gb': 250,
       'save_main_session': True,
       'enable_streaming_engine': False,
 
@@ -3822,6 +3827,8 @@ def run(
     merged_download_results = pl__3__parallel_download_videos(filtered_target_vid_index_schemad_pcoll, pl._options._all_options, n_partitions)
     merged_extraction_results = pl__4__parallel_extract_target_video_frames(merged_download_results, pl._options._all_options, n_partitions)
   print(f"****************************** Finished pipeline job: {job_name} ******************************")
+
+  return
 
 
   job_suffix = 'bootstrap-corpus-index'
