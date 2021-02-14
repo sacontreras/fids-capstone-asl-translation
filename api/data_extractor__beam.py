@@ -4032,7 +4032,7 @@ def run(
       pl
       | f"Beam PL: create pcoll for {pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]} cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]])
     )
-    beam__common.pl__X__rmdir(
+    beam__common.rmdir_if_exists(
       tmp_dir_path_pcoll, 
       pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
       pl._options._all_options
@@ -4047,7 +4047,7 @@ def run(
         pl
         | f"Beam PL: create pcoll for {truly_local_vid_dir_root} cleanup" >> beam.Create([truly_local_vid_dir_root])
       )
-      beam__common.pl__X__rmdir(
+      beam__common.rmdir_if_exists(
         truly_local_vid_dir_path_pcoll, 
         truly_local_vid_dir_root,
         pl._options._all_options

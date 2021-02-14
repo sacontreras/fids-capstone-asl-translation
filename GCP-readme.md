@@ -20,17 +20,6 @@ pip install virtualenv
 
 Please refer to GCP SDK installation instructions [here](https://cloud.google.com/sdk/docs/install).
 
-
-### 4. gcsfuse
-
-Please refer to gcsfuse installation instructions [here](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/installing.md).
-
-### 5. Docker Desktop
-
-**For Windows**, please efer to *Docker Desktop* installation [here](https://docs.docker.com/docker-for-windows/install/).
-
-**For Mac**, please efer to *Docker Desktop* installation [here](https://docs.docker.com/docker-for-mac/install/).
-
 <p><br><p><br>
 
 ## Setup Steps
@@ -88,6 +77,8 @@ This should output the ID of the GCP Project you created.
 gcloud config set project <GCP PROJECT ID>
 ```
 
+gcloud config set project sc-fids-capstone
+
 #### b. ... and, again, set `BEAM_GCP_PROJECT` Environment Variable:
 
 ```
@@ -97,7 +88,7 @@ echo $BEAM_GCP_PROJECT
 
 ### 5. Create New Folder (where all the work will be done)
 
-From here on, this folder will be refered to as `<LOCAL PROJECT ROOT>`.
+From here on, this folder will be refered to as `<LOCAL WORKING DIRECTORY>`.
 
 Note that the all source code (from my github repo) for the pipeline will be sync'ed and executed herein.
 
@@ -149,15 +140,13 @@ cd fids-capstone-asl-translation
 
 ### 12. Setup Dependencies (required to run the Apache Beam pipelines) in the `fids-capstone-asl-translation-env` Virtual Environment
 ```
-python setup.py develop
-```
-
-This will take a couple of minutes for `setup.py` to download and install everything, depending on your local machine specs.
-
-In the end, you should see final output:
-
-```
-Finished processing dependencies for sac-fids-capstone-asl-translation==0.0.1
+pip install apache-beam
+pip install tensorflow-transform
+pip install google-cloud-storage
+pip install google-auth
+pip install absl-py
+pip install opencv-python-headless
+pip install tqdm
 ```
 
 ### 13. Create GSC Bucket via Google Cloud Console (web)
@@ -170,37 +159,55 @@ Finished processing dependencies for sac-fids-capstone-asl-translation==0.0.1
 **name**: *sc-fids-capstone-bucket-\$BEAM_GCP_PROJECT*
 **region**: *us-central1*
 
-### 14. Mount GCS Bucket `sc-fids-capstone-bucket-\$BEAM_GCP_PROJECT` as `/tmp/fids-capstone-data` in your Local File System
-```
-mkdir /tmp/fids-capstone-data
-gcsfuse --debug_fuse sc-fids-capstone-bucket-$BEAM_GCP_PROJECT /tmp/fids-capstone-data 
-```
-
-If you have completed all previous steps successfully, you will see output:
-
-```
-Using mount point: /tmp/fids-capstone-data
-Opening GCS connection...
-Mounting file system...
-File system has been successfully mounted.
-```
 
 ## 15. Run the ETL Apache Beam Pipeline!
 
 **AGAIN, THIS WILL INCUR A COST TO *YOU* (SINCE IT WILL UPLOAD FILES TO YOUR GCS BUCKET), WHICH I TAKE NO RESPONSIBILITY FOR!**
+```
+FIDS_CAPSTONE_WRK_DIR=/tmp
+echo $FIDS_CAPSTONE_WRK_DIR
+
+FIDS_CAPSTONE_MAX_TARGET_VIDEOS=-1
+echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
+
+FIDS_CAPSTONE_GCP_REGION=us-west2
+echo $FIDS_CAPSTONE_GCP_REGION
+```
+
+OR
+
+```
+FIDS_CAPSTONE_WRK_DIR=gs://$BEAM_GCP_PROJECT-bucket-$BEAM_GCP_PROJECT
+FIDS_CAPSTONE_MAX_TARGET_VIDEOS=-1
+FIDS_CAPSTONE_GCP_REGION=us-west2
+
+echo $FIDS_CAPSTONE_WRK_DIR
+echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
+echo $FIDS_CAPSTONE_GCP_REGION
+```
+
+
+
 
 ```
 python ./run_local__etl.py \
-  --work-dir /tmp/fids-capstone-data \
-  --max-target-videos -1 \
-  --use-beam 1
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
+  --use-beam 1 \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
 ```
-python ./run_local__etl.py \
-  --work-dir /tmp/fids-capstone-data \
-  --max-target-videos 10 \
-  --use-beam 1
+nohup python ./run_cloud__etl.py \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py &
 ```
 
 Note that because there is some latency incurred in order to upload files to your GCS bucket (via `gcsfuse`), this takes a bit longer than if you were simply storing files locally.  But altogether there is more than 17 Gigs of data when all said and done.  Still, because the ETL pipeline does its processing in parallel, via Apache Beam, it should only take about 30 minutes to run.

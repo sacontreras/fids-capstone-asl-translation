@@ -185,16 +185,19 @@ def load_vid_index_csv(sel_csv_path):
     return []
 
 
-def rmdir(path_coll_row, d_pl_options):
+def rmdir_if_exists(path_coll_row, d_pl_options):
   path = path_coll_row
-  n_files = len(fileio.list_dir(path, d_pl_options))
-  if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
-    print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
-  fs = FileSystems.get_filesystem(path)
-  if type(fs) == GCSFileSystem:
-    path = fileio.gcs_correct_dir_path_form(path, d_pl_options)
-  fileio.delete_file(path, d_pl_options, recursive=True)
-  return [path]
+  if fileio.path_exists(path, d_pl_options, is_dir=True):
+    n_files = len(fileio.list_dir(path, d_pl_options))
+    if n_files > 0 and fidscs_globals.OUTPUT_INFO_LEVEL <= fidscs_globals.OUTPUT_INFO_LEVEL__WARNING:
+      print(f"{fidscs_globals.VALIDATION_WARNING_TEXT} directory {path} is not empty!")
+    fs = FileSystems.get_filesystem(path)
+    if type(fs) == GCSFileSystem:
+      path = fileio.gcs_correct_dir_path_form(path, d_pl_options)
+    fileio.delete_file(path, d_pl_options, recursive=True)
+    return [path]
+  else:
+    return []
 
 class DirectoryDeleter(PipelinePcollElementProcessor):
   def __init__(self, d_pl_options):
