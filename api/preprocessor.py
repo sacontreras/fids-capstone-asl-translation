@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import argparse
+import logging
 import os
 import random
 
@@ -11,6 +12,7 @@ import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
 
 from api import beam__common, fidscs_globals, fileio
+from api.beam__common import FIDSCapstonePreprocessingPipelineOptions
 
 
 def pl__2__get_keys__train_val_split_candidates(document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll):
@@ -227,7 +229,7 @@ def pl__3__do_train_val_split_keys(train_val_split_candidates_keys):
                 )
             )
         """
-        ctvusts_list = ctvusts_list__by__tcp__gt_1__tpl[1].copy() # we need a copy since we want to shuffle
+        ctvusts_list = list(ctvusts_list__by__tcp__gt_1__tpl[1]).copy() # we need a copy since we want to shuffle
         random.shuffle(ctvusts_list)
         len_ctvusts_list = len(ctvusts_list)
         val_len_ctvusts_list = int(len_ctvusts_list*fidscs_globals.VALIDATION_SIZE_RATIO) if len_ctvusts_list > int(((1-fidscs_globals.VALIDATION_SIZE_RATIO)*100)/10) else 1
@@ -419,7 +421,7 @@ def pl__4__create_train_frame_sequences__assoc(train__ctvusts_by_tcp, tcpctvusts
     return train_tcpctvustsfs, frame_sequences__by__tcpctvustsfs
 
 
-def pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc):
+def pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc, d_pl_options):
     """
     train_frame_sequences__assoc:
         (
@@ -461,7 +463,8 @@ def pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__a
         sorted_train_frame_sequences__assoc_index_csv_rows_pcoll, 
         "TRAIN-FRAME-SEQUENCES-ASSOC-INDEX", 
         fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME, 
-        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX,
+        d_pl_options
     ) # train_frame_sequences__assoc_index_csv_path
 
 
@@ -534,7 +537,7 @@ def pl__5__create_val_frame_sequences(val__ctvusts_by_tcp, frame_sequences__by__
     return val_tcpctvustsfs
 
 
-def pl__6__write_val_frame_sequences_index_csv(val_frame_sequences):
+def pl__6__write_val_frame_sequences_index_csv(val_frame_sequences, d_pl_options):
     """
     val_frame_sequences:
         (
@@ -576,7 +579,8 @@ def pl__6__write_val_frame_sequences_index_csv(val_frame_sequences):
         sorted_val_frame_sequences_index_csv_rows_pcoll, 
         "VAL-FRAME-SEQUENCES-ASSOC-INDEX", 
         fidscs_globals.VAL_FRAME_SEQ_DS_FNAME, 
-        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX,
+        d_pl_options
     ) # val_frame_sequences__assoc_index_csv_path
 
 
@@ -664,7 +668,7 @@ def pl__5__create_train_frame_sequences(ctvusts_by_tcp__lte_1, frame_sequences__
     return train_tcpctvustsfs__all
 
 
-def pl__6__write_train_frame_sequences_index_csv(train_frame_sequences):
+def pl__6__write_train_frame_sequences_index_csv(train_frame_sequences, d_pl_options):
     """
     train_frame_sequences:
         (
@@ -706,7 +710,8 @@ def pl__6__write_train_frame_sequences_index_csv(train_frame_sequences):
         sorted_train_frame_sequences_index_csv_rows_pcoll, 
         "TRAIN-FRAME-SEQUENCES-INDEX", 
         fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME, 
-        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX
+        fidscs_globals.SCHEMA_COL_NAMES__TRAIN_OR_VAL_INDEX,
+        d_pl_options
     ) # train_frame_sequences_index_csv_path
 
 
@@ -968,7 +973,12 @@ def pl__6__create_complete_utterances_from_train_val_tokens(train_val_tcpctvusts
     return complete_utterances__with__train_val_tcp, complete_utterances__with__train_val_tcp__failed_token_resolution
 
 
-def pl__6__write_complete_utterances_from_train_val_tokens(complete_utterances__with__train_val_tcp, name_complete_utterances_train_val_index, fname_complete_utterances_train_val_index):
+def pl__6__write_complete_utterances_from_train_val_tokens(
+    complete_utterances__with__train_val_tcp, 
+    name_complete_utterances_train_val_index, 
+    fname_complete_utterances_train_val_index,
+    d_pl_options
+):
     """
     complete_utterances__with__train_val_tcp:
         (
@@ -1020,56 +1030,89 @@ def pl__6__write_complete_utterances_from_train_val_tokens(complete_utterances__
         sorted_complete_utterances__with__train_val_tcp_csv_rows_pcoll, 
         name_complete_utterances_train_val_index, 
         fname_complete_utterances_train_val_index, 
-        fidscs_globals.SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX
+        fidscs_globals.SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX,
+        d_pl_options
     )
 
 
 
 
-def run(data_dir):
-    fidscs_globals.DATA_ROOT_DIR = data_dir
-    if not fileio.path_exists(fidscs_globals.DATA_ROOT_DIR)[0] or len(fileio.list_dir(fidscs_globals.DATA_ROOT_DIR))==0:
-        print(f"{fidscs_globals.VALIDATION_FATAL_ERROR_TEXT} data directory does not exist or is empty!")
-        return
-    fidscs_globals.VIDEO_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'videos')
-    fidscs_globals.STICHED_VIDEO_FRAMES_DIR = os.path.join(fidscs_globals.DATA_ROOT_DIR, 'stitched_video_frames')
-    fidscs_globals.CORPUS_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.CORPUS_DS_FNAME)
-    fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.DOCUMENT_ASL_CONSULTANT_DS_FNAME)
-    fidscs_globals.ASL_CONSULTANT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.ASL_CONSULTANT_DS_FNAME)
-    fidscs_globals.VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_DS_FNAME)
-    fidscs_globals.VIDEO_SEGMENT_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_SEGMENT_DS_FNAME)
-    fidscs_globals.VIDEO_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VIDEO_FRAME_DS_FNAME)
-    fidscs_globals.UTTERANCE_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_DS_FNAME)
-    fidscs_globals.UTTERANCE_VIDEO_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_VIDEO_DS_FNAME)
-    fidscs_globals.UTTERANCE_TOKEN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_DS_FNAME)
-    fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.UTTERANCE_TOKEN_FRAME_DS_FNAME)
-    fidscs_globals.VOCABULARY_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VOCABULARY_DS_FNAME)
-    fidscs_globals.TRAIN_ASSOC_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME)
-    fidscs_globals.VAL_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.VAL_FRAME_SEQ_DS_FNAME)
-    fidscs_globals.TRAIN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME)
-    fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME)
-    fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_FNAME)
-    fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH = os.path.join(fidscs_globals.DATA_ROOT_DIR, fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME)
+def run(
+    work_dir,
+    beam_runner='DirectRunner', 
+    beam_gcp_project=None,
+    beam_gcp_region=None,
+    beam_gcp_dataflow_job_name=None,
+    beam_gcs_staging_bucket=None,
+    beam_gcs_temp_location=None,
+    beam_gcp_dataflow_setup_file=None
+):
 
+    options = None
 
-    if not beam__common.train_val_csv_files_exist():
+    if work_dir[0:5]=='gs://':
+        beam_gcs_staging_bucket = fileio.path_join(work_dir, 'dataflow/staging')
+        beam_gcs_temp_location = fileio.path_join(work_dir, 'dataflow/tmp')
+
+    if beam_runner != 'DirectRunner':
+        if beam_gcp_dataflow_setup_file != './setup.py':
+            print(f"*** FATAL ERROR!!! ***  beam_gcp_setup_file=={beam_gcp_dataflow_setup_file} but it should be ./setup.py")
+            return
+
+        logging.getLogger().setLevel(logging.INFO) # enable logging only for DataflowRunner
+
         options = {
-            'project': 'my-project', # change
-            'runner': 'DirectRunner',
-            'direct_num_workers': 0, # 0 is use all available cores
-            'direct_running_mode': 'multi_threading', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
-            'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub)
+            'runner': beam_runner,
+            'streaming': False, # set to True if data source is unbounded (e.g. GCP PubSub),
+            'max_num_workers': 8,
+            'autoscaling_algorithm': 'THROUGHPUT_BASED',
+            'num_workers': 4,
+            'disk_size_gb': 250,
+            'save_main_session': True,
+            'enable_streaming_engine': False,
+
+            # GCP options
+            'project': beam_gcp_project,
+            'region': beam_gcp_region,
+            'worker_region': beam_gcp_region,
+            'service_account_email': 'fids-capstone-beam-pl-gcs@sc-fids-capstone.iam.gserviceaccount.com',
+            'staging_location': beam_gcs_staging_bucket,
+            'temp_location': beam_gcs_temp_location,
+            'setup_file': beam_gcp_dataflow_setup_file,
+            'job_name': beam_gcp_dataflow_job_name,
         }
+    else:
+        options = {
+            'runner': 'DirectRunner',
+            'environment_type': 'DOCKER',
+            'direct_num_workers': 0, # 0 is use all available cores
+            'direct_running_mode': 'multi_processing', # ['in_memory', 'multi_threading', 'multi_processing']
+            'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub),
+        }
+
+    options.update(beam__common.make_fids_options_dict(work_dir))
+    d_options_tmp = {
+        fidscs_globals.OPT_NAME_TRAIN_ASSOC_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.TRAIN_FRAME_SEQ_ASSOC_DS_FNAME),
+        fidscs_globals.OPT_NAME_VAL_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.VAL_FRAME_SEQ_DS_FNAME),
+        fidscs_globals.OPT_NAME_TRAIN_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.TRAIN_FRAME_SEQ_DS_FNAME),
+        fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME),
+        fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_VAL_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME),
+        fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_DS_PATH: fileio.path_join(options[fidscs_globals.OPT_NAME_DATA_DIR], fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME)
+    }
+    options.update(d_options_tmp)
+
+    n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
+
+    if not beam__common.train_val_csv_files_exist(options):
+        job_suffix = 'val-train-split'
+        job_name = f"{beam_gcp_dataflow_job_name}--{job_suffix}"
+        print(f"\n\n****************************** Starting pipeline job: {job_name} ******************************")
+        options.update({
+            'job_name': job_name
+        })
         pipeline_options = PipelineOptions(flags=[], **options) # easier to pass in options from command-line this way
         print(f"PipelineOptions:\n{pipeline_options.get_all_options()}\n")
-        
-
         with beam.Pipeline(options=pipeline_options) as pl:
-            # full_target_vid_index_schemad_pcoll = beam__common.pl__1__read_target_vid_index_csv(pl)
-            # corpus_index_schemad_pcoll = beam__common.pl__1__read_corpus_index_csv(pl) # XML is base-64 encode but we no longer need it (to decode it) since it is only used to create the datasets
-            # # corpus_index_decoded_XML_pcoll = pl__2__decode_XML(corpus_index_schemad_pcoll) # see above
-            # asl_consultant_index_schemad_pcoll = beam__common.pl__1__read_asl_consultant_index_csv(pl)
-
             document_asl_consultant_utterance_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_index_csv(pl)
             dcusstettlstrs = (
                 document_asl_consultant_utterance_index_schemad_pcoll
@@ -1085,10 +1128,6 @@ def run(data_dir):
                         )
                     )
             )
-
-            # document_asl_consultant_target_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_index_csv(pl)
-            # document_asl_consultant_utterance_video_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_video_index_csv(pl)
-            # document_target_video_segment_index_schemad_pcoll = beam__common.pl__1__read_document_target_video_segment_index_csv(pl)
 
             vocabulary_index_schemad_pcoll = beam__common.pl__1__read_vocabulary_index_csv(pl)
             tidt = (
@@ -1110,9 +1149,6 @@ def run(data_dir):
                 | "Beam PL: extract listof(<Token>) (ordered/indexed by <TokenID>)" >> beam.Map(lambda list_token_tpl: list_token_tpl[1])
             )
 
-            # document_asl_consultant_utterance_token_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_utterance_token_index_csv(pl)
-            # document_asl_consultant_target_video_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_frame_index_csv(pl)
-
             document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll = beam__common.pl__1__read_document_asl_consultant_target_video_utterance_token_frame_index_csv(pl)
             tcpdctvustsfs = (
                 document_asl_consultant_target_video_utterance_token_frame_index_schemad_pcoll
@@ -1129,7 +1165,6 @@ def run(data_dir):
                         )
                     )
             )
-
 
             (
                 train_val_split_candidates_keys, 
@@ -1151,13 +1186,13 @@ def run(data_dir):
                 train__keys, 
                 tcpctvustsfs
             )
-            pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc)
+            pl__5__write_train_frame_sequences__assoc_index_csv(train_frame_sequences__assoc, pl._options._all_options)
 
             val_frame_sequences = pl__5__create_val_frame_sequences(
                 val__keys, 
                 frame_sequences__by__tcpctvustsfs
             )
-            pl__6__write_val_frame_sequences_index_csv(val_frame_sequences)
+            pl__6__write_val_frame_sequences_index_csv(val_frame_sequences, pl._options._all_options)
 
             # this step of the pipeline creates the final train_frame_sequences set
                 # which is the union of train_frame_sequences__assoc (from above) and those produced from train_val_split_NON_candidates_keys
@@ -1167,7 +1202,7 @@ def run(data_dir):
                 frame_sequences__by__tcpctvustsfs, 
                 train_frame_sequences__assoc
             )
-            pl__6__write_train_frame_sequences_index_csv(train_frame_sequences)
+            pl__6__write_train_frame_sequences_index_csv(train_frame_sequences, pl._options._all_options)
 
             complete_utterances__from__train_assoc_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
                 train_frame_sequences__assoc, 
@@ -1179,7 +1214,8 @@ def run(data_dir):
             pl__6__write_complete_utterances_from_train_val_tokens(
                 complete_utterances__from__train_assoc_tokens, 
                 "COMPLETE-UTTERANCES-TRAIN-ASSOC-INDEX", 
-                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME
+                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_FNAME,
+                pl._options._all_options
             )
 
             complete_utterances__from__val_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
@@ -1192,7 +1228,8 @@ def run(data_dir):
             pl__6__write_complete_utterances_from_train_val_tokens(
                 complete_utterances__from__val_tokens, 
                 "COMPLETE-UTTERANCES-VAL-INDEX", 
-                fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_FNAME
+                fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_FNAME,
+                pl._options._all_options
             )
 
             complete_utterances__from__train_tokens, _ = pl__6__create_complete_utterances_from_train_val_tokens(
@@ -1205,27 +1242,10 @@ def run(data_dir):
             pl__6__write_complete_utterances_from_train_val_tokens(
                 complete_utterances__from__train_tokens, 
                 "COMPLETE-UTTERANCES-TRAIN-INDEX", 
-                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME
+                fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_FNAME,
+                pl._options._all_options
             )
+            print(f"****************************** Finished pipeline job: {job_name} ******************************")
 
 
-
-
-# **************************************** main: BEGIN ****************************************
-if __name__ == '__main__':
-  """Main function"""
-  parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-  parser.add_argument(
-    '--work-dir',
-    required=True,
-    help='Directory for staging and working files. '
-          'This can be a Google Cloud Storage path.'
-  )
-
-  args = parser.parse_args()
-  print(f"args: {args}")
-  run(
-    os.path.join(args.work_dir, 'data')
-  )
-  # **************************************** main: END ****************************************
+            print(f"Beam PL: ALL DONE!")

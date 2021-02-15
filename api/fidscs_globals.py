@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+import subprocess
+
 # **************************************** global variables: BEGIN ****************************************
 _1KB = 1024
 _1MB = _1KB**2
@@ -107,27 +109,34 @@ COMPLETE_UTTERANCES_VAL_DS_FNAME = 'complete-utterances-val.csv'
 COMPLETE_UTTERANCES_TRAIN_DS_FNAME = 'complete-utterances-train.csv'
 
 
+FIDSCS_OPT_NAME_PREFIX = 'fidscs_capstone'
 OPT_NAME_PROJECT = 'project'
-OPT_NAME_MAX_TARGET_VIDEOS = 'fidscs_capstone_max_target_videos'
-OPT_NAME_WORK_DIR = 'fidscs_capstone_work_dir'
-OPT_NAME_DATA_DIR = 'fidscs_capstone_data_dir'
-OPT_NAME_TMP_DIR = 'fidscs_capstone_tmp_dir'
-OPT_NAME_VIDEO_DIR = 'fidscs_capstone_videos_dir'
-OPT_NAME_STITCHED_VIDEO_FRAMES_DIR = 'fidscs_capstone_stitched_video_frames_dir'
-OPT_NAME_CORPUS_DIR = 'fidscs_capstone_corpus_dir'
-OPT_NAME_CORPUS_DS_PATH ='fidscs_capstone_corpus_ds_path'
-OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH = 'fidscs_capstone_document_asl_cconsultant_ds_path'
-OPT_NAME_ASL_CONSULTANT_DS_PATH = 'fidscs_capstone_asl_consultant_ds_path'
-OPT_NAME_VIDEO_INDEXES_DIR = 'fidscs_capstone_video_indexes_dir'
-OPT_NAME_SELECTED_VIDEO_INDEX_PATH = 'fidscs_capstone_selected_video_index_path'
-OPT_NAME_VIDEO_DS_PATH = 'fidscs_capstone_video_ds_path'
-OPT_NAME_VIDEO_SEGMENT_DS_PATH = 'fidscs_capstone_video_segment_ds_path'
-OPT_NAME_VIDEO_FRAME_DS_PATH = 'fidscs_capstone_video_frame_ds_path'
-OPT_NAME_UTTERANCE_DS_PATH = 'fidscs_capstone_utterance_ds_path'
-OPT_NAME_UTTERANCE_VIDEO_DS_PATH = 'fidscs_capstone_utterance_video_ds_path'
-OPT_NAME_UTTERANCE_TOKEN_DS_PATH = 'fidscs_capstone_utterance_token_ds_path'
-OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH = 'fidscs_capstone_utterance_token_frame_ds_path'
-OPT_NAME_VOCABULARY_DS_PATH = 'fidscs_capstone_vocabulary_ds_path'
+OPT_NAME_MAX_TARGET_VIDEOS = f'{FIDSCS_OPT_NAME_PREFIX}_max_target_videos'
+OPT_NAME_WORK_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_work_dir'
+OPT_NAME_DATA_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_data_dir'
+OPT_NAME_TMP_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_tmp_dir'
+OPT_NAME_VIDEO_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_videos_dir'
+OPT_NAME_STITCHED_VIDEO_FRAMES_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_stitched_video_frames_dir'
+OPT_NAME_CORPUS_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_corpus_dir'
+OPT_NAME_CORPUS_DS_PATH =f'{FIDSCS_OPT_NAME_PREFIX}_corpus_ds_path'
+OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_document_asl_cconsultant_ds_path'
+OPT_NAME_ASL_CONSULTANT_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_asl_consultant_ds_path'
+OPT_NAME_VIDEO_INDEXES_DIR = f'{FIDSCS_OPT_NAME_PREFIX}_video_indexes_dir'
+OPT_NAME_SELECTED_VIDEO_INDEX_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_selected_video_index_path'
+OPT_NAME_VIDEO_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_video_ds_path'
+OPT_NAME_VIDEO_SEGMENT_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_video_segment_ds_path'
+OPT_NAME_VIDEO_FRAME_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_video_frame_ds_path'
+OPT_NAME_UTTERANCE_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_utterance_ds_path'
+OPT_NAME_UTTERANCE_VIDEO_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_utterance_video_ds_path'
+OPT_NAME_UTTERANCE_TOKEN_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_utterance_token_ds_path'
+OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_utterance_token_frame_ds_path'
+OPT_NAME_VOCABULARY_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_vocabulary_ds_path'
+OPT_NAME_TRAIN_ASSOC_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_train_assoc_ds_path'
+OPT_NAME_VAL_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_val_ds_path'
+OPT_NAME_TRAIN_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_train_ds_path'
+OPT_NAME_COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_complete_utterances_train_assoc_ds_path'
+OPT_NAME_COMPLETE_UTTERANCES_VAL_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_complete_utterances_val_ds_path'
+OPT_NAME_COMPLETE_UTTERANCES_TRAIN_DS_PATH = f'{FIDSCS_OPT_NAME_PREFIX}_complete_utterances_train_ds_path'
   
 
 
@@ -330,3 +339,24 @@ SCHEMA_COL_NAMES__COMPLETE_UTTERANCES_TRAIN_VAL_TCP_INDEX = [
 
 D_IN_MEMORY_VARS = dict()
 # **************************************** global variables: END ****************************************
+
+
+
+
+def run_subprocess_command(initial_command_list):
+  stock_commands = [] # ['echo', 'current working directory is:', 'pwd']
+  command_list = stock_commands + initial_command_list
+  s_command = ' '.join(initial_command_list)
+  print(f"Running command: {s_command}")
+  p = subprocess.Popen(
+    command_list,
+    shell=True,
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT
+  )
+  stdout_data, _ = p.communicate() # this waits for the process to terminate
+  print(f"{stdout_data}")
+  # p.wait()
+  if p.returncode != 0:
+    raise RuntimeError(f'Command %s failed: exit code: {s_command, p.returncode}')

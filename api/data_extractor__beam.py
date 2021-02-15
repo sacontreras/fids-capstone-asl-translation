@@ -23,6 +23,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 
 from api import beam__common, data_extractor__common, fidscs_globals, fileio
 from api.signstreamxmlparser_refactored.analysis import signstream as ss
+from api.beam__common import FIDSCapstonePipelineOptions
 
 # from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
@@ -591,12 +592,9 @@ def pl__2__write_target_vid_index_csv(full_target_vid_index_schemad_pcoll, d_pl_
 
 
 def pl__2__filter_target_vid_index(full_target_vid_index_schemad_pcoll, d_pl_options):
-  max_target_videos = d_pl_options[fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS]
   # ******************** filter schemad target video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: BEGIN ********************
-  if max_target_videos is not None and max_target_videos>0:
-    return beam__common.pl__X__subset_pcoll(full_target_vid_index_schemad_pcoll, "full_target_vid_index_schemad_pcoll", max_target_videos)
-  else:
-    return full_target_vid_index_schemad_pcoll
+  max_target_videos = d_pl_options[fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS]
+  return beam__common.pl__X__subset_pcoll(full_target_vid_index_schemad_pcoll, "full_target_vid_index_schemad_pcoll", max_target_videos, d_pl_options)
   # ******************** filter schemad video index pcoll as desired (if necessary) using beam.transforms.sql.SqlTransform(), for example limiting size of pcoll data items to fidscs_globals.MAX_TARGET_VIDEOS: END ********************
 
 
@@ -3661,91 +3659,6 @@ def pl__4__parallel_extract_target_video_frames(merged_download_results, d_pl_op
   # ******************** EXTRACT SEGMENT-FRAMES IN PARALLEL: END ********************
 
 
-class FIDSCapstonePipelineOptions(PipelineOptions):
-  @classmethod
-  def _add_argparse_args(cls, parser):
-    parser.add_argument(
-      '--fidscs-capstone-max-target-videos',
-      default=None
-    )
-    parser.add_argument(
-      '--fidscs-capstone-work-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-data-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-tmp-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-videos-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-stitched-video-frames-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-corpus-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-corpus-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-document-asl-cconsultant-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-asl-consultant-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-video-indexes-dir',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-selected-video-index-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-video-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-video-segment-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-video-frame-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-utterance-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-utterance-video-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-utterance-token-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-utterance-token-frame-ds-path',
-      default=None,
-    )
-    parser.add_argument(
-      '--fidscs-capstone-vocabulary-ds-path',
-      default=None,
-    )
-
-
 def run(
   max_target_videos,
   work_dir,
@@ -3791,11 +3704,11 @@ def run(
       'runner': 'DirectRunner',
       'environment_type': 'DOCKER',
       'direct_num_workers': 0, # 0 is use all available cores
-      'direct_running_mode': 'multi_processing', # ['in_memory', 'multi_threading', 'multi_processing'] # 'multi_processing' doesn't seem to work for DirectRunner?
+      'direct_running_mode': 'multi_processing', # ['in_memory', 'multi_threading', 'multi_processing']
       'streaming': False # set to True if data source is unbounded (e.g. GCP PubSub),
     }
 
-  options.update(beam__common.make_fids_options_dict(work_dir, max_target_videos=max_target_videos, beam_gcp_project=beam_gcp_project))
+  options.update(beam__common.make_fids_options_dict(work_dir, max_target_videos=-1, beam_gcp_project=fidscs_globals.GCP_PROJECT))
 
   n_partitions = 8 # hardcoded for now but we need to retrieve this from beam to be the number of workers
 
@@ -4032,7 +3945,7 @@ def run(
       pl
       | f"Beam PL: create pcoll for {pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]} cleanup" >> beam.Create([pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR]])
     )
-    beam__common.rmdir_if_exists(
+    beam__common.pl__X__rmdir(
       tmp_dir_path_pcoll, 
       pl._options._all_options[fidscs_globals.OPT_NAME_TMP_DIR],
       pl._options._all_options
@@ -4047,7 +3960,7 @@ def run(
         pl
         | f"Beam PL: create pcoll for {truly_local_vid_dir_root} cleanup" >> beam.Create([truly_local_vid_dir_root])
       )
-      beam__common.rmdir_if_exists(
+      beam__common.pl__X__rmdir(
         truly_local_vid_dir_path_pcoll, 
         truly_local_vid_dir_root,
         pl._options._all_options

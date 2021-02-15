@@ -13,7 +13,7 @@ import argparse
 import logging
 import os
 
-from api import data_extractor
+from api import preprocessor
 
 if __name__ == '__main__':
 #   logging.getLogger().setLevel(logging.INFO) # too much output!
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     '--work-dir',
     required=True,
     help='Directory for staging and working files. '
-          'This should be a Google Cloud Storage path.'
+          'This can be a Google Cloud Storage path.'
   )
 
   parser.add_argument(
@@ -37,19 +37,19 @@ if __name__ == '__main__':
 
   parser.add_argument(
     '--beam-gcp-project',
-    required=True,
+    default=None,
     help='The GCP project containing the GCS bucket to use for beam temp as well as data storage.'
   )
 
   parser.add_argument(
     '--beam-gcp-region',
-    required=True,
+    default=None,
     help='The GCP region of the bucket.'
   )
 
   parser.add_argument(
     '--beam-gcp-dataflow-job-name',
-    required=True,
+    default=None,
     help='The name of the GCP Dataflow job to create.'
   )
 
@@ -62,11 +62,9 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(f"args: {args}")
 
-  data_extractor.run(
-    max_target_videos=args.max_target_videos if args.max_target_videos!=-1 else None, 
-    work_dir=args.work_dir, 
-    use_beam=True,
-    beam_runner='DataflowRunner',
+  preprocessor.run(
+    work_dir=args.work_dir,
+    beam_runner='DirectRunner',
     beam_gcp_project=args.beam_gcp_project,
     beam_gcp_region=args.beam_gcp_region,
     beam_gcp_dataflow_job_name=args.beam_gcp_dataflow_job_name,

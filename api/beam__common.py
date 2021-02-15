@@ -9,9 +9,131 @@ import urllib
 import apache_beam as beam
 import tensorflow as tf
 from apache_beam.io.filesystems import FileSystems, GCSFileSystem
+from apache_beam.options.pipeline_options import PipelineOptions
 from tensorflow.python.lib.io.file_io import FileIO
 
 from api import fidscs_globals, fileio
+
+
+def opt_name_to_command_line_opt(opt_name):
+  return opt_name.replace('_', '-')
+
+def command_line_opt_to_opt_name(command_line_opt):
+  return command_line_opt.replace('-', '_')
+
+
+class FIDSCapstonePipelineOptions(PipelineOptions):
+  @classmethod
+  def _add_argparse_args(cls, parser):
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_MAX_TARGET_VIDEOS)}',
+      default=None
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_WORK_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_DATA_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_TMP_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VIDEO_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_STITCHED_VIDEO_FRAMES_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_CORPUS_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_CORPUS_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_DOCUMENT_ASL_CONSULTANT_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_ASL_CONSULTANT_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VIDEO_INDEXES_DIR)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_SELECTED_VIDEO_INDEX_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VIDEO_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VIDEO_SEGMENT_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VIDEO_FRAME_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_UTTERANCE_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_UTTERANCE_VIDEO_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_UTTERANCE_TOKEN_FRAME_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VOCABULARY_DS_PATH)}',
+      default=None,
+    )
+
+class FIDSCapstonePreprocessingPipelineOptions(FIDSCapstonePipelineOptions):
+  @classmethod
+  def _add_argparse_args(cls, parser):
+    super(FIDSCapstonePreprocessingPipelineOptions, cls)._add_argparse_args(parser)
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_TRAIN_ASSOC_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_VAL_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_TRAIN_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_VAL_DS_PATH)}',
+      default=None,
+    )
+    parser.add_argument(
+      f'--{opt_name_to_command_line_opt(fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_DS_PATH)}',
+      default=None,
+    )
 
 
 class PipelinePcollElementProcessor(beam.DoFn):
@@ -119,18 +241,18 @@ def dataset_csv_files_exist(d_pl_options, dataset_csv_paths=None):
   return True
 
 
-def train_val_csv_files_exist(train_val_csv_paths=None):
+def train_val_csv_files_exist(d_pl_options, train_val_csv_paths=None):
   if train_val_csv_paths is None or len(train_val_csv_paths)==0:
     train_val_csv_paths = [
-      fidscs_globals.TRAIN_ASSOC_DS_PATH,
-      fidscs_globals.VAL_DS_PATH,
-      fidscs_globals.TRAIN_DS_PATH,
-      fidscs_globals.COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH,
-      fidscs_globals.COMPLETE_UTTERANCES_VAL_DS_PATH,
-      fidscs_globals.COMPLETE_UTTERANCES_TRAIN_DS_PATH
+      d_pl_options[fidscs_globals.OPT_NAME_TRAIN_ASSOC_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_VAL_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_TRAIN_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_ASSOC_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_VAL_DS_PATH],
+      d_pl_options[fidscs_globals.OPT_NAME_COMPLETE_UTTERANCES_TRAIN_DS_PATH]
     ]
   for train_val_csv_path in train_val_csv_paths:
-    if not fileio.file_path_exists(train_val_csv_path)[0]:
+    if not fileio.file_path_exists(train_val_csv_path, d_pl_options)[0]:
       # print(f"Dataset {dataset_csv_path} not found")
       return False
     else:
@@ -202,7 +324,7 @@ def rmdir_if_exists(path_coll_row, d_pl_options):
 class DirectoryDeleter(PipelinePcollElementProcessor):
   def __init__(self, d_pl_options):
     super(DirectoryDeleter, self).__init__(
-      fn_pcoll_element_processor=rmdir,
+      fn_pcoll_element_processor=rmdir_if_exists,
       kargs={'d_pl_options':d_pl_options},
       return_result=True
     )
@@ -257,13 +379,22 @@ def pl__X__index_pcoll(pcoll, pcoll_label):
   )
 
 
-def pl__X__subset_pcoll(pcoll, pcoll_label, n):
-  indexed_pcoll = pl__X__index_pcoll(pcoll, pcoll_label)
-  return (
-    indexed_pcoll
-    | f"Beam PL: filter {pcoll_label} tuples with index val less than {n}" >> beam.Filter(lambda tpl: tpl[0] < n)
-    | f"Beam PL: discard {pcoll_label} index, leaving only data" >> beam.Map(lambda tpl: tpl[1])
-  )
+def pl__X__subset_pcoll(pcoll, pcoll_label, n, d_pl_options):
+  if d_pl_options['runner']=='DirectRunner':
+    return (
+      pcoll
+      | beam.transforms.sql.SqlTransform(f"SELECT * FROM PCOLLECTION {'LIMIT '+str(n) if n is not None and n>0 else ''}") # we do this on DirectRunner since it will result in doing work in Docker worker nodes, which is ends up being much faster
+    )
+  else:
+    if n is not None and n>0:
+      indexed_pcoll = pl__X__index_pcoll(pcoll, pcoll_label)
+      return (
+        indexed_pcoll
+        | f"Beam PL: filter {pcoll_label} tuples with index val less than {n}" >> beam.Filter(lambda tpl: tpl[0] < n)
+        | f"Beam PL: discard {pcoll_label} index, leaving only data" >> beam.Map(lambda tpl: tpl[1])
+      )
+    else:
+      return pcoll
 
 
 def beam_row_to_csv_string(row):

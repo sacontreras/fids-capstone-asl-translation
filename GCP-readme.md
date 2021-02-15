@@ -160,17 +160,14 @@ pip install tqdm
 **region**: *us-central1*
 
 
-## 15. Run the ETL Apache Beam Pipeline!
-
-**AGAIN, THIS WILL INCUR A COST TO *YOU* (SINCE IT WILL UPLOAD FILES TO YOUR GCS BUCKET), WHICH I TAKE NO RESPONSIBILITY FOR!**
+## 15. Set Environment Variables
 ```
 FIDS_CAPSTONE_WRK_DIR=/tmp
-echo $FIDS_CAPSTONE_WRK_DIR
-
 FIDS_CAPSTONE_MAX_TARGET_VIDEOS=-1
-echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
-
 FIDS_CAPSTONE_GCP_REGION=us-west2
+
+echo $FIDS_CAPSTONE_WRK_DIR
+echo $FIDS_CAPSTONE_MAX_TARGET_VIDEOS
 echo $FIDS_CAPSTONE_GCP_REGION
 ```
 
@@ -187,7 +184,10 @@ echo $FIDS_CAPSTONE_GCP_REGION
 ```
 
 
+## 16. Run the ETL Pipeline
+**IF YOU SPECIFY A GCS BUCKET FOR `$FIDS_CAPSTONE_WRK_DIR` THIS WILL INCUR A COST TO *YOU* , WHICH I TAKE NO RESPONSIBILITY FOR!**
 
+### Run Locally
 
 ```
 python ./run_local__etl.py \
@@ -200,6 +200,21 @@ python ./run_local__etl.py \
   --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
+### Run in GCP Dataflow
+**THIS WILL DEFINITELY INCUR A COST TO *YOU* , WHICH I TAKE NO RESPONSIBILITY FOR!**
+
+```
+python ./run_cloud__etl.py \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
+```
+
+*A variant of this will allow you to detach the process and run it in the background*
+
 ```
 nohup python ./run_cloud__etl.py \
   --work-dir $FIDS_CAPSTONE_WRK_DIR \
@@ -210,20 +225,27 @@ nohup python ./run_cloud__etl.py \
   --beam-gcp-dataflow-setup-file ./setup.py &
 ```
 
-Note that because there is some latency incurred in order to upload files to your GCS bucket (via `gcsfuse`), this takes a bit longer than if you were simply storing files locally.  But altogether there is more than 17 Gigs of data when all said and done.  Still, because the ETL pipeline does its processing in parallel, via Apache Beam, it should only take about 30 minutes to run.
+## 17. Run the Preprocessing Pipeline (which splits datasets into Validation/Train partitions)
 
-### 16. Dismount GCS Bucket `sc-fids-capstone-bucket-\$BEAM_GCP_PROJECT` from `/tmp/fids-capstone-data` in your Local File System
+### Run Locally
 
-**Note that this command differs based on operating system**.
-
-According to [this post]()https://stackoverflow.com/a/42613541), the command for Linux operating systems is:
 ```
-fusermount -u /tmp/fids-capstone-data
-```
-
-I personally use Mac, and the command is:
-```
-sudo umount /tmp/fids-capstone-data
+python ./run_local__preprocess.py \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
 ```
 
-# A Jupyter Notebook variant of this process has been captured within `etl.ipynb`
+### Run in GCP Dataflow
+
+```
+python ./run_cloud__preprocess.py \
+  --work-dir $FIDS_CAPSTONE_WRK_DIR \
+  --max-target-videos $FIDS_CAPSTONE_MAX_TARGET_VIDEOS \
+  --beam-gcp-project $BEAM_GCP_PROJECT \
+  --beam-gcp-region $FIDS_CAPSTONE_GCP_REGION \
+  --beam-gcp-dataflow-job-name $BEAM_GCP_PROJECT-etl \
+  --beam-gcp-dataflow-setup-file ./setup.py
+```
