@@ -1,11 +1,11 @@
 import logging
 import os
 
-import google.cloud.storage as gcs
-import tensorflow as tf
-from apache_beam.io.filesystems import FileSystems, GCSFileSystem
 from apache_beam.io.gcp import gcsio
+import google.cloud.storage as gcs
+from apache_beam.io.filesystems import FileSystems, GCSFileSystem
 from tensorflow.python.lib.io.file_io import FileIO
+import tensorflow as tf
 
 from api import fidscs_globals
 

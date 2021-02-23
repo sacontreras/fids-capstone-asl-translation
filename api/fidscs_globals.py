@@ -360,3 +360,37 @@ def run_subprocess_command(initial_command_list):
   # p.wait()
   if p.returncode != 0:
     raise RuntimeError(f'Command %s failed: exit code: {s_command, p.returncode}')
+
+
+def md_formatter(md, pp, cycle):
+    pp.text(md.data)
+
+def html_formatter(html):
+    print(f"html.data: {html.data}")
+    # pp.text(html.data)
+
+# modified from https://stackoverflow.com/q/20665118/11761918
+def disp_source(src):
+    from inspect import getsource
+    from pygments import highlight
+    from pygments.lexers import PythonLexer
+    from pygments.formatters import HtmlFormatter
+    from IPython.core.display import Markdown, display
+    
+    hl_src = highlight(
+      getsource(src), 
+      PythonLexer(), 
+      HtmlFormatter(
+        full=True, 
+        nowrap=False,
+        noclasses=True,
+        wrapcode=False,
+        lineseparator='<br>'
+      )
+    )
+
+    # text_plain = get_ipython().display_formatter.formatters['text/plain']
+    # text_plain.for_type(Markdown, md_formatter)
+    disp_text_object = Markdown(hl_src)
+
+    display(disp_text_object)

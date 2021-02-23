@@ -380,6 +380,8 @@ def pl__X__index_pcoll(pcoll, pcoll_label):
 
 
 def pl__X__subset_pcoll(pcoll, pcoll_label, n, d_pl_options):
+  # if (d_pl_options['runner']=='DirectRunner' or d_pl_options['runner']=='InteractiveRunner') and \
+  #   (d_pl_options['direct_running_mode']=='in_memory' or d_pl_options['direct_running_mode']=='multi_threading'):
   if d_pl_options['runner']=='DirectRunner':
     return (
       pcoll

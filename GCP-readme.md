@@ -3,7 +3,7 @@
 ## IMPORTANT NOTES!!!
 
 1. These instructions are for executing the **ETL** pipeline that extracts data and stores it to Google Cloud Storage.
-2. DOING SO WILL INCUR A COST TO *YOU*!  I TAKE NO RESPONSIBILITY FOR ANY CHARGES FROM Google THAT YOU INCUR BY RUNNING THIS PROCEDURE!  **The ETL pipeline downloads (to GCS) more than 2600 videos!  It then extracts more than 500,000 frames from those videos, so consider your choice whether you want to do this for yourself carefully!**
+2. DOING SO WILL INCUR A COST TO *YOU*!  I TAKE NO RESPONSIBILITY FOR ANY CHARGES FROM Google THAT YOU INCUR BY RUNNING THIS PROCEDURE!  **The ETL pipeline downloads (to GCS) 2,637 videos!  It then extracts 561,891 frames from those videos, so consider your choice whether you want to do this for yourself carefully!**
 3. When it is time to run the ETL pipeline, it is HIGHLY recommended to turn off your VPN in order to reduce the overall time required to run it (considering ETL uploads to GCS).  Additionally, having your VPN on can cause undue retries, further ext
 
 
